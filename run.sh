@@ -56,7 +56,7 @@ if bashio::var.has_value "${db_url}"; then
     export HA_OPS_DB_URL="${db_url}"
 fi
 
-# OAuth auth — opt-in
+# OAuth auth — enabled by default since v0.27.0
 auth_enabled=$(bashio::config 'auth_enabled')
 if bashio::var.true "${auth_enabled}"; then
     export HA_OPS_AUTH_ENABLED="true"
@@ -64,16 +64,30 @@ if bashio::var.true "${auth_enabled}"; then
     if bashio::var.has_value "${auth_issuer_url}"; then
         export HA_OPS_AUTH_ISSUER_URL="${auth_issuer_url}"
     else
-        # Auto-derive from HA's internal_url — extract hostname, use addon port
-        ha_internal_url=$(curl -s -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+        # Auto-derive hostname from HA's internal_url. The OAuth issuer
+        # must be reachable from MCP clients, so values like null,
+        # "none", "localhost", or loopback addresses are unusable —
+        # fall back to the mDNS default in those cases.
+        ha_hostname=$(curl -s -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
             http://supervisor/core/api/config \
-            | python3 -c "import sys,json; print(json.loads(sys.stdin.read()).get('internal_url',''))" 2>/dev/null)
-        if bashio::var.has_value "${ha_internal_url}"; then
-            ha_hostname=$(python3 -c "from urllib.parse import urlparse; print(urlparse('${ha_internal_url}').hostname)")
+            | python3 -c '
+import sys, json
+from urllib.parse import urlparse
+try:
+    url = json.loads(sys.stdin.read()).get("internal_url") or ""
+    host = urlparse(url).hostname or ""
+    if host.lower() in ("", "none", "localhost", "127.0.0.1", "::1"):
+        host = ""
+    print(host)
+except Exception:
+    print("")
+' 2>/dev/null)
+        if bashio::var.has_value "${ha_hostname}"; then
             export HA_OPS_AUTH_ISSUER_URL="http://${ha_hostname}:8901"
             bashio::log.info "OAuth issuer auto-detected: http://${ha_hostname}:8901"
         else
-            bashio::log.warning "Could not auto-detect OAuth issuer URL — set auth_issuer_url manually"
+            export HA_OPS_AUTH_ISSUER_URL="http://homeassistant.local:8901"
+            bashio::log.warning "Could not derive OAuth issuer from HA internal_url — defaulting to http://homeassistant.local:8901. Set 'auth_issuer_url' in addon Configuration to override."
         fi
     fi
     mkdir -p /data

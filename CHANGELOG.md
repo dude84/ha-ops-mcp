@@ -1,3 +1,7 @@
+## 0.32.3
+
+**Fix: OAuth issuer auto-detection on fresh installs with no `internal_url`.** When HA's `internal_url` is unset, the supervisor returns `null` (or a junk placeholder); the previous parser stringified that into the literal hostname `none`, producing an issuer of `http://none:8901/` that no MCP client can dial — the symptom is "Unable to connect" on the client, not a 401. `run.sh` now treats null/empty/`none`/`localhost`/loopback values as "not detected" and falls back to `http://homeassistant.local:8901` (HA's mDNS default), which works on a default LAN with zero manual config. The existing `auth_issuer_url` override still wins when set. New `docs/HA_QUIRKS.md` entry documents the diagnosis path.
+
 ## 0.32.2
 
 **CI / release pipeline ahead of public flip.** Adds `.github/workflows/release.yml`: tests + ruff + mypy strict on every push/PR; on `release: published`, builds sdist + wheel via `python -m build`, attests provenance with `actions/attest-build-provenance@v2`, and uploads the artifacts to the GitHub release. The first public release will ship with a verifiable build attestation (`gh attestation verify`) instead of a bare tag.
