@@ -1,5 +1,5 @@
 name: "HA Ops MCP"
-version: "0.32.2"
+version: "0.32.3"
 slug: "ha_ops_mcp"
 description: "MCP server for Home Assistant operations — database management, config editing, dashboards, entity hygiene, and system health"
 url: "https://github.com/dude84/ha-ops-mcp"
