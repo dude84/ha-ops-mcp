@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HA Ops</title>
+<link rel="icon" href="data:,">
+<script>
+  (function() {
+    var stored = localStorage.getItem('haops-theme');
+    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var dark = stored === 'dark' || (stored !== 'light' && prefersDark);
+    if (dark) document.documentElement.classList.add('dark');
+  })();
+  window.tailwind = window.tailwind || {};
+  window.tailwind.config = { darkMode: 'class' };
+</script>
+<script src="https://cdn.tailwindcss.com/3.4.1"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
+<style>
+  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  [x-cloak] { display: none !important; }
+  .badge { @apply inline-block px-2 py-0.5 rounded text-xs font-medium; }
+  .sev-safe  { background:#dcfce7; color:#166534; }
+  .sev-warn  { background:#fef3c7; color:#92400e; }
+  .sev-breaking { background:#fecaca; color:#7f1d1d; }
+  .sev-info  { background:#e5e7eb; color:#374151; }
+  .dark .sev-safe  { background:#14532d; color:#bbf7d0; }
+  .dark .sev-warn  { background:#78350f; color:#fde68a; }
+  .dark .sev-breaking { background:#7f1d1d; color:#fecaca; }
+  .dark .sev-info  { background:#374151; color:#d1d5db; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100" x-data="app()" x-init="init()" x-cloak>
+
+<header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex items-center justify-between">
+  <div class="flex items-center gap-3">
+    <span class="text-lg font-semibold">HA Ops</span>
+    <nav class="flex gap-1">
+      <template x-for="t in tabs" :key="t.id">
+        <button
+          class="px-3 py-1 rounded text-sm"
+          :class="active === t.id ? 'bg-blue-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          @click="switchTab(t.id)"
+          x-text="t.label"></button>
+      </template>
+    </nav>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="text-xs text-gray-500 dark:text-gray-400 font-mono" x-show="version" x-text="'v' + version"></span>
+    <span class="text-xs text-gray-400 dark:text-gray-500" x-text="'Last refreshed: ' + (lastRefresh || 'never')"></span>
+    <button
+      class="px-2 py-1 rounded text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+      @click="cycleTheme()"
+      :title="'Theme: ' + themeMode + ' (click to cycle)'"
+      x-text="themeMode === 'dark' ? '☾' : themeMode === 'light' ? '☀' : '◐'"></button>
+  </div>
+</header>
+
+<main class="p-6 max-w-7xl mx-auto">
+
+<!-- Health -->
+<section x-show="active === 'health'">
+  <h2 class="text-xl font-semibold mb-4">Health</h2>
+
+  <div class="space-y-6">
+    <div>
+      <h3 class="font-medium mb-2">Self check (config + connectivity)</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-2" x-show="selfCheckLoading && !selfCheck">Loading self check…</p>
+      <template x-if="selfCheckError">
+        <p class="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono mb-2" x-text="selfCheckError"></p>
+      </template>
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 text-sm space-y-3" x-show="selfCheck">
+        <template x-for="(check, name) in selfCheckEntries" :key="name">
+          <div class="border-b border-gray-100 dark:border-gray-700 pb-3 last:border-b-0 last:pb-0">
+            <div class="flex items-start justify-between mb-1">
+              <div class="font-medium" x-text="name"></div>
+              <span class="badge whitespace-nowrap"
+                    :class="check.status === 'ok' ? 'sev-safe'
+                          : check.status === 'fail' ? 'sev-breaking'
+                          : check.status === 'degraded' ? 'sev-warn'
+                          : 'sev-info'"
+                    x-text="check.status || '?'"></span>
+            </div>
+            <template x-if="check.error || check.dashboard_error">
+              <div class="text-xs text-red-700 dark:text-red-300 font-mono mb-1"
+                   x-text="check.error || check.dashboard_error"></div>
+            </template>
+            <div class="text-xs text-gray-600 dark:text-gray-400 grid grid-cols-1 gap-0.5">
+              <template x-for="[k, v] in fieldEntries(check)" :key="k">
+                <div>
+                  <span class="font-mono text-gray-500 dark:text-gray-500" x-text="k + ':'"></span>
+                  <span class="font-mono ml-1" x-text="formatValue(v)"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <div>
+      <h3 class="font-medium mb-2">Tools check (per-group capabilities)</h3>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mb-2" x-show="toolsCheckLoading && !toolsCheck">Loading tools check…</p>
+      <template x-if="toolsCheckError">
+        <p class="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono mb-2" x-text="toolsCheckError"></p>
+      </template>
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 text-sm" x-show="toolsCheck">
+        <div class="text-xs uppercase text-gray-500 dark:text-gray-400 mb-3"
+             x-text="'Overall: ' + (toolsCheck?.summary?.overall || '')"></div>
+
+        <div class="space-y-3">
+          <template x-for="(group, name) in toolsCheckGroups" :key="name">
+            <div class="border border-gray-100 dark:border-gray-700 rounded p-2">
+              <div class="flex items-start justify-between mb-2">
+                <div class="font-medium" x-text="name"></div>
+                <span class="badge whitespace-nowrap"
+                  :class="group.status === 'pass' ? 'sev-safe'
+                        : group.status === 'fail' ? 'sev-breaking'
+                        : group.status === 'partial' ? 'sev-warn' : 'sev-info'"
+                  x-text="group.status"></span>
+              </div>
+              <div class="text-xs space-y-1 mb-2" x-show="group.tests">
+                <template x-for="(test, tname) in (group.tests || {})" :key="tname">
+                  <div class="flex items-start gap-2">
+                    <span class="badge whitespace-nowrap"
+                          :class="test.ok ? 'sev-safe' : 'sev-breaking'"
+                          x-text="test.ok ? 'ok' : 'fail'"></span>
+                    <div class="flex-1">
+                      <span class="font-mono" x-text="tname"></span>
+                      <template x-if="test.error">
+                        <span class="text-red-700 dark:text-red-300 ml-2 font-mono" x-text="test.error"></span>
+                      </template>
+                      <template x-if="!test.error && testSummary(test)">
+                        <span class="text-gray-500 dark:text-gray-400 ml-2" x-text="testSummary(test)"></span>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 font-mono"
+                   x-show="(group.tools_affected || []).length && group.status !== 'pass'">
+                Affects: <span x-text="(group.tools_affected || []).join(', ')"></span>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="mt-3 text-xs" x-show="toolsCheck?.broken_tools?.length">
+          <div class="font-medium text-red-700 dark:text-red-300 mb-1">Broken tools:</div>
+          <div class="font-mono text-gray-600 dark:text-gray-400" x-text="(toolsCheck?.broken_tools || []).join(', ')"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Timeline -->
+<section x-show="active === 'timeline'">
+  <div class="flex items-center justify-between mb-1">
+    <h2 class="text-xl font-semibold">Timeline</h2>
+    <button
+      @click="clearAuditLog()"
+      :disabled="auditClearInFlight"
+      class="px-3 py-1 rounded text-xs font-medium text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 disabled:opacity-50">
+      <span x-show="!auditClearInFlight">Clear audit log</span>
+      <span x-show="auditClearInFlight">Clearing…</span>
+    </button>
+  </div>
+  <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+    Inspection of recent mutations. Click a row to see the diff. Apply
+    rows whose transaction is still in-session expose a Revert button
+    that fires haops_rollback via the sidebar; once the transaction is
+    gone (addon restart), revert falls back to
+    call <code class="font-mono text-xs bg-gray-100 dark:bg-gray-700 px-1 rounded">haops_backup_revert</code>
+    via the MCP flow.
+  </p>
+  <template x-if="!timeline?.entries?.length">
+    <p class="text-gray-500 dark:text-gray-400 text-sm">No audit entries yet.</p>
+  </template>
+  <div class="space-y-2">
+    <template x-for="(e, eidx) in (timeline?.entries || [])" :key="eidx">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm" :id="'tl-row-' + eidx">
+        <button
+          class="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-750"
+          @click="toggleTimelineEntry(eidx)">
+          <span class="mt-0.5 text-gray-400 text-xs font-mono"
+                x-text="expandedTimeline === eidx ? '▾' : '▸'"></span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-mono text-xs text-gray-500 dark:text-gray-400"
+                    x-text="formatTimestamp(e.timestamp)"></span>
+              <span class="font-medium text-sm" x-text="e.tool"></span>
+              <span class="badge"
+                    :class="e.success ? 'sev-safe' : 'sev-breaking'"
+                    x-text="e.success ? 'ok' : 'fail'"></span>
+              <template x-if="e.paired_with">
+                <button
+                  @click.stop="scrollToPair(e.paired_with.index)"
+                  class="text-xs font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                  :title="'Jump to ' + e.paired_with.tool + ' at ' + formatTimestamp(e.paired_with.timestamp)">
+                  <span x-show="e.paired_with.relation === 'rolled_back_by'">↺ rolled back</span>
+                  <span x-show="e.paired_with.relation === 'reverts'">↶ reverts apply</span>
+                </button>
+              </template>
+            </div>
+            <div class="text-sm text-gray-700 dark:text-gray-300 mt-1" x-text="e.summary"></div>
+          </div>
+        </button>
+        <div x-show="expandedTimeline === eidx" x-cloak class="px-4 pb-4 border-t border-gray-100 dark:border-gray-700">
+          <template x-if="e.error">
+            <div class="mt-3 text-xs text-red-700 dark:text-red-300 font-mono bg-red-50 dark:bg-red-900/30 p-2 rounded"
+                 x-text="e.error"></div>
+          </template>
+          <template x-if="e.diff_present && e.diff === undefined && !e._diff_error">
+            <div class="mt-3 text-xs text-gray-500 dark:text-gray-400 italic">
+              Loading diff…
+            </div>
+          </template>
+          <template x-if="e._diff_error">
+            <div class="mt-3 text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono" x-text="'Failed to load diff: ' + e._diff_error"></div>
+          </template>
+          <template x-if="typeof e.diff === 'string' && e.diff">
+            <div class="mt-3">
+              <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                Diff
+                <template x-if="e.diff_truncated">
+                  <span class="ml-2 text-orange-700 dark:text-orange-400">
+                    (truncated for display — full patch saved in the audit tool-results dir)
+                  </span>
+                </template>
+              </div>
+              <pre class="text-xs font-mono bg-gray-50 dark:bg-gray-900 p-3 rounded overflow-x-auto max-h-96 border border-gray-100 dark:border-gray-700"
+                   x-html="renderDiffHtml(e.diff)"></pre>
+            </div>
+          </template>
+          <template x-if="typeof e.diff === 'string' && !e.diff">
+            <div class="mt-3 text-xs text-gray-500 dark:text-gray-400 italic">
+              No changes recorded (empty diff).
+            </div>
+          </template>
+          <template x-if="e.details_excerpt && Object.keys(e.details_excerpt).length">
+            <div class="mt-3">
+              <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Details</div>
+              <pre class="text-xs font-mono bg-gray-50 dark:bg-gray-900 p-3 rounded overflow-x-auto max-h-64 border border-gray-100 dark:border-gray-700"
+                   x-text="JSON.stringify(e.details_excerpt, null, 2)"></pre>
+            </div>
+          </template>
+          <template x-if="e.details_excerpt?.path || e.details_excerpt?.dashboard_id">
+            <div class="mt-3 text-xs">
+              <span class="text-gray-500 dark:text-gray-400">Target: </span>
+              <span class="font-mono text-gray-700 dark:text-gray-300"
+                    x-text="e.details_excerpt?.path || dashboardStoragePath(e.details_excerpt?.dashboard_id)"></span>
+            </div>
+          </template>
+          <template x-if="e.backup_path">
+            <div class="mt-1 text-xs">
+              <span class="text-gray-500 dark:text-gray-400">Backup: </span>
+              <span class="font-mono text-gray-700 dark:text-gray-300" x-text="e.backup_path"></span>
+            </div>
+          </template>
+          <template x-if="e.token_id">
+            <div class="mt-1 text-xs">
+              <span class="text-gray-500 dark:text-gray-400">Token: </span>
+              <span class="font-mono text-gray-700 dark:text-gray-300" x-text="e.token_id"></span>
+            </div>
+          </template>
+          <template x-if="e.transaction_id">
+            <div class="mt-3 flex items-center gap-3">
+              <button
+                @click="revertEntry(e, eidx)"
+                :disabled="timelineActionInFlight === eidx"
+                class="px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white text-xs font-medium">
+                <span x-show="timelineActionInFlight !== eidx">Revert</span>
+                <span x-show="timelineActionInFlight === eidx">Reverting…</span>
+              </button>
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                Undoes this apply via in-session rollback. Disappears after addon restart — fall back to
+                <code class="font-mono">haops_backup_revert</code> then.
+              </span>
+            </div>
+          </template>
+          <template x-if="timelineActionError[eidx]">
+            <div class="mt-2 text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono" x-text="timelineActionError[eidx]"></div>
+          </template>
+          <template x-if="timelineActionResult[eidx]">
+            <div class="mt-2 text-xs text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 p-2 rounded" x-text="timelineActionResult[eidx]"></div>
+          </template>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Pagination: 50 per page; auto-refresh polling only fires on page 1
+       so the offset window doesn't shift under the user mid-read. -->
+  <div class="mt-4 flex items-center justify-between text-sm" x-show="timelinePage > 0 || timeline?.has_more">
+    <button
+      @click="timelinePrevPage()"
+      :disabled="timelinePage === 0"
+      class="px-3 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+      ← Newer
+    </button>
+    <span class="text-xs text-gray-500 dark:text-gray-400 font-mono">
+      <span x-text="'Page ' + (timelinePage + 1)"></span>
+      <span x-show="timelinePage === 0 && timelineAutoRefresh" class="ml-2">· auto-refreshing</span>
+      <span x-show="timelinePage > 0" class="ml-2">· auto-refresh paused</span>
+    </span>
+    <button
+      @click="timelineNextPage()"
+      :disabled="!timeline?.has_more"
+      class="px-3 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+      Older →
+    </button>
+  </div>
+</section>
+
+<!-- Backups -->
+<section x-show="active === 'backups'">
+  <h2 class="text-xl font-semibold mb-1">Backups</h2>
+  <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+    Summary of persistent backups plus admin-convenience prune actions.
+    Full control (revert, targeted deletion) stays in the MCP flow —
+    use <code class="font-mono">haops_backup_revert</code> /
+    <code class="font-mono">haops_backup_prune</code>.
+  </p>
+
+  <template x-if="!backups">
+    <p class="text-gray-500 dark:text-gray-400">Loading…</p>
+  </template>
+
+  <template x-if="backups">
+    <div class="space-y-4">
+      <!-- Action buttons -->
+      <div class="flex flex-wrap gap-2">
+        <button
+          @click="pruneNow()"
+          :disabled="backupActionInFlight"
+          class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium">
+          <span x-show="!backupActionInFlight">Prune now (use retention)</span>
+          <span x-show="backupActionInFlight && backupActionLabel === 'prune'">Pruning…</span>
+        </button>
+        <button
+          @click="clearAllNow()"
+          :disabled="backupActionInFlight"
+          class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-medium">
+          <span x-show="!backupActionInFlight">Clear all now</span>
+          <span x-show="backupActionInFlight && backupActionLabel === 'clear_all'">Clearing…</span>
+        </button>
+      </div>
+
+      <template x-if="backupActionError">
+        <div class="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono" x-text="backupActionError"></div>
+      </template>
+      <template x-if="backupActionResult">
+        <div class="text-sm text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 p-2 rounded">
+          <span x-text="backupActionResult"></span>
+        </div>
+      </template>
+
+      <!-- Totals + retention -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">Total backups</div>
+          <div class="text-2xl font-semibold mt-1" x-text="backups?.summary?.total_count ?? 0"></div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">Disk usage</div>
+          <div class="text-2xl font-semibold mt-1" x-text="formatBytes(backups?.summary?.total_bytes ?? 0)"></div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">Max age (days)</div>
+          <div class="text-2xl font-semibold mt-1" x-text="backups?.retention?.max_age_days"></div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">Max per type</div>
+          <div class="text-2xl font-semibold mt-1" x-text="backups?.retention?.max_per_type"></div>
+        </div>
+      </div>
+
+      <!-- Per-type breakdown -->
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
+        <div class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 text-xs uppercase text-gray-500 dark:text-gray-400">By type</div>
+        <table class="w-full text-sm">
+          <thead class="text-xs uppercase text-gray-500 dark:text-gray-400">
+            <tr class="border-b border-gray-100 dark:border-gray-700">
+              <th class="text-left px-4 py-2">Type</th>
+              <th class="text-right px-4 py-2">Count</th>
+              <th class="text-right px-4 py-2">Bytes</th>
+              <th class="text-left px-4 py-2">Oldest</th>
+              <th class="text-left px-4 py-2">Newest</th>
+              <th class="text-right px-4 py-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="row in backupsByType" :key="row.type">
+              <tr class="border-t border-gray-100 dark:border-gray-700">
+                <td class="px-4 py-2 font-medium" x-text="row.type"></td>
+                <td class="px-4 py-2 text-right" x-text="row.count"></td>
+                <td class="px-4 py-2 text-right font-mono text-xs" x-text="formatBytes(row.bytes)"></td>
+                <td class="px-4 py-2 font-mono text-xs text-gray-500 dark:text-gray-400" x-text="formatTimestamp(row.oldest_ts)"></td>
+                <td class="px-4 py-2 font-mono text-xs text-gray-500 dark:text-gray-400" x-text="formatTimestamp(row.newest_ts)"></td>
+                <td class="px-4 py-2 text-right">
+                  <button
+                    x-show="row.count > 0"
+                    @click="clearType(row.type)"
+                    :disabled="backupActionInFlight"
+                    :title="'Clear all ' + row.type + ' backups'"
+                    class="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 text-xs disabled:opacity-50">
+                    Clear
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Last prune -->
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+        <div class="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">Last prune</div>
+        <template x-if="!backups?.last_prune">
+          <p class="text-gray-500 dark:text-gray-400 text-sm italic">
+            No prune has been logged yet. Retention runs automatically after every backup write — this will populate once the first prune removes something.
+          </p>
+        </template>
+        <template x-if="backups?.last_prune">
+          <div class="text-sm space-y-1">
+            <div>
+              <span class="text-gray-500 dark:text-gray-400">When:</span>
+              <span class="font-mono" x-text="formatTimestamp(backups.last_prune.ts)"></span>
+            </div>
+            <div>
+              <span class="text-gray-500 dark:text-gray-400">Removed:</span>
+              <span x-text="backups.last_prune.pruned_count + ' backup(s), ' + formatBytes(backups.last_prune.bytes_freed) + ' freed'"></span>
+            </div>
+            <div>
+              <span class="text-gray-500 dark:text-gray-400">Scope:</span>
+              <span x-text="backups.last_prune.type + (backups.last_prune.clear_all ? ' (clear_all)' : '')"></span>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Backup location -->
+      <div class="text-xs text-gray-500 dark:text-gray-400">
+        Backup directory: <span class="font-mono" x-text="backups?.backup_dir"></span>
+      </div>
+    </div>
+  </template>
+</section>
+
+</main>
+
+<script>
+function app() {
+  return {
+    active: 'timeline',
+    tabs: [
+      {id:'timeline', label:'Timeline'},
+      {id:'backups',  label:'Backups'},
+      {id:'health',   label:'Health'},
+    ],
+    timeline: null,
+    backups: null,
+    backupActionInFlight: false,
+    backupActionLabel: '',
+    backupActionError: '',
+    backupActionResult: '',
+    auditClearInFlight: false,
+    timelineAutoRefresh: null,
+    timelineActionInFlight: -1,
+    timelineActionError: {},
+    timelineActionResult: {},
+    expandedTimeline: -1,
+    timelinePage: 0,
+    timelinePageSize: 50,
+    selfCheck: null,
+    toolsCheck: null,
+    selfCheckLoading: false,
+    toolsCheckLoading: false,
+    selfCheckError: '',
+    toolsCheckError: '',
+    version: '',
+    lastRefresh: '',
+    themeMode: 'auto',
+
+    async init() {
+      this.themeMode = localStorage.getItem('haops-theme') || 'auto';
+      this.applyTheme();
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (this.themeMode === 'auto') this.applyTheme();
+      });
+      // Prefetch self_check in the background so the title bar shows
+      // the addon version on page load — independent of which tab the
+      // user opens. Without this, version only populated when Health
+      // was visited, which felt flaky.
+      this._loadSelfCheck();
+      await this.load('timeline');
+      this._startTimelinePolling();
+    },
+
+    async _loadSelfCheck() {
+      // Single source for self_check — used by init() (for the title bar)
+      // and by loadHealth() (for the Health tab block). Idempotent: if a
+      // load is already in flight, callers piggyback on the same promise
+      // so we don't double-fetch when the user opens Health right after
+      // page load.
+      if (this._selfCheckPromise) return this._selfCheckPromise;
+      this.selfCheckLoading = true;
+      this.selfCheckError = '';
+      var self = this;
+      this._selfCheckPromise = this.fetchJson('/self_check').then(function(d) {
+        self.selfCheck = d;
+        if (d && d.ha_ops_version) self.version = d.ha_ops_version;
+      }).catch(function(e) {
+        self.selfCheckError = (e && e.message) || String(e);
+      }).finally(function() {
+        self.selfCheckLoading = false;
+        self._selfCheckPromise = null;
+      });
+      return this._selfCheckPromise;
+    },
+
+    cycleTheme() {
+      this.themeMode = this.themeMode === 'auto' ? 'light'
+                     : this.themeMode === 'light' ? 'dark' : 'auto';
+      if (this.themeMode === 'auto') localStorage.removeItem('haops-theme');
+      else localStorage.setItem('haops-theme', this.themeMode);
+      this.applyTheme();
+    },
+
+    applyTheme() {
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var dark = this.themeMode === 'dark' || (this.themeMode === 'auto' && prefersDark);
+      document.documentElement.classList.toggle('dark', dark);
+    },
+
+    apiBase() {
+      var p = window.location.pathname;
+      var m = p.match(/^(.*\/)ui(\/?)$/);
+      return m ? m[1] + 'api/ui' : 'api/ui';
+    },
+
+    async fetchJson(path) {
+      var r = await fetch(this.apiBase() + path, {credentials: 'same-origin'});
+      if (!r.ok) {
+        var msg = 'HTTP ' + r.status;
+        try {
+          var body = await r.json();
+          if (body && body.error) msg = body.error;
+        } catch (_) { /* not JSON */ }
+        throw new Error(msg);
+      }
+      return r.json();
+    },
+
+    async switchTab(id) {
+      this.active = id;
+      await this.load(id);
+      // Auto-refresh Timeline while it's the active tab AND on page 1
+      // (polling on page > 0 would shift the offset window under the
+      // user). _startTimelinePolling guards on this internally.
+      this._stopTimelinePolling();
+      if (id === 'timeline') {
+        this._startTimelinePolling();
+      }
+    },
+
+    async timelineNextPage() {
+      if (!this.timeline?.has_more) return;
+      this.timelinePage += 1;
+      this.expandedTimeline = -1;
+      this._stopTimelinePolling();
+      await this.load('timeline');
+    },
+
+    async timelinePrevPage() {
+      if (this.timelinePage === 0) return;
+      this.timelinePage -= 1;
+      this.expandedTimeline = -1;
+      await this.load('timeline');
+      // Resume polling once we're back on page 1.
+      if (this.timelinePage === 0 && this.active === 'timeline') {
+        this._startTimelinePolling();
+      }
+    },
+
+    _startTimelinePolling() {
+      if (this.timelineAutoRefresh) return;
+      // Only poll on page 1; on deeper pages the offset window would
+      // shift under the user as new entries arrive at the head.
+      if (this.timelinePage !== 0) return;
+      this.timelineAutoRefresh = setInterval(async () => {
+        if (this.active !== 'timeline' || this.timelinePage !== 0) {
+          this._stopTimelinePolling();
+          return;
+        }
+        try {
+          var fresh = await this.fetchJson('/timeline?offset=0&limit=' + this.timelinePageSize);
+          // Only update if the count changed — avoids re-rendering
+          // (and collapsing expanded rows) on every tick. Carry over
+          // any already-loaded diffs (keyed by ts+tool) so the user
+          // doesn't see "Loading diff…" reappear on a still-expanded
+          // row when a new entry pushes onto the head.
+          if (fresh.count !== (this.timeline?.count ?? 0)
+              || fresh.has_more !== this.timeline?.has_more) {
+            this._mergeCachedDiffs(fresh, this.timeline);
+            this.timeline = fresh;
+          }
+        } catch (_) { /* silent — next tick retries */ }
+      }, 5000);
+    },
+
+    _stopTimelinePolling() {
+      if (this.timelineAutoRefresh) {
+        clearInterval(this.timelineAutoRefresh);
+        this.timelineAutoRefresh = null;
+      }
+    },
+
+    async load(id) {
+      try {
+        if (id === 'health')        await this.loadHealth();
+        else if (id === 'timeline') {
+          var offset = this.timelinePage * this.timelinePageSize;
+          this.timeline = await this.fetchJson(
+            '/timeline?offset=' + offset + '&limit=' + this.timelinePageSize
+          );
+        }
+        else if (id === 'backups')  this.backups  = await this.fetchJson('/backups');
+        this.lastRefresh = new Date().toLocaleTimeString();
+      } catch (e) {
+        console.error('load', id, e);
+      }
+    },
+
+    async loadHealth() {
+      // Fire both probes in parallel and render each block as soon as
+      // its fetch resolves — tools_check runs every per-group probe
+      // serially and can take several seconds, so blocking self_check
+      // (which is fast) on it would mean the whole panel sits at
+      // "Loading…" until the slow one returns.
+      // _loadSelfCheck is shared with init() — if it's already loaded
+      // or in flight, we piggyback rather than re-fetch.
+      var p1 = this._loadSelfCheck();
+      this.toolsCheckLoading = true;
+      this.toolsCheckError = '';
+      var self = this;
+      var p2 = this.fetchJson('/tools_check').then(function(d) {
+        self.toolsCheck = d;
+      }).catch(function(e) {
+        self.toolsCheckError = (e && e.message) || String(e);
+      }).finally(function() {
+        self.toolsCheckLoading = false;
+      });
+      await Promise.allSettled([p1, p2]);
+    },
+
+    get selfCheckEntries() {
+      var s = this.selfCheck || {};
+      var raw = s.checks || (typeof s === 'object' ? s : {});
+      // Filter to dict entries only — strings like 'overall' and
+      // 'ha_ops_version' would get iterated character-by-character
+      // by fieldEntries/Object.entries if left in.
+      var filtered = {};
+      Object.keys(raw).forEach(function(k) {
+        if (typeof raw[k] === 'object' && raw[k] !== null) {
+          filtered[k] = raw[k];
+        }
+      });
+      return filtered;
+    },
+
+    fieldEntries(obj) {
+      if (!obj) return [];
+      var skip = new Set(['status', 'error', 'dashboard_error']);
+      return Object.entries(obj).filter(([k]) => !skip.has(k));
+    },
+
+    formatValue(v) {
+      if (v === null || v === undefined) return '—';
+      if (typeof v === 'boolean') return v ? 'true' : 'false';
+      if (typeof v === 'object') return JSON.stringify(v);
+      var s = String(v);
+      return s.length > 200 ? s.slice(0, 200) + '…' : s;
+    },
+
+    testSummary(test) {
+      if (!test || typeof test !== 'object') return '';
+      var bits = [];
+      Object.entries(test).forEach(function([k, v]) {
+        if (k === 'ok' || k === 'error') return;
+        bits.push(k + '=' + (typeof v === 'object' ? JSON.stringify(v) : v));
+      });
+      return bits.join(' · ');
+    },
+
+    toggleTimelineEntry(idx) {
+      this.expandedTimeline = this.expandedTimeline === idx ? -1 : idx;
+      if (this.expandedTimeline === idx) {
+        this._maybeFetchDiff(idx);
+      }
+    },
+
+    async _maybeFetchDiff(idx) {
+      // Lazy-load the diff body for this row. The list payload only
+      // carries diff_present (so initial render stays small even with
+      // 50 entries × 60 KB diffs). On expand we pull the body once and
+      // cache it onto the entry.
+      var e = this.timeline?.entries?.[idx];
+      if (!e) return;
+      if (!e.diff_present) return;
+      if (typeof e.diff === 'string') return;          // already loaded
+      if (e._diff_loading) return;                     // in-flight
+      e._diff_loading = true;
+      e._diff_error = '';
+      try {
+        var qs = '?ts=' + encodeURIComponent(e.timestamp)
+               + '&tool=' + encodeURIComponent(e.tool);
+        var data = await this.fetchJson('/timeline/diff' + qs);
+        if (data.diff_present) {
+          e.diff = typeof data.diff === 'string' ? data.diff : '';
+          e.diff_truncated = !!data.diff_truncated;
+        } else {
+          // Server says no diff after all — flip the flag so the row
+          // stops showing the spinner and falls through to the empty-
+          // diff branch.
+          e.diff_present = false;
+        }
+      } catch (err) {
+        e._diff_error = (err && err.message) || String(err);
+      } finally {
+        e._diff_loading = false;
+      }
+    },
+
+    _mergeCachedDiffs(fresh, prev) {
+      // Carry over cached diff bodies from `prev` to `fresh` when a
+      // poll replaces the timeline list. Match on timestamp+tool —
+      // unique enough since the audit log is append-only.
+      if (!prev?.entries?.length || !fresh?.entries?.length) return;
+      var byKey = {};
+      prev.entries.forEach(function(e) {
+        if (typeof e.diff === 'string') {
+          byKey[e.timestamp + '|' + e.tool] = {
+            diff: e.diff,
+            diff_truncated: !!e.diff_truncated,
+          };
+        }
+      });
+      fresh.entries.forEach(function(e) {
+        var hit = byKey[e.timestamp + '|' + e.tool];
+        if (hit) {
+          e.diff = hit.diff;
+          e.diff_truncated = hit.diff_truncated;
+        }
+      });
+    },
+
+    dashboardStoragePath(dashboardId) {
+      // Map dashboard url_path to its .storage file path on the server.
+      // HA sanitises url_path → storage key by replacing - with _.
+      if (!dashboardId) return '';
+      if (dashboardId === 'lovelace') return '/config/.storage/lovelace';
+      return '/config/.storage/lovelace.' + dashboardId.replace(/-/g, '_');
+    },
+
+    formatTimestamp(iso) {
+      if (!iso) return '';
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return iso;
+      return d.toLocaleString(undefined, {
+        year: 'numeric', month: 'short', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      });
+    },
+
+    formatBytes(n) {
+      if (n == null) return '—';
+      if (n < 1024) return n + ' B';
+      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+      if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+      return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+    },
+
+    get backupsByType() {
+      var pt = this.backups?.summary?.per_type || {};
+      return ['config', 'dashboard', 'entity', 'db']
+        .map(function(t) {
+          var b = pt[t] || {};
+          return {
+            type: t,
+            count: b.count ?? 0,
+            bytes: b.bytes ?? 0,
+            oldest_ts: b.oldest_ts,
+            newest_ts: b.newest_ts,
+          };
+        });
+    },
+
+    async pruneNow() {
+      // Admin-convenience: run the configured retention pass manually.
+      // Two-step: preview → browser confirm → execute. Mirrors the
+      // haops_backup_prune two-phase shape without issuing an MCP token.
+      await this._runBackupPruneAction(
+        'prune',
+        {type: 'all', clear_all: false},
+        function(preview) {
+          if (preview.count === 0) {
+            return 'Nothing matches the retention policy — already clean.';
+          }
+          return 'Prune ' + preview.count + ' backup(s), freeing ~'
+            + (preview.bytes_freed / (1024 * 1024)).toFixed(1) + ' MB?';
+        }
+      );
+    },
+
+    async clearAllNow() {
+      await this._runBackupPruneAction(
+        'clear_all',
+        {type: 'all', clear_all: true},
+        function(preview) {
+          if (preview.count === 0) return 'No backups to clear.';
+          return 'CLEAR ALL ' + preview.count + ' backup(s) across every type'
+            + ' (' + (preview.bytes_freed / (1024 * 1024)).toFixed(1) + ' MB)?\n\n'
+            + 'This is irreversible. Backups restored via haops_backup_revert will no longer be available.';
+        }
+      );
+    },
+
+    async clearType(type) {
+      await this._runBackupPruneAction(
+        'clear_' + type,
+        {type: type, clear_all: true},
+        function(preview) {
+          if (preview.count === 0) return 'No ' + type + ' backups to clear.';
+          return 'Clear all ' + preview.count + ' ' + type + ' backup(s)'
+            + ' (' + (preview.bytes_freed / (1024 * 1024)).toFixed(1) + ' MB)?\n\n'
+            + 'Other backup types are untouched.';
+        }
+      );
+    },
+
+    async _runBackupPruneAction(label, body, confirmMessageBuilder) {
+      this.backupActionError = '';
+      this.backupActionResult = '';
+      this.backupActionLabel = label;
+      this.backupActionInFlight = true;
+      try {
+        // Phase 1 — dry-run preview.
+        var preview = await this._postJson('/backup_prune', Object.assign({}, body, {execute: false}));
+        if (preview && preview.count === 0) {
+          this.backupActionResult = confirmMessageBuilder(preview);
+          return;
+        }
+        // Phase 2 — browser confirm, then execute.
+        var msg = confirmMessageBuilder(preview);
+        if (!window.confirm(msg)) {
+          this.backupActionResult = 'Cancelled — nothing changed.';
+          return;
+        }
+        var applied = await this._postJson('/backup_prune', Object.assign({}, body, {execute: true}));
+        this.backupActionResult = 'Removed ' + applied.count + ' backup(s), freed '
+          + this.formatBytes(applied.bytes_freed) + '.';
+        // Refresh summary so the panel reflects the new state.
+        this.backups = await this.fetchJson('/backups');
+      } catch (e) {
+        this.backupActionError = String(e.message || e);
+      } finally {
+        this.backupActionInFlight = false;
+        this.backupActionLabel = '';
+      }
+    },
+
+    async clearAuditLog() {
+      var count = this.timeline?.entries?.length || 0;
+      if (!window.confirm(
+        'Clear the entire audit log (' + count + ' entries)?\n\n'
+        + 'This wipes the Timeline. The log file is recreated '
+        + 'automatically on the next mutation.'
+      )) return;
+      this.auditClearInFlight = true;
+      try {
+        await this._postJson('/audit_clear', {});
+        // Log just got wiped — reset to page 1 (any deeper page is now
+        // empty) and re-fetch via the standard load path so polling
+        // resumes on the fresh state.
+        this.timelinePage = 0;
+        this.expandedTimeline = -1;
+        await this.load('timeline');
+        if (!this.timelineAutoRefresh) this._startTimelinePolling();
+      } catch (e) {
+        console.error('clearAuditLog', e);
+      } finally {
+        this.auditClearInFlight = false;
+      }
+    },
+
+    scrollToPair(idx) {
+      // Expand the paired entry + scroll it into view. Each Timeline row
+      // has id="tl-row-<idx>" so we can anchor without URL fragments.
+      this.expandedTimeline = idx;
+      this.$nextTick(() => {
+        var el = document.getElementById('tl-row-' + idx);
+        if (el) {
+          el.scrollIntoView({behavior: 'smooth', block: 'center'});
+          el.classList.add('ring-2', 'ring-indigo-500');
+          setTimeout(() => {
+            el.classList.remove('ring-2', 'ring-indigo-500');
+          }, 1500);
+        }
+      });
+    },
+
+    async revertEntry(entry, idx) {
+      // Timeline Revert button — calls POST /api/ui/rollback which shares
+      // haops_rollback's code path. Preview modal confirms; apply executes.
+      this.timelineActionError = Object.assign({}, this.timelineActionError, {[idx]: ''});
+      this.timelineActionResult = Object.assign({}, this.timelineActionResult, {[idx]: ''});
+      this.timelineActionInFlight = idx;
+      try {
+        var preview = await this._postJson('/rollback', {
+          transaction_id: entry.transaction_id,
+          execute: false,
+        });
+        var msg = 'Revert ' + entry.tool + ' — '
+          + preview.count + ' target(s) from ' + preview.operation + '?\n\n'
+          + preview.targets.map(function(t) {
+              return '• ' + t.action + ' ' + t.target;
+            }).join('\n')
+          + '\n\nHA side effects fired during the original apply are NOT rolled back.';
+        if (!window.confirm(msg)) {
+          this.timelineActionResult = Object.assign({}, this.timelineActionResult,
+            {[idx]: 'Cancelled — nothing changed.'});
+          return;
+        }
+        var applied = await this._postJson('/rollback', {
+          transaction_id: entry.transaction_id,
+          execute: true,
+        });
+        if (applied.success) {
+          this.timelineActionResult = Object.assign({}, this.timelineActionResult,
+            {[idx]: 'Reverted ' + applied.restored.length + ' target(s).'});
+        } else {
+          this.timelineActionError = Object.assign({}, this.timelineActionError,
+            {[idx]: 'Rollback partial: ' + applied.still_dirty.length + ' target(s) failed — see audit log.'});
+        }
+        // Refresh timeline so the new rollback entry appears + the reverted row
+        // loses its transaction/button.
+        this.timeline = await this.fetchJson('/timeline');
+      } catch (e) {
+        this.timelineActionError = Object.assign({}, this.timelineActionError,
+          {[idx]: String(e.message || e)});
+      } finally {
+        this.timelineActionInFlight = -1;
+      }
+    },
+
+    async _postJson(path, body) {
+      var r = await fetch(this.apiBase() + path, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        var msg = 'HTTP ' + r.status;
+        try {
+          var err = await r.json();
+          if (err && err.error) msg = err.error;
+        } catch (_) { /* not JSON */ }
+        throw new Error(msg);
+      }
+      return r.json();
+    },
+
+    renderDiffHtml(diff) {
+      // Syntax colouring for diffs, YAML blocks, and JSON-diff summaries.
+      // Escape HTML first, then line-colour. The <pre> wrapper supplies the
+      // monospace font and overflow behaviour.
+      if (!diff) return '';
+      var esc = diff
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return esc.split('\n').map(function(line) {
+        // ── Unified diff prefixes ──
+        if (line.startsWith('+++') || line.startsWith('---')) {
+          return '<span class="text-gray-500">' + line + '</span>';
+        }
+        if (line.startsWith('+')) {
+          return '<span class="text-green-700 dark:text-green-400">' + line + '</span>';
+        }
+        if (line.startsWith('-')) {
+          return '<span class="text-red-700 dark:text-red-400">' + line + '</span>';
+        }
+        if (line.startsWith('@@')) {
+          return '<span class="text-blue-700 dark:text-blue-400">' + line + '</span>';
+        }
+        // ── Indented add/remove from format_json_diff / patch-aware diff ──
+        var trimmed = line.trimStart();
+        if (trimmed.startsWith('+ ')) {
+          return '<span class="text-green-700 dark:text-green-400">' + line + '</span>';
+        }
+        if (trimmed.startsWith('- ') && !trimmed.match(/^- [a-z_]+:/)) {
+          // Diff removal, not a YAML list marker (list markers are "- key:")
+          return '<span class="text-red-700 dark:text-red-400">' + line + '</span>';
+        }
+        if (trimmed.startsWith('~ ')) {
+          return '<span class="text-yellow-700 dark:text-yellow-400">' + line + '</span>';
+        }
+        if (trimmed.startsWith('? ')) {
+          return '<span class="text-blue-700 dark:text-blue-400">' + line + '</span>';
+        }
+        // ── Section headers (Added items:, Changed values:, etc.) ──
+        if (line.match(/^[A-Z][a-z].*:$/) || line.match(/^\(array at /)) {
+          return '<span class="text-gray-500 dark:text-gray-400 font-semibold">' + line + '</span>';
+        }
+        // ── YAML syntax highlighting for indented content blocks ──
+        // Key: value — color the key cyan, colon gray
+        var yamlKV = line.match(/^(\s*)([\w._-]+)(:)(\s?)(.*)/);
+        if (yamlKV) {
+          var indent = yamlKV[1];
+          var key = '<span class="text-cyan-700 dark:text-cyan-400">' + yamlKV[2] + '</span>';
+          var colon = '<span class="text-gray-500">' + yamlKV[3] + '</span>';
+          var space = yamlKV[4];
+          var val = yamlKV[5];
+          // Color values: numbers, booleans, null
+          if (val.match(/^-?\d+(\.\d+)?$/)) {
+            val = '<span class="text-purple-700 dark:text-purple-400">' + val + '</span>';
+          } else if (val.match(/^(true|false|null|yes|no|on|off)$/i)) {
+            val = '<span class="text-orange-700 dark:text-orange-400">' + val + '</span>';
+          } else if (val.match(/^['"]/) || val.match(/^[a-z]+\.[a-z_]+/)) {
+            // Quoted strings or entity_ids (domain.object_id)
+            val = '<span class="text-emerald-700 dark:text-emerald-400">' + val + '</span>';
+          }
+          return indent + key + colon + space + val;
+        }
+        // YAML list item with key: "- type: button" — marker gray, key cyan
+        var yamlListKV = line.match(/^(\s*)(- )([\w._-]+)(:)(\s?)(.*)/);
+        if (yamlListKV) {
+          return yamlListKV[1]
+            + '<span class="text-gray-500">' + yamlListKV[2] + '</span>'
+            + '<span class="text-cyan-700 dark:text-cyan-400">' + yamlListKV[3] + '</span>'
+            + '<span class="text-gray-500">' + yamlListKV[4] + '</span>'
+            + yamlListKV[5]
+            + yamlListKV[6];
+        }
+        // YAML list marker "- value" (no key) — subtle marker
+        var yamlList = line.match(/^(\s*)(- )(.*)/);
+        if (yamlList) {
+          var val2 = yamlList[3];
+          return yamlList[1]
+            + '<span class="text-gray-500">' + yamlList[2] + '</span>'
+            + val2;
+        }
+        return line;
+      }).join('\n');
+    },
+
+    get toolsCheckGroups() {
+      var t = this.toolsCheck || {};
+      var out = {};
+      // Filter out the summary/meta keys — they're rendered separately
+      // in the "Overall:" line above the groups. The summary object was
+      // moved under a `summary` key in the response; older flat keys
+      // are kept in the filter for back-compat with cached responses.
+      var meta = new Set([
+        'summary', 'overall', 'broken_tools', 'groups_passing',
+        'groups_failing', 'groups_partial', 'groups_skipped', 'error',
+      ]);
+      Object.keys(t).forEach(function(k) {
+        if (!meta.has(k)) out[k] = t[k];
+      });
+      return out;
+    },
+
+  };
+}
+</script>
+
+</body>
+</html>

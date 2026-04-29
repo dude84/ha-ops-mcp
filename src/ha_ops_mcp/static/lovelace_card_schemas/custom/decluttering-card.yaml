@@ -1,0 +1,13 @@
+type: custom:decluttering-card
+required: [template]
+field_types:
+  template: string
+  variables: list_of_single_key_maps
+notes:
+  - "variables MUST be a list of single-key maps (HA's decluttering convention),
+     NOT a plain map. The most common bug. Example:
+       variables:
+         - entity: light.x
+         - title: Hello"
+  - "default values for variables go inside the *template definition* (under
+     decluttering_templates: in the dashboard root), not on the card."

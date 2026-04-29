@@ -1,0 +1,6 @@
+type: markdown
+required: [content]
+field_types:
+  content: string
+  title: string
+  card_size: number

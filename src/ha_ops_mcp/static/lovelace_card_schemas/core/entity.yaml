@@ -1,0 +1,9 @@
+type: entity
+required: [entity]
+field_types:
+  entity: string
+  name: string
+  icon: string
+  unit: string
+  attribute: string
+  state_color: boolean

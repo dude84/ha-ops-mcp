@@ -1,0 +1,5 @@
+type: conditional
+required: [conditions, card]
+field_types:
+  conditions: array
+  card: object

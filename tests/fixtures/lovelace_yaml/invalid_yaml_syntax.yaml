@@ -1,0 +1,6 @@
+title: Home
+views:
+  - title: Bad
+    cards:
+      - type: entity
+       entity: sensor.x

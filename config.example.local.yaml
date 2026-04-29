@@ -1,0 +1,61 @@
+# ha-ops-mcp configuration
+# Copy to config.yaml and fill in your values.
+# All values can also be set via environment variables (prefixed HA_OPS_).
+
+ha:
+  url: "http://homeassistant.local:8123"
+  # Long-lived access token (or set HA_OPS_TOKEN env var)
+  token: ""
+  # Alternative: read token from file (useful in container/addon)
+  # token_file: "/run/secrets/ha_token"
+
+database:
+  # Auto-detect from HA's recorder config (reads configuration.yaml + secrets.yaml)
+  auto_detect: true
+  # Or specify explicitly:
+  # url: "mysql://homeassistant:password@core-mariadb/homeassistant"
+  # url: "sqlite:////config/home-assistant_v2.db"
+  # url: "postgresql://homeassistant:password@localhost/homeassistant"
+
+filesystem:
+  # Path to HA config directory
+  config_root: "/config"
+
+server:
+  # Transport: stdio (for Claude Code / local MCP clients), sse, streamable-http
+  transport: "stdio"
+  # For network transports:
+  # host: "0.0.0.0"
+  # port: 8901
+
+safety:
+  # Require two-phase confirmation for all mutating operations
+  require_confirmation: true
+  # Auto-backup config files before modification — strongly recommended to keep true
+  backup_on_write: true
+  # Maximum rows returned by db_query
+  max_query_rows: 10000
+
+backup:
+  # Where to store backups. Default points at HA's /backup volume so backups
+  # live OUTSIDE /config/ (avoids backups-of-backups in HA's own snapshots
+  # and keeps the config tree searches clean). Legacy deploys that had
+  # "/config/ha-ops-backups" get a one-shot warning at startup pointing at
+  # the new location — no auto-migration, mv the files yourself when ready.
+  dir: "/backup/ha-ops-mcp"
+  # Retention
+  max_age_days: 30
+  max_per_type: 100
+
+audit:
+  # Where to write the append-only operations log. Leave empty to derive from
+  # backup.dir (as <backup.dir>/../audit) for back-compat. Setting this
+  # explicitly decouples the audit trail from the backup location.
+  # dir: "/config/ha-ops-audit"
+
+auth:
+  # OAuth 2.0 for MCP transport (SSE/HTTP). Enabled by default since v0.27.0.
+  # Ignored for stdio transport. Set to false for fully-trusted LANs.
+  # enabled: true
+  # data_dir: "/data"  # addon persistent dir; for standalone use any writable path
+  # issuer_url: ""  # auto-derived from HA internal_url; override only if needed

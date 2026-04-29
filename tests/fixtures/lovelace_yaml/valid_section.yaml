@@ -1,0 +1,6 @@
+type: grid
+cards:
+  - type: entity
+    entity: sensor.temperature
+  - type: markdown
+    content: "Hi"

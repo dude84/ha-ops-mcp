@@ -1,0 +1,49 @@
+configuration:
+  ha_token:
+    name: Home Assistant access token
+    description: >-
+      Long-lived access token for HA. Leave empty to reuse the Supervisor
+      token (recommended) — the addon will authenticate as the Supervisor
+      and route API calls through the Supervisor proxy automatically.
+  transport:
+    name: MCP transport
+    description: >-
+      How MCP clients connect to this server. Keep "sse" (Server-Sent
+      Events over HTTP) — it's the tested path through HA ingress.
+      "streamable-http" is the newer MCP HTTP transport; it should work
+      but hasn't been validated end-to-end here.
+  db_url:
+    name: Recorder database URL
+    description: >-
+      SQLAlchemy URL for HA's recorder DB (sqlite/MariaDB/PostgreSQL).
+      Leave empty to auto-detect from configuration.yaml + secrets.yaml
+      (recommended). Override only if auto-detect fails or you want to
+      point at a replica.
+  backup_dir:
+    name: Backup directory
+    description: >-
+      Where ha-ops-mcp writes its own persistent backups (config file
+      snapshots before edits, pre-mutation DB row dumps, manifest log)
+      — NOT HA's own full-system backups. Must live under /config,
+      /backup, or /share so the container can write to it. Default
+      /config/ha-ops-backups is fine for most users.
+  log_level:
+    name: Log level
+    description: >-
+      Verbosity of the addon's own log. "info" is the normal default;
+      "debug" adds per-tool-call tracing (useful when diagnosing an
+      MCP tool that's misbehaving).
+  auth_enabled:
+    name: OAuth authentication
+    description: >-
+      Require MCP clients to authenticate via OAuth 2.0 before using
+      tools. Recommended — without it, anyone on your LAN can reach
+      the SSE port. On first connect the MCP client opens a browser
+      for a one-time approval; tokens auto-refresh silently for 30 days.
+  auth_issuer_url:
+    name: OAuth issuer URL
+    description: >-
+      The URL that MCP clients use to reach this addon (e.g.
+      http://homeassistant.local:8901). Leave empty to auto-detect
+      from HA's internal URL — only set this if auto-detection picks
+      the wrong hostname.

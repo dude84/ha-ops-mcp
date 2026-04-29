@@ -1,0 +1,65 @@
+name: "HA Ops MCP"
+version: "0.32.2"
+slug: "ha_ops_mcp"
+description: "MCP server for Home Assistant operations — database management, config editing, dashboards, entity hygiene, and system health"
+url: "https://github.com/dude84/ha-ops-mcp"
+
+arch:
+  - aarch64
+  - amd64
+
+init: false
+startup: "application"
+boot: "manual"
+
+# Access to the HA config directory
+map:
+  - config:rw
+  - backup:rw
+  - share:rw
+  - ssl:ro
+
+# Network ports
+ports:
+  8901/tcp: 8901
+ports_description:
+  8901/tcp: "MCP server (SSE/HTTP transport)"
+
+# Permissions
+homeassistant_api: true
+hassio_api: true
+hassio_role: manager  # needed for addon management tools (list, info, logs, restart)
+auth_api: true
+
+host_network: false
+
+options:
+  ha_token: ""
+  transport: "sse"
+  db_url: ""
+  backup_dir: "/backup/ha-ops-mcp"
+  backup_max_age_days: 30
+  backup_max_per_type: 100
+  log_level: "info"
+  auth_enabled: true
+  auth_issuer_url: ""
+
+schema:
+  ha_token: "str?"
+  transport: "list(sse|streamable-http)"
+  db_url: "str?"
+  backup_dir: "str"
+  backup_max_age_days: "int(1,3650)"
+  backup_max_per_type: "int(1,100000)"
+  log_level: "list(debug|info|warning|error)"
+  auth_enabled: "bool?"
+  auth_issuer_url: "str?"
+
+ingress: true
+ingress_port: 8901
+ingress_entry: "ui"
+panel_icon: "mdi:graph-outline"
+panel_title: "HA Ops"
+
+environment:
+  HA_OPS_CONFIG_ROOT: "/config"

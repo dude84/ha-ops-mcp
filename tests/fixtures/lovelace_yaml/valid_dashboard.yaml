@@ -1,0 +1,15 @@
+title: Home
+views:
+  - title: Overview
+    path: overview
+    cards:
+      - type: entity
+        entity: sensor.temperature
+      - type: entities
+        title: Lights
+        entities:
+          - light.living_room
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "Hello"

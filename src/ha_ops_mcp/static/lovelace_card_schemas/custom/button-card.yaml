@@ -1,0 +1,19 @@
+type: custom:button-card
+required: []
+field_types:
+  entity: string
+  name: string
+  icon: string
+  template: any
+  variables: object
+  styles: object
+  state: array
+  show_state: boolean
+  show_name: boolean
+  show_icon: boolean
+notes:
+  - "JS template blocks use [[[ ... ]]] delimiters. Each opener must have a
+     matching closer; an unterminated [[[ causes a generic 'startsWith' /
+     'slice' error in HA's editor without line info."
+  - "template: accepts a string (single template name) OR an array of strings
+     (chained templates merged left-to-right)."

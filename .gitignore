@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code per-user settings
+/.claude/settings.local.json
+
+# Project — user's local config
+/config.local.yaml
+*.db
+
+# Session scratch — gap docs, UX investigation notes, sample captures
+/_gaps/
+
+# OS
+.DS_Store

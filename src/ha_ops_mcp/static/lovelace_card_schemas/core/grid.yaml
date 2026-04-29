@@ -1,0 +1,6 @@
+type: grid
+required: [cards]
+field_types:
+  cards: array
+  columns: number
+  square: boolean

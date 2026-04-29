@@ -1,0 +1,8 @@
+type: entities
+required: [entities]
+field_types:
+  entities: array
+  title: string
+  show_header_toggle: boolean
+  state_color: boolean
+  theme: string

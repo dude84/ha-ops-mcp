@@ -1,0 +1,5 @@
+type: vertical-stack
+required: [cards]
+field_types:
+  cards: array
+  title: string

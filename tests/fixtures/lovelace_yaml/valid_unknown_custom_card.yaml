@@ -1,0 +1,6 @@
+title: Home
+views:
+  - title: Misc
+    cards:
+      - type: custom:totally-made-up-card
+        some_field: "ok"

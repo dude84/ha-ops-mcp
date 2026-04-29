@@ -1,0 +1,17 @@
+type: custom:mushroom-template-card
+required: []
+field_types:
+  entity: string
+  primary: string
+  secondary: string
+  icon: string
+  icon_color: string
+  badge_icon: string
+  badge_color: string
+  picture: string
+  multiline_secondary: boolean
+  layout: string
+  fill_container: boolean
+  tap_action: object
+  hold_action: object
+  double_tap_action: object

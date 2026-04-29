@@ -1,0 +1,12 @@
+title: Home
+views:
+  - title: Buttons
+    cards:
+      - type: custom:button-card
+        entity: light.x
+        styles:
+          card:
+            - background: >-
+                [[[ if (states['light.x'].state === 'on')
+                    return 'red';
+        name: Bad
