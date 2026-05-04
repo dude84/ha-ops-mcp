@@ -108,7 +108,7 @@ async def test_full_authorization_code_flow(tmp_path: Path):
     assert token.access_token
     assert token.refresh_token
     assert token.token_type == "Bearer"
-    assert token.expires_in == 3600
+    assert token.expires_in == 86400
 
     # Code is now consumed — can't load again
     assert await provider.load_authorization_code(client_info, code) is None
@@ -258,3 +258,90 @@ async def test_persistence_survives_reload(tmp_path: Path):
     # Access token survived
     access = await provider2.load_access_token(token.access_token)
     assert access is not None
+
+
+# ── Sliding TTL + refresh-exchange logging ──────────────────────────
+
+
+async def _issue_token(provider: HaOpsOAuthProvider, client_info) -> object:
+    """Helper: register, authorize, exchange — return the OAuthToken."""
+    await provider.register_client(client_info)
+    _, challenge = _pkce_pair()
+    params = _make_auth_params(challenge)
+    redirect = await provider.authorize(client_info, params)
+    from urllib.parse import parse_qs, urlparse
+    code = parse_qs(urlparse(redirect).query)["code"][0]
+    auth_code = await provider.load_authorization_code(client_info, code)
+    return await provider.exchange_authorization_code(client_info, auth_code)
+
+
+@pytest.mark.asyncio
+async def test_sliding_ttl_extends_expires_at_when_past_half_window(tmp_path: Path):
+    """When >50% of the TTL window has elapsed, load_access_token re-stamps expires_at."""
+    provider = HaOpsOAuthProvider(data_dir=tmp_path, access_token_ttl=100)
+    token = await _issue_token(provider, _make_client_info())
+
+    # Simulate 60s of elapsed wall-clock by rewinding expires_at into the
+    # near-expiry zone (40s remaining out of a 100s window — past the 50% mark)
+    raw = provider._store.access_tokens[token.access_token]
+    original_exp = raw["expires_at"]
+    raw["expires_at"] = int(time.time() + 40)
+    provider._store.save()
+
+    # Verifying the token now should slide the window back to ~now+100
+    access = await provider.load_access_token(token.access_token)
+    assert access is not None
+    new_exp = provider._store.access_tokens[token.access_token]["expires_at"]
+    assert new_exp > original_exp - 1  # restored to roughly the original window
+    assert new_exp >= int(time.time() + 90)
+
+
+@pytest.mark.asyncio
+async def test_sliding_ttl_does_not_extend_when_fresh(tmp_path: Path):
+    """No re-stamp (and no disk write) when remaining TTL is still >50% of window."""
+    provider = HaOpsOAuthProvider(data_dir=tmp_path, access_token_ttl=100)
+    token = await _issue_token(provider, _make_client_info())
+
+    raw = provider._store.access_tokens[token.access_token]
+    exp_before = raw["expires_at"]
+
+    access = await provider.load_access_token(token.access_token)
+    assert access is not None
+
+    exp_after = provider._store.access_tokens[token.access_token]["expires_at"]
+    assert exp_after == exp_before  # no change — still in the first half
+
+
+@pytest.mark.asyncio
+async def test_sliding_ttl_does_not_resurrect_expired_tokens(tmp_path: Path):
+    """Sliding extension MUST NOT apply to a token that's already past expiry."""
+    provider = HaOpsOAuthProvider(data_dir=tmp_path, access_token_ttl=100)
+    token = await _issue_token(provider, _make_client_info())
+
+    # Fully expire it
+    provider._store.access_tokens[token.access_token]["expires_at"] = int(time.time() - 10)
+    provider._store.save()
+
+    assert await provider.load_access_token(token.access_token) is None
+    # And the expired entry was deleted from the store, not extended
+    assert token.access_token not in provider._store.access_tokens
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_exchange_logs_at_info(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+):
+    """Refresh exchange emits an INFO log line — diagnostic for client behaviour."""
+    import logging
+    provider = HaOpsOAuthProvider(data_dir=tmp_path)
+    client_info = _make_client_info()
+    token = await _issue_token(provider, client_info)
+    refresh = await provider.load_refresh_token(client_info, token.refresh_token)
+
+    with caplog.at_level(logging.INFO, logger="ha_ops_mcp.auth.provider"):
+        await provider.exchange_refresh_token(client_info, refresh, [])
+
+    matches = [r for r in caplog.records if "Refresh-token exchange" in r.message]
+    seen = [r.message for r in caplog.records]
+    assert matches, f"expected refresh-exchange INFO log, got: {seen}"
+    assert matches[0].levelname == "INFO"

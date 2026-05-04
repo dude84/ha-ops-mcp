@@ -1,3 +1,13 @@
+## 0.32.4
+
+**OAuth access tokens: 24h default + sliding TTL on use + refresh-exchange logging.** Field telemetry (across multi-day Claude Code sessions on streamable-http) showed the 1h `access_token_ttl` default was too short for ha-ops's session shape — review-and-fix loops routinely span hours with multi-minute think pauses, and every TTL crossing surfaces as `MCP error -32602` (the client-side rewrite of the server's spec-correct 401, see `docs/HA_QUIRKS.md`) and forces a manual `/mcp` reconnect. Three layered changes in `auth/provider.py`:
+
+- **Default `access_token_ttl` raised from 3600 s → 86400 s (24h).** Single-user admin tool, blast-radius argument for short access tokens is weak when revocation is one `haops_auth_clear` call away. Existing override via `auth.access_token_ttl` in YAML still wins.
+- **Sliding TTL on use.** `load_access_token` now extends `expires_at` whenever a valid token is verified, so an actively-used session never times out. Throttled persistence — only re-saves the store when remaining lifetime has dropped below half the configured window. Idle tokens still expire on schedule; expired tokens are still rejected (sliding cannot resurrect a token that already crossed `expires_at`).
+- **INFO log on `exchange_refresh_token`.** Diagnostic — until now we couldn't tell server-side whether an MCP client was exercising the refresh-token grant or just doing a fresh dynamic-client-registration on every 401. One log line per attempt is enough to validate which clients refresh proactively without instrumenting them.
+
+Tests: 510 → 514 (+4: sliding extends past half-window, sliding is a no-op when fresh, sliding does not resurrect expired tokens, refresh-exchange emits INFO log).
+
 ## 0.32.3
 
 **Fix: OAuth issuer auto-detection on fresh installs with no `internal_url`.** When HA's `internal_url` is unset, the supervisor returns `null` (or a junk placeholder); the previous parser stringified that into the literal hostname `none`, producing an issuer of `http://none:8901/` that no MCP client can dial — the symptom is "Unable to connect" on the client, not a 401. `run.sh` now treats null/empty/`none`/`localhost`/loopback values as "not detected" and falls back to `http://homeassistant.local:8901` (HA's mDNS default), which works on a default LAN with zero manual config. The existing `auth_issuer_url` override still wins when set. New `docs/HA_QUIRKS.md` entry documents the diagnosis path.

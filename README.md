@@ -10,7 +10,7 @@ An [MCP server](https://modelcontextprotocol.io/) that gives AI assistants (and 
 
 Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.io/integrations/mcp_server/), [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), [hass-mcp](https://github.com/voska/hass-mcp)) focus on device control — "turn on the lights", query states, trigger automations via natural language. ha-ops-mcp is for the work that comes *dduring and after* setup: cleaning up 200 orphaned entities, reorganising dashboards across views, purging a bloated recorder database, editing YAML without losing comments, understanding what references `sensor.energy_grid` before renaming it, and doing all of that with diffs you can review and rollback if something goes wrong (most of the time...).
 
-**60 tools. 510 tests. Mypy strict.**
+**60 tools. 514 tests. Mypy strict.**
 
 ## Installation
 

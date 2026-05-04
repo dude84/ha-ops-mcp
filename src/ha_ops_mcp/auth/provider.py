@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Defaults
 AUTH_CODE_TTL = 300  # 5 minutes
-DEFAULT_ACCESS_TTL = 3600  # 1 hour
+DEFAULT_ACCESS_TTL = 86400  # 24 hours — single-user admin tool, sliding TTL extends on use
 DEFAULT_REFRESH_TTL = 2592000  # 30 days
 
 
@@ -244,6 +244,12 @@ class HaOpsOAuthProvider:
         }
         self._store.save()
 
+        logger.info(
+            "Refresh-token exchange: client=%s expires_in=%ds",
+            (client.client_id or "?")[:12],
+            self._access_ttl,
+        )
+
         return OAuthToken(
             access_token=new_access,
             token_type="Bearer",
@@ -259,10 +265,21 @@ class HaOpsOAuthProvider:
         if raw is None:
             return None
         exp = raw.get("expires_at")
-        if exp is not None and exp < time.time():
+        now = time.time()
+        if exp is not None and exp < now:
             del self._store.access_tokens[token]
             self._store.save()
             return None
+
+        # Sliding TTL: extend expires_at on each successful verification so
+        # active sessions never time out. Throttle persistence — only rewrite
+        # the store when remaining lifetime has dropped below half the window.
+        if exp is not None and self._access_ttl > 0:
+            remaining = exp - now
+            if remaining < (self._access_ttl / 2):
+                raw["expires_at"] = int(now + self._access_ttl)
+                self._store.save()
+
         return AccessToken(**{
             k: v for k, v in raw.items()
             if k in AccessToken.model_fields

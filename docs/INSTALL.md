@@ -131,7 +131,7 @@ Since ha-ops-mcp is a single-user admin tool, authorization requests are **auto-
 
 ### Token lifetimes
 
-- **Access tokens:** 1 hour (configurable via `auth.access_token_ttl`)
+- **Access tokens:** 24 hours (configurable via `auth.access_token_ttl`). Sliding window — TTL is extended on every successful verification, so an actively-used session never expires. Idle sessions still time out on schedule.
 - **Refresh tokens:** 30 days (configurable via `auth.refresh_token_ttl`)
 - **Authorization codes:** 5 minutes
 
