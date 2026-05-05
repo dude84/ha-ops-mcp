@@ -160,6 +160,32 @@ Deleting/disabling hundreds of entities rapidly can overwhelm HA's
 event bus. `haops_entity_remove` and `haops_entity_disable` batch
 operations.
 
+### Input helpers are NOT in the entity registry
+
+`input_boolean`, `input_number`, `input_text`, `input_select`,
+`input_datetime`, `counter`, `timer`, `schedule` look like entities but
+do not get *created* via the entity registry. The registry only mirrors
+them after the integration registers them. Each domain owns its own
+collection in `.storage/<domain>` and the only API that creates,
+updates, or deletes them is the WebSocket pair
+`<domain>/{create,update,delete,list}`. REST `/api/services/...` does
+not expose collection commands, and inserting a row into
+`core.entity_registry` produces a dangling entry with no integration
+backing it.
+
+YAML-defined helpers (declared under `input_boolean:` etc. in
+`configuration.yaml`) are read-only via the WS collection API — HA
+returns "not found" because they aren't in the storage collection.
+Edit the YAML with `haops_config_patch` and reload `input_<domain>`
+instead.
+
+Use `haops_helper_*` for collection helpers. Config-entry helpers
+(`template`, `utility_meter`, `derivative`, `min_max`, `threshold`,
+`statistics`, `tod`, `history_stats`, `integration`, `random`,
+`group`) go through `config_entries/flow/init` instead — multi-step
+state machine, separate tool surface (not yet implemented as of
+v0.33.0).
+
 ---
 
 ## Configuration Operational Patterns

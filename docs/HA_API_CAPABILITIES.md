@@ -55,6 +55,11 @@ Legend: ● = required, ◐ = preferred (falls back to another capability), ○ 
 | **Registry** |
 | `haops_registry_query` | | ◐ | | ◐ | | | Any | FS preferred, WS fallback |
 | `haops_device_info` | ○ | ◐ | | ◐ | | | Any | FS preferred |
+| **Helper** (input_*, counter, timer, schedule) |
+| `haops_helper_list` | | ● | | | | | Any | WS `<domain>/list` per requested domain |
+| `haops_helper_create` | | ● | | ◐ | | | Any | WS `<domain>/create`; FS read of entity registry for optional rename |
+| `haops_helper_update` | | ● | | ◐ | | | Any | WS `<domain>/update`; FS read of entity registry to resolve entity_id → collection id |
+| `haops_helper_delete` | | ● | | ◐ | | | Any | WS `<domain>/delete`; FS read for entity_id resolution |
 | **System** |
 | `haops_system_info` | ● | | ○ | ○ | | | Any | Works without DB/FS but with less detail |
 | `haops_system_logs` | ○ | | | ◐ | | | Any | FS preferred, REST fallback |
