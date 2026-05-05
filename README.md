@@ -10,7 +10,7 @@ An [MCP server](https://modelcontextprotocol.io/) that gives AI assistants (and 
 
 Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.io/integrations/mcp_server/), [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), [hass-mcp](https://github.com/voska/hass-mcp)) focus on device control — "turn on the lights", query states, trigger automations via natural language. ha-ops-mcp is for the work that comes *dduring and after* setup: cleaning up 200 orphaned entities, reorganising dashboards across views, purging a bloated recorder database, editing YAML without losing comments, understanding what references `sensor.energy_grid` before renaming it, and doing all of that with diffs you can review and rollback if something goes wrong (most of the time...).
 
-**60 tools. 514 tests. Mypy strict.**
+**64 tools. 534 tests. Mypy strict.**
 
 ## Installation
 
@@ -80,7 +80,7 @@ When reporting a bug, include: HA version, install method (addon/pip), transport
 
 ## Tools & Capabilities
 
-**60 tools** across database, config, dashboard, entity, registry, system, service, backup, rollback, batch, reference graph, debugger, ergonomic wrappers, and superuser categories. All prefixed `haops_`.
+**64 tools** across database, config, dashboard, entity, registry, system, service, backup, rollback, batch, reference graph, debugger, helper (input_boolean / input_number / counter / timer / schedule etc.), ergonomic wrappers, and superuser categories. All prefixed `haops_`.
 
 - **[Tool reference](https://github.com/dude84/ha-ops-mcp/blob/main/docs/TOOLS.md)** — full list with descriptions and types
 - **[Capability matrix](https://github.com/dude84/ha-ops-mcp/blob/main/docs/HA_API_CAPABILITIES.md)** — per-tool backend dependencies (REST, WS, DB, FS, Supervisor) and token requirements

@@ -492,6 +492,36 @@ async def _check_debugger(ctx: HaOpsContext) -> dict[str, Any]:
     }
 
 
+async def _check_helpers(ctx: HaOpsContext) -> dict[str, Any]:
+    """Probe the WS collection-helper API used by haops_helper_*.
+
+    Lists `input_boolean` and `counter` — one input-style domain and one
+    non-input domain — to confirm the <domain>/list shape works on this
+    HA. Read-only; no helpers are created or modified.
+    """
+    tools_affected = [
+        "haops_helper_list", "haops_helper_create",
+        "haops_helper_update", "haops_helper_delete",
+    ]
+    checks: dict[str, Any] = {}
+    for domain in ("input_boolean", "counter"):
+        try:
+            result = await ctx.ws.send_command(f"{domain}/list")
+            checks[f"{domain}_list"] = {
+                "ok": isinstance(result, list),
+                "count": len(result) if isinstance(result, list) else 0,
+            }
+        except Exception as e:
+            checks[f"{domain}_list"] = {"ok": False, "error": str(e)[:200]}
+
+    all_ok = all(c.get("ok") for c in checks.values())
+    return {
+        "status": "pass" if all_ok else "fail",
+        "tools_affected": tools_affected,
+        "tests": checks,
+    }
+
+
 async def _check_refs(ctx: HaOpsContext) -> dict[str, Any]:
     """Build the reference index and confirm the ref tools work.
 
@@ -555,6 +585,7 @@ async def haops_tools_check(ctx: HaOpsContext) -> dict[str, Any]:
     results["shell"] = await _check_shell(ctx)
     results["refs"] = await _check_refs(ctx)
     results["debugger"] = await _check_debugger(ctx)
+    results["helpers"] = await _check_helpers(ctx)
 
     # Summary
     statuses = [r.get("status") for r in results.values()]

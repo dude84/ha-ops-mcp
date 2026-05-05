@@ -1,3 +1,15 @@
+## 0.33.0
+
+**Collection-helper tools: `haops_helper_{list,create,update,delete}`.** Closes a gap that bit during real use — previously, an LLM asked to "add an input_boolean" had no working path through this MCP. The visible tool surface (`haops_registry_query`, `haops_entity_*`) implied the entity registry was the way, but inserting a row there is a no-op: HA's input helpers are owned by the per-domain collection subsystem in `.storage/<domain>`, not the registry, and the only API that creates them is the WebSocket `<domain>/{create,update,delete,list}` family. `haops_service_call` couldn't reach those either (REST `/api/services` → service calls only; collection commands are WS-native).
+
+The new module wraps the WS collection API for all eight collection-helper domains: `input_boolean`, `input_number`, `input_text`, `input_select`, `input_datetime`, `counter`, `timer`, `schedule`. Same two-phase confirmation flow as the rest of the surface — preview returns a token, apply consumes it. `haops_helper_update` and `haops_helper_delete` accept `entity_id` (e.g. `input_boolean.foo`) and resolve to the collection id via the entity registry's `unique_id` mapping, with a slug-of-name fallback so freshly-created helpers are still resolvable before the registry catches up. `haops_helper_create` optionally accepts a target `entity_id` and renames via `config/entity_registry/update` in the same transaction; rename failure leaves the helper at its auto-derived id and surfaces `rename_error` instead of silently mis-reporting success.
+
+YAML-defined helpers are intentionally out of scope for these tools — HA returns "not found" on collection-API mutations against them. Edit `configuration.yaml` with `haops_config_patch` and reload `input_<domain>` instead.
+
+`haops_tools_check` gains a `helpers` group that probes `input_boolean/list` and `counter/list` to surface a broken WS collection API before a user session hits it. Config-entry helpers (`template`, `utility_meter`, `derivative`, etc.) are NOT covered here — those go through `config_entries/flow/init`, a multi-step state machine, and warrant a separate tool.
+
+Tools: 60 → 64. Tests: 514 → 534 (+20: list/create/update/delete preview & confirm paths, slug fallback, rename-failure path, no-op detection, unresolvable handling, unsupported-domain rejection).
+
 ## 0.32.4
 
 **OAuth access tokens: 24h default + sliding TTL on use + refresh-exchange logging.** Field telemetry (across multi-day Claude Code sessions on streamable-http) showed the 1h `access_token_ttl` default was too short for ha-ops's session shape — review-and-fix loops routinely span hours with multi-minute think pauses, and every TTL crossing surfaces as `MCP error -32602` (the client-side rewrite of the server's spec-correct 401, see `docs/HA_QUIRKS.md`) and forces a manual `/mcp` reconnect. Three layered changes in `auth/provider.py`:

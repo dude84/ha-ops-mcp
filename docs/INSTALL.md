@@ -9,7 +9,7 @@
 5. Search for **ha-ops-mcp** and click **Install**
 6. Go to the add-on's **Configuration** tab and set your options (see below)
 7. Click **Start**
-8. Check the **Log** tab — you should see `"ha-ops-mcp server created with 60 tools"`
+8. Check the **Log** tab — you should see `"ha-ops-mcp server created with 64 tools"`
 
 An **HA Ops** sidebar panel appears automatically via ingress.
 

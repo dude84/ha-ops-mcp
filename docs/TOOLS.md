@@ -53,6 +53,17 @@ All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 | `haops_registry_query` | Read | Generic access to `.storage/core.*` registries: devices, entities, areas, floors, config_entries. Filter, project, paginate. |
 | `haops_device_info` | Read | Device lookup by ID or name — full record + linked entities with state + area resolution. |
 
+## Helper tools (`haops_helper_*`)
+
+Wraps HA's collection-helper WebSocket API for `input_boolean`, `input_number`, `input_text`, `input_select`, `input_datetime`, `counter`, `timer`, `schedule`. These helpers live in `.storage/<domain>` and cannot be created by inserting into the entity registry — `<domain>/create` is the only API that works. YAML-defined helpers are read-only via this surface; edit `configuration.yaml` with `haops_config_patch` instead.
+
+| Tool | Type | Description |
+|---|---|---|
+| `haops_helper_list` | Read | List collection helpers per domain (or all 8). Returns id, name, full payload. |
+| `haops_helper_create` | Write | Two-phase create. Optional `entity_id` triggers in-transaction registry rename. |
+| `haops_helper_update` | Write | Two-phase update by `entity_id` — resolves to collection id via registry's `unique_id`, with slug-of-name fallback. Merges with current payload. |
+| `haops_helper_delete` | Write | Two-phase bulk delete by `entity_id`. Persistent payload backup before removal. |
+
 ## System tools (`haops_system_*`)
 
 | Tool | Type | Description |
