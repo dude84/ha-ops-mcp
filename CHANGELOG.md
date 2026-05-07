@@ -1,3 +1,11 @@
+## 0.33.1
+
+**Fix: bind dual-stack (`::`) so IPv6 clients no longer get a kernel RST.** Default server host changed from `0.0.0.0` to `::`. The symptom was a Claude Code MCP "socket connection was closed unexpectedly" failure within ~30 ms of `GET /sse`, with no entry in the addon log. Root cause: HA OS's Avahi advertises `homeassistant.local` as both an IPv4 (e.g. `10.0.0.150`) and a link-local IPv6 (`fe80::…`) address. RFC 6724 ranks v6 above v4, so Bun's `fetch` (Claude Code) tries v6 first; with the listener on `0.0.0.0` only, the kernel has no v6 socket and replies with a TCP RST. The client surfaces that as a closed connection, never reaches the 401 / OAuth discovery path, and stays stuck.
+
+Binding `::` makes Uvicorn accept on both families on Linux/macOS (default `IPV6_V6ONLY=0`). The HA addon's `ports: 8901/tcp: 8901` mapping forwards both stacks. Existing users who set `HA_OPS_HOST` or `host:` in `config.yaml` keep their override.
+
+This also unblocks the same failure mode for any other MCP client whose HTTP stack prefers v6 — the pattern was specific to dual-stack mDNS, not to Claude Code.
+
 ## 0.33.0
 
 **Collection-helper tools: `haops_helper_{list,create,update,delete}`.** Closes a gap that bit during real use — previously, an LLM asked to "add an input_boolean" had no working path through this MCP. The visible tool surface (`haops_registry_query`, `haops_entity_*`) implied the entity registry was the way, but inserting a row there is a no-op: HA's input helpers are owned by the per-domain collection subsystem in `.storage/<domain>`, not the registry, and the only API that creates them is the WebSocket `<domain>/{create,update,delete,list}` family. `haops_service_call` couldn't reach those either (REST `/api/services` → service calls only; collection commands are WS-native).

@@ -44,7 +44,7 @@ class FilesystemConfig:
 @dataclass
 class ServerConfig:
     transport: str = "stdio"
-    host: str = "0.0.0.0"
+    host: str = "::"
     port: int = 8901
 
 
