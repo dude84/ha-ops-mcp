@@ -7,6 +7,8 @@ import logging
 import os
 from pathlib import Path
 
+import anyio
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="ha-ops-mcp — HA operations MCP server")
@@ -24,7 +26,12 @@ def main() -> None:
     mcp, ctx = create_server(args.config)
 
     transport = os.environ.get("HA_OPS_TRANSPORT", ctx.config.server.transport)
-    mcp.run(transport=transport)  # type: ignore[arg-type]
+
+    if transport == "stdio":
+        mcp.run(transport="stdio")
+    else:
+        from ha_ops_mcp._runner import serve_http
+        anyio.run(lambda: serve_http(mcp, transport))
 
 
 if __name__ == "__main__":
