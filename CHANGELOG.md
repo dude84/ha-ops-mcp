@@ -1,3 +1,9 @@
+## 0.33.5
+
+**Raise `auth.access_token_ttl` default from 72h → 30d.** Field reality: ha-ops runs on a private LAN against a single HA instance, single admin user, single MCP client. The "minimise idle window for stolen tokens" argument from generic OAuth deployments doesn't load-bear here — anyone on the LAN with token-stealing capability already has 30 d via the refresh token, and revocation remains a one-call `haops_auth_clear`. With the access TTL now matching the refresh TTL (2592000 s) and sliding extension on use, idle expiry stops being a thing the user notices in practice. The config knob still wins for anyone running this in a less closed environment.
+
+One-line change. No new tests.
+
 ## 0.33.4
 
 **Raise `auth.access_token_ttl` default from 24h → 72h.** 0.33.3 corrected the regression where the dataclass default still said 1h, but 24h still surfaces `MCP error -32602` on long idle gaps — weekend pauses, multi-day review windows, anything that lets a session sit untouched past Friday afternoon. Single-user admin tool, refresh tokens already last 30 days, revocation is one `haops_auth_clear` call. Bumping the idle ceiling to 72h covers the realistic gap between active sessions without weakening anything an attacker who steals a token can already do for the next 30 d via refresh.

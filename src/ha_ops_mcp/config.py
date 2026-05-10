@@ -76,7 +76,7 @@ class AuditConfig:
 class AuthConfig:
     enabled: bool = True
     data_dir: str = "/data"  # addon persistent storage
-    access_token_ttl: int = 259200  # 72h; sliding TTL extends on use (provider.py)
+    access_token_ttl: int = 2592000  # 30d; sliding TTL extends on use (provider.py)
     refresh_token_ttl: int = 2592000  # 30 days
     issuer_url: str = ""  # client-facing URL; defaults to http://{host}:{port}
 
