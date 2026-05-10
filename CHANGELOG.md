@@ -1,3 +1,11 @@
+## 0.33.3
+
+**Fix: `auth.access_token_ttl` default dropped back to 1h after 0.32.4.** 0.32.4 raised `DEFAULT_ACCESS_TTL` in `auth/provider.py` to 86400 s and added sliding TTL — but `AuthConfig.access_token_ttl` in `config.py` was still `3600`, and `server.py` passes the dataclass value into the provider, so the field default won. Net effect: every fresh deploy that didn't explicitly set `auth.access_token_ttl:` in `config.yaml` reverted to a 1h ceiling, and users kept hitting `MCP error -32602` on idle gaps > 1h despite the changelog claiming otherwise.
+
+Two-line change: dataclass default → 86400, with a comment pointing at the sliding-TTL behaviour in `provider.py` so the next person doesn't drift them apart again. `config.example.local.yaml` documents both `access_token_ttl` and `refresh_token_ttl` knobs so the next deploy doesn't have to grep source to find them.
+
+No code-path changes, no new tests — purely a default that should have moved with 0.32.4.
+
 ## 0.33.2
 
 **Fix: addon ingress UI returned 502 / MCP-over-IPv6 returned RST — pre-bind the listener so it accepts both stacks simultaneously.** Confirmed working on HA OS production after `Update` from the addon panel. Releases 0.33.0 and 0.33.1 were withdrawn — both shipped one half of the regression.

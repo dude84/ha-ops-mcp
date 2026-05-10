@@ -59,3 +59,5 @@ auth:
   # enabled: true
   # data_dir: "/data"  # addon persistent dir; for standalone use any writable path
   # issuer_url: ""  # auto-derived from HA internal_url; override only if needed
+  # access_token_ttl: 86400   # seconds; sliding — extended on each verification when <half remains
+  # refresh_token_ttl: 2592000  # seconds (30d); set 0 to disable refresh
