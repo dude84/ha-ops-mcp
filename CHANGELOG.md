@@ -1,3 +1,11 @@
+## 0.33.4
+
+**Raise `auth.access_token_ttl` default from 24h → 72h.** 0.33.3 corrected the regression where the dataclass default still said 1h, but 24h still surfaces `MCP error -32602` on long idle gaps — weekend pauses, multi-day review windows, anything that lets a session sit untouched past Friday afternoon. Single-user admin tool, refresh tokens already last 30 days, revocation is one `haops_auth_clear` call. Bumping the idle ceiling to 72h covers the realistic gap between active sessions without weakening anything an attacker who steals a token can already do for the next 30 d via refresh.
+
+Sliding TTL still extends on use, so an actively-used session never expires; this only changes how long an idle session survives before forcing a fresh OAuth round-trip. `auth.access_token_ttl` in `config.yaml` continues to override.
+
+One-line change. No new tests.
+
 ## 0.33.3
 
 **Fix: `auth.access_token_ttl` default dropped back to 1h after 0.32.4.** 0.32.4 raised `DEFAULT_ACCESS_TTL` in `auth/provider.py` to 86400 s and added sliding TTL — but `AuthConfig.access_token_ttl` in `config.py` was still `3600`, and `server.py` passes the dataclass value into the provider, so the field default won. Net effect: every fresh deploy that didn't explicitly set `auth.access_token_ttl:` in `config.yaml` reverted to a 1h ceiling, and users kept hitting `MCP error -32602` on idle gaps > 1h despite the changelog claiming otherwise.
