@@ -5,7 +5,7 @@ self-DoS'd: wiping the OAuth store kills the very session calling the tool, and
 the only realistic use case (recover from a wedged auth state where MCP
 dispatch is dead) can't be served from the MCP surface at all. Clearing the
 OAuth store is now an admin action via the addon Configuration tab's
-`auth_reset_marker` field — see run.sh.
+`clear_oauth_on_next_boot` checkbox (v0.33.8) — see run.sh.
 """
 
 from __future__ import annotations

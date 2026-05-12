@@ -100,7 +100,7 @@ class ToolRegistry:
 
 The provider is a single-user/admin server — it auto-approves all authorization requests (no consent UI). Client registrations and tokens are persisted to `<data_dir>/oauth.json`. The store is loaded into memory on startup, flushed to disk on every write, and cleaned of expired entries on load.
 
-`haops_auth_status` provides visibility (token values masked — first 8 chars only). Clearing the OAuth store is an admin action via the addon Configuration's `auth_reset_marker` field, not an MCP tool — calling such a tool would terminate the session making the call.
+`haops_auth_status` provides visibility (token values masked — first 8 chars only). Clearing the OAuth store is an admin action via the addon Configuration's `clear_oauth_on_next_boot` checkbox (introduced in v0.33.8 — self-resets after firing), not an MCP tool — calling such a tool would terminate the session making the call.
 
 ### Step 3: Safety layer (includes backup — this is Phase 1, not Phase 2)
 - `safety/confirmation.py`: Token create/validate/consume
