@@ -108,7 +108,8 @@ async def test_full_authorization_code_flow(tmp_path: Path):
     assert token.access_token
     assert token.refresh_token
     assert token.token_type == "Bearer"
-    assert token.expires_in == 86400
+    # Provider's DEFAULT_ACCESS_TTL — matches config.py default (30d).
+    assert token.expires_in == 2592000
 
     # Code is now consumed — can't load again
     assert await provider.load_authorization_code(client_info, code) is None
