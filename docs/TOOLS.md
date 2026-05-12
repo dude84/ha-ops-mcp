@@ -143,4 +143,5 @@ Stateless typed graph rebuilt per query — registries, structured YAML, dashboa
 | Tool | Type | Description |
 |---|---|---|
 | `haops_auth_status` | Read | OAuth status — enabled/disabled, registered clients, active tokens (masked), TTLs. |
-| `haops_auth_clear` | Write | Two-phase clear of OAuth state (clients, tokens, codes). |
+
+To clear the OAuth store when MCP dispatch is unreachable (wedged auth, expired tokens), use the addon's `auth_reset_marker` Configuration field — set any new value and Save. The MCP tool that previously did this (`haops_auth_clear`) was removed in v0.33.7 because calling it terminated the very session making the call.

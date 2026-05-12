@@ -100,7 +100,6 @@ Legend: ● = required, ◐ = preferred (falls back to another capability), ○ 
 | `haops_addon_restart` | | | | | | ● | **Sup only** | |
 | **OAuth management** |
 | `haops_auth_status` | | | | | | | Any | Pure-local: reads OAuth store |
-| `haops_auth_clear` | | | | | | | Any | Pure-local: clears OAuth store |
 | **Diagnostic** |
 | `haops_self_check` | — | — | — | — | — | — | Any | Always runs |
 | `haops_tools_check` | — | — | — | — | — | — | Any | Always runs |

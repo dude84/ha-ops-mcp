@@ -1,4 +1,12 @@
-"""OAuth management tools — status and clear."""
+"""OAuth management tool — status (read-only).
+
+The previous `haops_auth_clear` write tool was removed in v0.33.7 because it
+self-DoS'd: wiping the OAuth store kills the very session calling the tool, and
+the only realistic use case (recover from a wedged auth state where MCP
+dispatch is dead) can't be served from the MCP surface at all. Clearing the
+OAuth store is now an admin action via the addon Configuration tab's
+`auth_reset_marker` field — see run.sh.
+"""
 
 from __future__ import annotations
 
@@ -96,99 +104,3 @@ async def haops_auth_status(ctx: HaOpsContext) -> dict[str, Any]:
     }
 
 
-@registry.tool(
-    name="haops_auth_clear",
-    description=(
-        "Clear OAuth state — registered clients, access tokens, refresh "
-        "tokens, and authorization codes. Two-phase: call without confirm "
-        "to preview what will be cleared. Call with confirm=true and the "
-        "token to execute. All connected MCP clients will need to "
-        "re-register and re-authenticate after this. "
-        "Parameters: confirm (bool, default false), "
-        "token (string, required if confirm=true), "
-        "clients_only (bool, default false — clear only client "
-        "registrations, not tokens)."
-    ),
-    params={
-        "confirm": {
-            "type": "boolean",
-            "description": "Execute the clear",
-            "default": False,
-        },
-        "token": {
-            "type": "string",
-            "description": "Confirmation token from preview step",
-        },
-        "clients_only": {
-            "type": "boolean",
-            "description": "Clear only client registrations (not tokens)",
-            "default": False,
-        },
-    },
-)
-async def haops_auth_clear(
-    ctx: HaOpsContext,
-    confirm: bool = False,
-    token: str | None = None,
-    clients_only: bool = False,
-) -> dict[str, Any]:
-    if not ctx.config.auth.enabled or ctx.auth_provider is None:
-        return {
-            "error": "OAuth is disabled. Nothing to clear.",
-        }
-
-    store = ctx.auth_provider._store
-
-    counts = {
-        "clients": len(store.clients),
-        "access_tokens": len(store.access_tokens),
-        "refresh_tokens": len(store.refresh_tokens),
-        "auth_codes": len(store.auth_codes),
-    }
-
-    if not confirm:
-        tk = ctx.safety.create_token(
-            action="auth_clear",
-            details={"clients_only": clients_only, "counts": counts},
-        )
-        scope = "client registrations only" if clients_only else "all OAuth state"
-        return {
-            "preview": counts,
-            "scope": scope,
-            "token": tk.id,
-            "message": f"Will clear {scope}. Call again with confirm=true and this token.",
-        }
-
-    if token is None:
-        return {"error": "confirm=true requires a token"}
-
-    try:
-        ctx.safety.validate_token(token)
-    except Exception as e:
-        return {"error": str(e)}
-
-    cleared = dict(counts)
-
-    if clients_only:
-        store.clients.clear()
-    else:
-        store.clients.clear()
-        store.access_tokens.clear()
-        store.refresh_tokens.clear()
-        store.auth_codes.clear()
-    store.save()
-
-    ctx.safety.consume_token(token)
-
-    await ctx.audit.log(
-        tool="auth_clear",
-        details={"cleared": cleared, "clients_only": clients_only},
-        token_id=token,
-    )
-
-    return {
-        "success": True,
-        "cleared": cleared,
-        "clients_only": clients_only,
-        "message": "OAuth state cleared. Clients must re-register and re-authenticate.",
-    }

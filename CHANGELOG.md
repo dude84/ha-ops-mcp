@@ -1,3 +1,13 @@
+## 0.33.7
+
+**Remove `haops_auth_clear` MCP tool — self-DoS by design, admin action moved to addon config.** The tool wiped the OAuth store (clients, access tokens, refresh tokens, auth codes) via the standard two-phase preview/confirm flow. Problem: the only client that could call it is the MCP client itself, and the wipe invalidates that very client's token. Calling `haops_auth_clear` always terminated the session that called it. Worse, the realistic use case — "auth is wedged, recover from it" — can't be served from the MCP surface at all because MCP dispatch is what's broken in that scenario. We had a tool that worked when you didn't need it and didn't work when you did.
+
+v0.33.6 already shipped the correct path for this: addon Configuration → `auth_reset_marker` field. The shell-level marker wipes `/data/oauth.json` before the MCP server starts, which is exactly the layering this operation needs.
+
+Removed: `src/ha_ops_mcp/tools/auth.py::haops_auth_clear` (registration + function), `tests/test_auth_tools.py::test_auth_clear_*` (3 tests). `haops_auth_status` stays — read-only, never had this problem. Docs (`docs/TOOLS.md`, `docs/HA_API_CAPABILITIES.md`, `README.md` tool count) updated. `CLAUDE.md` rewritten to point at the addon-config recovery flow.
+
+Tools: 64 → 63. Tests: 534 → 531.
+
 ## 0.33.6
 
 **Addon Configuration: `auth_reset_marker` field — wipe the OAuth store from the HA UI when MCP dispatch is dead.** The pain case: a client gets stuck on an expired or otherwise unusable access token, surfaces as `MCP error -32602`, and the natural recovery path (`haops_auth_clear` via the MCP server) is unreachable because dispatch itself is what's broken. Previous recovery required SSH into the addon container and `rm /data/oauth.json`, which is fine for the project author but unfit for any user who reaches "auth is wedged" via the panel.
