@@ -1,3 +1,13 @@
+## 0.33.6
+
+**Addon Configuration: `auth_reset_marker` field — wipe the OAuth store from the HA UI when MCP dispatch is dead.** The pain case: a client gets stuck on an expired or otherwise unusable access token, surfaces as `MCP error -32602`, and the natural recovery path (`haops_auth_clear` via the MCP server) is unreachable because dispatch itself is what's broken. Previous recovery required SSH into the addon container and `rm /data/oauth.json`, which is fine for the project author but unfit for any user who reaches "auth is wedged" via the panel.
+
+`auth_reset_marker` is a free-form string option on the addon Configuration tab. The startup script (`run.sh`) compares the saved value against `/data/.auth_reset_marker`; if they differ and the new value is non-empty, it deletes `/data/oauth.json` and writes the new marker. Empty value = no-op. Same value as last run = no-op. Any *change* triggers exactly one wipe. Logged at warning level so the operations log shows when/why the store was reset.
+
+Implementation is entirely shell + addon manifest — no Python changes, no new env var, no new `AuthConfig` field. The wipe runs before the MCP server process starts, which is the whole point: we don't want a wedged server to be responsible for unwedging itself. Schema entry is `auth_reset_marker: "str?"`, option default is `""`.
+
+User flow: HA → Settings → Add-ons → HA Ops → Configuration → set `auth_reset_marker` to any new value (a timestamp works) → Save. Addon restarts, log shows the wipe, next `/mcp` reissues a fresh token against the now-empty store. The existing `haops_auth_clear` MCP tool remains the preferred path when the server is healthy.
+
 ## 0.33.5
 
 **Raise `auth.access_token_ttl` default from 72h → 30d.** Field reality: ha-ops runs on a private LAN against a single HA instance, single admin user, single MCP client. The "minimise idle window for stolen tokens" argument from generic OAuth deployments doesn't load-bear here — anyone on the LAN with token-stealing capability already has 30 d via the refresh token, and revocation remains a one-call `haops_auth_clear`. With the access TTL now matching the refresh TTL (2592000 s) and sliding extension on use, idle expiry stops being a thing the user notices in practice. The config knob still wins for anyone running this in a less closed environment.

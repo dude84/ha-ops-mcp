@@ -93,6 +93,26 @@ except Exception:
     mkdir -p /data
 fi
 
+# Auth reset trigger — wipe /data/oauth.json when the configured marker changes.
+# Use case: MCP client stuck on a dead token, can't call haops_auth_clear via the
+# server because dispatch itself fails. User edits 'auth_reset_marker' in the
+# addon Configuration tab to any new value, addon restarts, marker mismatch
+# triggers wipe. Idempotent — Save with the same value is a no-op.
+mkdir -p /data
+auth_reset_marker=$(bashio::config 'auth_reset_marker')
+marker_file="/data/.auth_reset_marker"
+last_marker=""
+[ -f "${marker_file}" ] && last_marker=$(cat "${marker_file}")
+if bashio::var.has_value "${auth_reset_marker}" && [ "${auth_reset_marker}" != "${last_marker}" ]; then
+    if [ -f /data/oauth.json ]; then
+        rm -f /data/oauth.json
+        bashio::log.warning "OAuth store wiped via auth_reset_marker change ('${last_marker}' -> '${auth_reset_marker}')"
+    else
+        bashio::log.info "auth_reset_marker changed but no /data/oauth.json present"
+    fi
+    echo "${auth_reset_marker}" > "${marker_file}"
+fi
+
 # Set log level
 case "${log_level}" in
     debug)   verbose_flag="--verbose" ;;
