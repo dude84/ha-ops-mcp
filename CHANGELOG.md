@@ -1,3 +1,11 @@
+## 0.33.8
+
+**Addon Configuration: replace `auth_reset_marker` string with `clear_oauth_on_next_boot` boolean that self-resets after firing.** Marker pattern (set any new value to trigger a wipe) worked but felt indirect — the user described the desired UX as "a button" and a checkbox is the closest the addon Configuration form gets to one. Bool default `false`. When toggled on and saved, the next addon boot wipes `/data/oauth.json` and then writes the option back to `false` via Supervisor's `POST /addons/self/info` → `POST /addons/self/options` (GET-modify-POST because the Supervisor API replaces the whole options object rather than merging). On the boot after that, the flag is already false and the wipe is a no-op — same shape as ESPHome's "factory reset on next boot" pattern.
+
+Failure mode: if the Supervisor self-write call fails (Supervisor unreachable, token rejected, network), the wipe has already happened but the flag stays `true`. The startup log emits a clear warning telling the user to toggle the flag off manually, otherwise every restart will wipe tokens. The wipe itself is the operation that has to succeed; the self-reset is convenience.
+
+The previous v0.33.6 `auth_reset_marker` field was only live for ~one release before this replaced it; no migration path is needed because nobody had it set in saved options yet.
+
 ## 0.33.7
 
 **Remove `haops_auth_clear` MCP tool — self-DoS by design, admin action moved to addon config.** The tool wiped the OAuth store (clients, access tokens, refresh tokens, auth codes) via the standard two-phase preview/confirm flow. Problem: the only client that could call it is the MCP client itself, and the wipe invalidates that very client's token. Calling `haops_auth_clear` always terminated the session that called it. Worse, the realistic use case — "auth is wedged, recover from it" — can't be served from the MCP surface at all because MCP dispatch is what's broken in that scenario. We had a tool that worked when you didn't need it and didn't work when you did.

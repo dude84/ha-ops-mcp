@@ -93,24 +93,42 @@ except Exception:
     mkdir -p /data
 fi
 
-# Auth reset trigger — wipe /data/oauth.json when the configured marker changes.
-# Use case: MCP client stuck on a dead token, can't call haops_auth_clear via the
-# server because dispatch itself fails. User edits 'auth_reset_marker' in the
-# addon Configuration tab to any new value, addon restarts, marker mismatch
-# triggers wipe. Idempotent — Save with the same value is a no-op.
+# One-shot OAuth store reset: when 'clear_oauth_on_next_boot' is true in the
+# addon Configuration, wipe /data/oauth.json on startup, then flip the flag
+# back to false via the Supervisor self-options API so the next boot is a
+# normal one. If the Supervisor write fails, the wipe still happened — log
+# tells the user to toggle the flag off manually so they don't lose tokens
+# on every restart.
 mkdir -p /data
-auth_reset_marker=$(bashio::config 'auth_reset_marker')
-marker_file="/data/.auth_reset_marker"
-last_marker=""
-[ -f "${marker_file}" ] && last_marker=$(cat "${marker_file}")
-if bashio::var.has_value "${auth_reset_marker}" && [ "${auth_reset_marker}" != "${last_marker}" ]; then
+clear_oauth=$(bashio::config 'clear_oauth_on_next_boot')
+if bashio::var.true "${clear_oauth}"; then
+    bashio::log.warning "clear_oauth_on_next_boot=true — wiping OAuth store"
     if [ -f /data/oauth.json ]; then
         rm -f /data/oauth.json
-        bashio::log.warning "OAuth store wiped via auth_reset_marker change ('${last_marker}' -> '${auth_reset_marker}')"
+        bashio::log.info "  Removed /data/oauth.json"
     else
-        bashio::log.info "auth_reset_marker changed but no /data/oauth.json present"
+        bashio::log.info "  /data/oauth.json was not present"
     fi
-    echo "${auth_reset_marker}" > "${marker_file}"
+
+    # Flip the flag back to false. Supervisor's POST /addons/self/options
+    # replaces the whole options object, so GET current, mutate, POST back.
+    if current_opts=$(curl -fsS \
+        -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+        http://supervisor/addons/self/info \
+        | jq -c '.data.options' 2>/dev/null) && [ -n "${current_opts}" ]; then
+        new_opts=$(echo "${current_opts}" | jq -c '. + {"clear_oauth_on_next_boot": false}')
+        if curl -fsS -X POST \
+            -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"options\": ${new_opts}}" \
+            http://supervisor/addons/self/options >/dev/null 2>&1; then
+            bashio::log.info "  Reset clear_oauth_on_next_boot=false via Supervisor"
+        else
+            bashio::log.warning "  Could not reset flag via Supervisor — toggle clear_oauth_on_next_boot OFF in Configuration or every restart will wipe tokens"
+        fi
+    else
+        bashio::log.warning "  Could not read current addon options — toggle clear_oauth_on_next_boot OFF in Configuration to avoid wiping on every restart"
+    fi
 fi
 
 # Set log level
