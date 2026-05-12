@@ -28,7 +28,9 @@ logger = logging.getLogger(__name__)
 
 # Defaults
 AUTH_CODE_TTL = 300  # 5 minutes
-DEFAULT_ACCESS_TTL = 2592000  # 30 days — single-user admin tool, sliding TTL extends on use; config.py default overrides this for server-issued tokens
+# 30 days — single-user admin tool, sliding TTL extends on use.
+# config.py default overrides this for server-issued tokens.
+DEFAULT_ACCESS_TTL = 2592000
 DEFAULT_REFRESH_TTL = 2592000  # 30 days
 
 
