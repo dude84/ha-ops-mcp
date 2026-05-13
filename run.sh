@@ -56,7 +56,11 @@ if bashio::var.has_value "${db_url}"; then
     export HA_OPS_DB_URL="${db_url}"
 fi
 
-# OAuth auth — enabled by default since v0.27.0
+# OAuth auth — enabled by default since v0.27.0. Always export the flag in
+# both directions so config.py's True default never wins when the addon UI
+# sets auth_enabled=false. Previously only the true branch exported, leaving
+# the env var unset for the false case and the Python config silently
+# re-enabled OAuth.
 auth_enabled=$(bashio::config 'auth_enabled')
 if bashio::var.true "${auth_enabled}"; then
     export HA_OPS_AUTH_ENABLED="true"
@@ -91,6 +95,8 @@ except Exception:
         fi
     fi
     mkdir -p /data
+else
+    export HA_OPS_AUTH_ENABLED="false"
 fi
 
 # One-shot OAuth store reset: when 'clear_oauth_on_next_boot' is true in the

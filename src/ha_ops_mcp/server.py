@@ -268,9 +268,14 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
         )
         from pydantic import AnyHttpUrl
 
-        issuer = config.auth.issuer_url or (
-            f"http://{config.server.host}:{config.server.port}"
-        )
+        # `config.server.host` may be a bind address (`::` for IPv6 dual-stack,
+        # `0.0.0.0` for IPv4 any-interface, or empty) that isn't a valid URL
+        # host. Substitute a reachable hostname for the issuer fallback so
+        # AnyHttpUrl doesn't reject `http://:::8901`.
+        host = config.server.host
+        if host in ("::", "0.0.0.0", ""):
+            host = "homeassistant.local"
+        issuer = config.auth.issuer_url or f"http://{host}:{config.server.port}"
         server_url = AnyHttpUrl(issuer)
 
         # The MCP SDK enforces HTTPS per OAuth 2.0 spec, but HA addons
