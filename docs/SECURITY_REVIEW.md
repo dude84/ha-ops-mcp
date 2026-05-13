@@ -27,10 +27,24 @@ The HA Ingress proxy provides some protection for browser-based access,
 but MCP clients connect directly to the SSE endpoint, not through
 Ingress.
 
-**Status (v0.26.0):** Optional OAuth 2.0 implemented. Set
-`auth.enabled: true` (or `auth_enabled: true` in addon config) to
-require OAuth tokens on SSE/HTTP transports. Disabled by default for
-backwards compatibility. stdio transport is never authenticated.
+**Status (v0.27.0+):** OAuth 2.0 enabled by default for SSE/HTTP
+transports. Set `auth.enabled: false` (or `auth_enabled: false` in
+addon config) to disable on a trusted LAN. stdio transport is never
+authenticated. Token TTL defaults to 30 days with a sliding window
+(see `auth/provider.py`); tokens + DCR client registrations persist
+to `<data_dir>/oauth.json`.
+
+**Known issue — Claude Code CLI re-auth on every launch.** Claude
+Code performs a fresh Dynamic Client Registration on each launch
+instead of persisting and reusing the previously issued `client_id`
++ refresh token. The user-visible effect is "MCP authentication
+expired again" at every restart, even though server-side access
+tokens remain valid for their full 30-day TTL. Stale client
+registrations accumulate in `oauth.json`; visible via
+`haops_auth_status`. The server cannot fix this — OAuth treats
+each DCR call as a distinct client. Tracking upstream:
+[anthropics/claude-code#58607](https://github.com/anthropics/claude-code/issues/58607).
+Mitigation for trusted single-host LAN: set `auth_enabled: false`.
 
 ### 1.2 SQL Injection in db_purge and db_statistics
 

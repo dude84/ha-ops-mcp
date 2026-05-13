@@ -32,6 +32,21 @@ For standalone (stdio):
 claude mcp add ha-ops -- /path/to/.venv/bin/ha-ops-mcp --config /path/to/config.local.yaml
 ```
 
+### Authentication
+
+OAuth 2.0 with Dynamic Client Registration is enabled by default for SSE / streamable-HTTP transports. The provider auto-approves authorization requests (single-user admin server, no consent UI) and persists clients + tokens to `<data_dir>/oauth.json`. Default token TTLs: 30-day access token with a sliding window (extends on every successful verification), 30-day refresh token.
+
+To clear all stored OAuth state (after a client mismatch or revocation), tick `clear_oauth_on_next_boot` in the addon Configuration and restart — the flag self-resets after firing.
+
+**Known issue — re-auth on every Claude Code launch.** Claude Code CLI currently performs a fresh DCR + authorization-code flow on every launch instead of persisting and reusing the previously issued `client_id` + refresh token. This makes server-side re-auth feel like "expiry" even though access tokens stay valid for their full 30-day TTL. Stale client registrations accumulate server-side; visible via `haops_auth_status`.
+
+Workarounds for trusted single-host LAN deployments:
+
+- Set `auth_enabled: false` in the addon Configuration. The server stops requiring Bearer tokens. Anyone who can reach `:8901/sse` can call every tool, including `haops_exec_shell` and DB writes — only acceptable if the LAN trust boundary is strict (no guest WiFi, no port-forward, no untrusted devices).
+- Leave OAuth on, accept one re-auth per CLI launch, and rely on the 30-day sliding TTL keeping the same auth alive across the session itself.
+
+Tracking upstream fix: see [anthropics/claude-code#58607](https://github.com/anthropics/claude-code/issues/58607) — requested persistence of DCR results + refresh tokens keyed by MCP server URL.
+
 ## Usage
 
 Mutating tools support two modes: **two-phase confirmation** (preview returns a diff + token, a second call applies it) and **auto-apply** (`auto_apply=true` — preview + apply in a single call). Both modes create backups and rollback savepoints automatically. The AI assistant can use either mode autonomously, or you can require manual review — it depends on your MCP client's permission settings, not the server.
