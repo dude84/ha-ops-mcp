@@ -43,7 +43,11 @@ tokens remain valid for their full 30-day TTL. Stale client
 registrations accumulate in `oauth.json`; visible via
 `haops_auth_status`. The server cannot fix this — OAuth treats
 each DCR call as a distinct client. Tracking upstream:
-[anthropics/claude-code#58607](https://github.com/anthropics/claude-code/issues/58607).
+[anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000)
+(root cause: persisted MCP OAuth credentials keyed by ephemeral
+localhost callback port, not server URL). Related: #57674, #52565.
+SSE transport may have no persistence at all — addendum posted on
+#43000.
 Mitigation for trusted single-host LAN: set `auth_enabled: false`.
 
 ### 1.2 SQL Injection in db_purge and db_statistics

@@ -45,7 +45,7 @@ Workarounds for trusted single-host LAN deployments:
 - Set `auth_enabled: false` in the addon Configuration. The server stops requiring Bearer tokens. Anyone who can reach `:8901/sse` can call every tool, including `haops_exec_shell` and DB writes — only acceptable if the LAN trust boundary is strict (no guest WiFi, no port-forward, no untrusted devices).
 - Leave OAuth on, accept one re-auth per CLI launch, and rely on the 30-day sliding TTL keeping the same auth alive across the session itself.
 
-Tracking upstream fix: see [anthropics/claude-code#58607](https://github.com/anthropics/claude-code/issues/58607) — requested persistence of DCR results + refresh tokens keyed by MCP server URL.
+Tracking upstream: [anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000) — root cause is that Claude Code keys persisted MCP OAuth credentials by `serverName|base64(callback_url)`, and the callback URL contains an ephemeral localhost port that changes every launch. Related: [#57674](https://github.com/anthropics/claude-code/issues/57674) (HTTP transport: tokens written to keychain but not loaded at session start), [#52565](https://github.com/anthropics/claude-code/issues/52565) (custom connector tokens fail to persist across restart on Windows / Cowork). On the SSE transport ha-ops uses, the persistence step may not happen at all — Keychain `mcpOAuth` is empty after successful auth; addendum posted on #43000.
 
 ## Usage
 
