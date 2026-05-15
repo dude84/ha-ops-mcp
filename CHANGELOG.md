@@ -1,3 +1,31 @@
+## 0.34.0
+
+**Switch addon default transport from `sse` to `streamable-http`.** Field-observed reliability problem on the SSE transport: long-lived `GET /sse` streams get torn down by the Supervisor IPv6 proxy after periods of idleness, and the MCP Python SDK's SSE handler (`mcp/server/sse.py:249`) raises `anyio.ClosedResourceError` on the next POST to that session. Client sees the POST 202-accept but never receives the JSON-RPC reply, surfaces as `MCP error -32602` and forces a manual `/mcp` reconnect every session.
+
+Reproduced in production logs:
+
+```
+INFO:     fd0c:ac1e:2100::1:59808 - "POST /messages/?session_id=... HTTP/1.1" 202 Accepted
+ERROR:    Exception in ASGI application
+  File ".../mcp/server/sse.py", line 249, in handle_post_message
+    await writer.send(session_message)
+  File ".../anyio/streams/memory.py", line 218, in send_nowait
+    raise ClosedResourceError
+anyio.ClosedResourceError
+```
+
+`streamable-http` (single-endpoint POST/GET at `/mcp`, no `session_id` URL coupling, reconnect-safe by design) does not exhibit this pattern. Server already supported it via `_runner.py::serve_http` — only the addon option default needed flipping plus a schema-order cosmetic swap. Existing installs keep their saved `transport` value (Supervisor preserves saved options); only fresh installs pick up the new default.
+
+`sse` transport remains available for clients that need it. Both code paths are still in `_runner.py` and both are tested. Connect snippets in `README.md` and `docs/INSTALL.md` now lead with the `--transport http ... /mcp` form and keep the SSE form as a legacy fallback. Endpoint description for port 8901 in the addon manifest updated to "streamable-HTTP / SSE transport" (order reflects which is the default).
+
+No code change; no test change; tool count unchanged at 63. 533 tests still pass.
+
+## 0.33.9
+
+**Always export `HA_OPS_AUTH_ENABLED` from `run.sh` and guard issuer host derivation.** Two bugs surfaced when toggling `auth_enabled: false` on the addon — (1) bashio's `bashio::config 'auth_enabled'` only exports the env var when the option is *true-y*, so flipping to `false` left the env var unset and the Python default (`true`) won. The shell now reads the raw option and always exports the explicit boolean string. (2) IPv6 literal hosts (`fd00::1`-shaped Supervisor addresses) crashed the issuer-URL builder; now wrapped in `[ ]` per RFC 3986.
+
+Tracking docs updated: `docs/SECURITY_REVIEW.md` and `README.md` retarget DCR re-auth references from the now-closed-as-duplicate #58607 to upstream root issue [anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000), with SSE-transport addendum cross-posted.
+
 ## 0.33.8
 
 **Addon Configuration: replace `auth_reset_marker` string with `clear_oauth_on_next_boot` boolean that self-resets after firing.** Marker pattern (set any new value to trigger a wipe) worked but felt indirect — the user described the desired UX as "a button" and a checkbox is the closest the addon Configuration form gets to one. Bool default `false`. When toggled on and saved, the next addon boot wipes `/data/oauth.json` and then writes the option back to `false` via Supervisor's `POST /addons/self/info` → `POST /addons/self/options` (GET-modify-POST because the Supervisor API replaces the whole options object rather than merging). On the boot after that, the flag is already false and the wipe is a no-op — same shape as ESPHome's "factory reset on next boot" pattern.

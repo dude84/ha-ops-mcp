@@ -20,7 +20,13 @@ See [INSTALL.md](https://github.com/dude84/ha-ops-mcp/blob/main/docs/INSTALL.md)
 
 ### Connecting an MCP client
 
-The addon exposes an SSE endpoint on port 8901. To connect Claude Code:
+The addon exposes a streamable-HTTP endpoint on port 8901 (default). To connect Claude Code:
+
+```bash
+claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp
+```
+
+For SSE transport (legacy, set `transport: sse` in addon Configuration):
 
 ```bash
 claude mcp add --transport sse ha-ops http://<your-ha-address>:8901/sse
@@ -42,7 +48,7 @@ To clear all stored OAuth state (after a client mismatch or revocation), tick `c
 
 Workarounds for trusted single-host LAN deployments:
 
-- Set `auth_enabled: false` in the addon Configuration. The server stops requiring Bearer tokens. Anyone who can reach `:8901/sse` can call every tool, including `haops_exec_shell` and DB writes — only acceptable if the LAN trust boundary is strict (no guest WiFi, no port-forward, no untrusted devices).
+- Set `auth_enabled: false` in the addon Configuration. The server stops requiring Bearer tokens. Anyone who can reach `:8901/mcp` (or `:8901/sse` on SSE transport) can call every tool, including `haops_exec_shell` and DB writes — only acceptable if the LAN trust boundary is strict (no guest WiFi, no port-forward, no untrusted devices).
 - Leave OAuth on, accept one re-auth per CLI launch, and rely on the 30-day sliding TTL keeping the same auth alive across the session itself.
 
 Tracking upstream: [anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000) — root cause is that Claude Code keys persisted MCP OAuth credentials by `serverName|base64(callback_url)`, and the callback URL contains an ephemeral localhost port that changes every launch. Related: [#57674](https://github.com/anthropics/claude-code/issues/57674) (HTTP transport: tokens written to keychain but not loaded at session start), [#52565](https://github.com/anthropics/claude-code/issues/52565) (custom connector tokens fail to persist across restart on Windows / Cowork). On the SSE transport ha-ops uses, the persistence step may not happen at all — Keychain `mcpOAuth` is empty after successful auth; addendum posted on #43000.

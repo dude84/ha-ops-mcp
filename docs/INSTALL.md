@@ -75,7 +75,7 @@ For most users, the **default configuration works without changes**. The addon a
 If you need to customise, the addon's **Configuration** tab exposes these options:
 
 - **Token**: leave blank to use the Supervisor token (recommended). Only set a long-lived access token if you need specific permissions.
-- **Transport**: `sse` (default) or `streamable-http`.
+- **Transport**: `streamable-http` (default) or `sse` (legacy).
 - **Database URL**: leave blank for auto-detect. Set explicitly for MariaDB or PostgreSQL.
 - **Backup directory**: default `/backup/ha-ops-mcp`.
 - **Backup retention**: `max_age_days` (default 30), `max_per_type` (default 100).
@@ -139,7 +139,13 @@ Client registrations and tokens are persisted to `<data_dir>/oauth.json` and sur
 
 ### Claude Code (CLI)
 
-Claude Code uses stdio transport locally — no OAuth needed. For remote connections over SSE with auth enabled, Claude Code supports OAuth natively:
+Claude Code uses stdio transport locally — no OAuth needed. For remote connections over streamable-HTTP with auth enabled, Claude Code supports OAuth natively:
+
+```bash
+claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp
+```
+
+For SSE transport (legacy):
 
 ```bash
 claude mcp add --transport sse ha-ops http://<your-ha-address>:8901/sse
