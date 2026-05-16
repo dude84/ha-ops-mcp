@@ -34,20 +34,27 @@ authenticated. Token TTL defaults to 30 days with a sliding window
 (see `auth/provider.py`); tokens + DCR client registrations persist
 to `<data_dir>/oauth.json`.
 
-**Known issue — Claude Code CLI re-auth on every launch.** Claude
-Code performs a fresh Dynamic Client Registration on each launch
-instead of persisting and reusing the previously issued `client_id`
-+ refresh token. The user-visible effect is "MCP authentication
-expired again" at every restart, even though server-side access
-tokens remain valid for their full 30-day TTL. Stale client
-registrations accumulate in `oauth.json`; visible via
-`haops_auth_status`. The server cannot fix this — OAuth treats
-each DCR call as a distinct client. Tracking upstream:
-[anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000)
-(root cause: persisted MCP OAuth credentials keyed by ephemeral
-localhost callback port, not server URL). Related: #57674, #52565.
-SSE transport may have no persistence at all — addendum posted on
-#43000.
+**Re-auth-every-launch — resolved by transport switch (v0.34.0).**
+Earlier reports of Claude Code CLI forcing a fresh DCR + auth-code
+flow per launch were attributed to upstream
+[anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000).
+After flipping the addon default from SSE to streamable-HTTP in
+v0.34.0 the symptom stopped reproducing: same `client_id` reused,
+access + refresh tokens persisted across `/clear` and Claude Code
+restart, TTL decrements at wall-clock rate, no fresh DCR
+registrations piling up. Root cause was SSE-transport fragility
+(long-lived `GET /sse` streams dropped by the Supervisor IPv6
+proxy on idle), not the DCR-keying theory. If still on SSE: switch
+`transport` to `streamable-http` in addon Configuration.
+
+**Defensive bounds (v0.34.1).** `MAX_CLIENTS = 100` cap on
+`/register` with LRU-by-`client_id_issued_at` eviction. Evicting
+a client also revokes any access/refresh tokens it owns, so a
+stale `oauth.json` dump cannot smuggle live tokens past the cap.
+`issued_at` field stamped on every token (access + refresh),
+surfaced via `haops_auth_status` for forensic auditing alongside
+`expires_at` and the masked token prefix.
+
 Mitigation for trusted single-host LAN: set `auth_enabled: false`.
 
 ### 1.2 SQL Injection in db_purge and db_statistics

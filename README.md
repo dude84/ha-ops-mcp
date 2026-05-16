@@ -44,14 +44,11 @@ OAuth 2.0 with Dynamic Client Registration is enabled by default for SSE / strea
 
 To clear all stored OAuth state (after a client mismatch or revocation), tick `clear_oauth_on_next_boot` in the addon Configuration and restart — the flag self-resets after firing.
 
-**Known issue — re-auth on every Claude Code launch.** Claude Code CLI currently performs a fresh DCR + authorization-code flow on every launch instead of persisting and reusing the previously issued `client_id` + refresh token. This makes server-side re-auth feel like "expiry" even though access tokens stay valid for their full 30-day TTL. Stale client registrations accumulate server-side; visible via `haops_auth_status`.
+**Re-auth-every-launch — resolved by switching transport to streamable-HTTP (v0.34.0).** Earlier reports of "Claude Code forces a fresh DCR + authorization-code flow on every launch" were tracked against [anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000). After flipping the addon default from SSE to streamable-HTTP in v0.34.0, the symptom no longer reproduces: same `client_id` reused, same access + refresh tokens persisted across `/clear` and Claude Code restart cycles (`haops_auth_status` confirms TTL decrements at wall-clock rate, no fresh registrations piling up). The root cause was SSE-transport fragility — long-lived `GET /sse` streams dropping on Supervisor-proxy idle, surfacing client-side as forced re-auth — not the DCR-keying theory. If you are still on SSE and seeing this, switch to `transport: streamable-http` in the addon Configuration.
 
-Workarounds for trusted single-host LAN deployments:
+`auth_enabled: false` remains available for trusted single-host LAN deployments where you want zero auth overhead. Disabling it means anyone reachable on `:8901/mcp` can call every tool including `haops_exec_shell` and DB writes — only acceptable if the LAN trust boundary is strict.
 
-- Set `auth_enabled: false` in the addon Configuration. The server stops requiring Bearer tokens. Anyone who can reach `:8901/mcp` (or `:8901/sse` on SSE transport) can call every tool, including `haops_exec_shell` and DB writes — only acceptable if the LAN trust boundary is strict (no guest WiFi, no port-forward, no untrusted devices).
-- Leave OAuth on, accept one re-auth per CLI launch, and rely on the 30-day sliding TTL keeping the same auth alive across the session itself.
-
-Tracking upstream: [anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000) — root cause is that Claude Code keys persisted MCP OAuth credentials by `serverName|base64(callback_url)`, and the callback URL contains an ephemeral localhost port that changes every launch. Related: [#57674](https://github.com/anthropics/claude-code/issues/57674) (HTTP transport: tokens written to keychain but not loaded at session start), [#52565](https://github.com/anthropics/claude-code/issues/52565) (custom connector tokens fail to persist across restart on Windows / Cowork). On the SSE transport ha-ops uses, the persistence step may not happen at all — Keychain `mcpOAuth` is empty after successful auth; addendum posted on #43000.
+Defensive caps added in v0.34.1: `MAX_CLIENTS = 100` on persisted DCR registrations with LRU-by-`client_id_issued_at` eviction (revokes tokens for dropped clients too), and `issued_at` stamped on every access + refresh token for forensic auditing via `haops_auth_status`.
 
 ## Usage
 

@@ -174,7 +174,7 @@ For SSE (legacy) replace `"httpUrl"` with `"url": "http://<ha-ip>:8901/sse"`.
 
 Verify with `gemini mcp list`.
 
-Why a static Bearer token is **not** a workaround: ha-ops-mcp's OAuth provider issues only short-lived access tokens (24h sliding window) and there is no API to mint a long-lived token. Pasting a one-off token into a header works for a day at most and then silently starts returning 401 — not a deployable configuration. If you need auth with Gemini CLI, wait for upstream Gemini CLI to add OAuth/DCR support or for ha-ops-mcp to expose a long-lived API key issuance path (not currently on the roadmap).
+Why a static Bearer token is **not** a workaround: ha-ops-mcp's OAuth provider issues only short-lived access tokens (30-day sliding window — extends on use, idle sessions still time out) and there is no API to mint a long-lived token. Pasting a one-off token into a header works for an idle window of at most 30 days and then silently starts returning 401 — not a deployable configuration. If you need auth with Gemini CLI, wait for upstream Gemini CLI to add OAuth/DCR support or for ha-ops-mcp to expose a long-lived API key issuance path (not currently on the roadmap).
 
 ## Recommended: client-side review mode for mutations
 

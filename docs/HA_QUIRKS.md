@@ -248,11 +248,13 @@ on its way back. **This rewrite is client-side and not fixable in
 ha-ops-mcp** — see the rejected-fix note below.
 
 Fix in the moment: re-run the auth flow (`/mcp` in Claude Code, or
-the equivalent in your MCP client). Common triggers: long sessions
-crossing the token TTL (default 1 h), `/compact` re-mounting SSE
-without carrying the token, addon restart invalidating in-memory
-state. `haops_auth_status` reports `expires_at` + `ttl_seconds` per
-access token if you want to refresh proactively.
+the equivalent in your MCP client). Common triggers: idle sessions
+crossing the access-token TTL (default 30 days, sliding — extends
+on every successful verification, so only idle sessions expire),
+`/compact` re-mounting SSE without carrying the token, addon
+restart invalidating in-memory state. `haops_auth_status` reports
+`issued_at`, `expires_at`, and `ttl_seconds` per access token if
+you want to refresh proactively.
 
 **Rejected fix (do not propose again):** mapping the auth failure
 to JSON-RPC `-32001 Authentication required` server-side. The 401
