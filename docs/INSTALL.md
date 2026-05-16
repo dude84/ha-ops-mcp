@@ -153,6 +153,29 @@ claude mcp add --transport sse ha-ops http://<your-ha-address>:8901/sse
 
 Claude Code will detect the 401, discover the OAuth metadata, and walk you through the auth flow.
 
+### Gemini CLI
+
+Gemini CLI's MCP client does **not** implement OAuth Dynamic Client Registration, so the Claude Code-style `/mcp` auto-auth flow is unavailable. The only working configuration today is to **disable auth on the addon** and connect anonymously.
+
+1. Open the addon **Configuration** tab, set `auth_enabled: false`, and restart the addon. Confirm the addon is back up before continuing — Gemini CLI will silently fail to register the server if it cannot reach `/mcp`.
+2. Add the following to `~/.gemini/settings.json`, replacing `<ha-ip>` with your Home Assistant host's **IP address** (e.g. `10.0.0.150`). Prefer the IP over `homeassistant.local` — mDNS resolution is not available on every network or every OS, and a hostname that fails to resolve produces a vague registration error:
+
+```json
+{
+  "mcpServers": {
+    "ha-ops": {
+      "httpUrl": "http://<ha-ip>:8901/mcp"
+    }
+  }
+}
+```
+
+For SSE (legacy) replace `"httpUrl"` with `"url": "http://<ha-ip>:8901/sse"`.
+
+Verify with `gemini mcp list`.
+
+Why a static Bearer token is **not** a workaround: ha-ops-mcp's OAuth provider issues only short-lived access tokens (24h sliding window) and there is no API to mint a long-lived token. Pasting a one-off token into a header works for a day at most and then silently starts returning 401 — not a deployable configuration. If you need auth with Gemini CLI, wait for upstream Gemini CLI to add OAuth/DCR support or for ha-ops-mcp to expose a long-lived API key issuance path (not currently on the roadmap).
+
 ## Recommended: client-side review mode for mutations
 
 Every preview tool (`haops_dashboard_diff`, `haops_dashboard_patch`, `haops_config_patch`, `haops_config_create`, `haops_rollback`) now embeds a **REVIEW PROTOCOL** in its description that asks the controller LLM to paste `diff_rendered` to chat and stop for explicit user approval before calling the corresponding `*_apply`. That works in practice today (Claude Opus 4.7 obeys it), but it's *social* — bypass-prone if the LLM drifts.
