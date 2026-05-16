@@ -33,6 +33,11 @@ AUTH_CODE_TTL = 300  # 5 minutes
 DEFAULT_ACCESS_TTL = 2592000
 DEFAULT_REFRESH_TTL = 2592000  # 30 days
 
+# Cap on persisted DCR registrations. Anyone on the LAN can register
+# anonymously; without a cap, oauth.json grows unbounded. On overflow,
+# evict the oldest entries by client_id_issued_at (LRU-by-age).
+MAX_CLIENTS = 100
+
 
 def _generate_token() -> str:
     """Generate a URL-safe token with 256 bits of entropy."""
@@ -95,12 +100,42 @@ class HaOpsOAuthProvider:
         self._store.clients[client_info.client_id] = client_info.model_dump(
             mode="json", exclude_none=True
         )
+        self._evict_excess_clients()
         self._store.save()
         logger.info(
             "Registered OAuth client: %s (%s)",
             client_info.client_id[:12],
             client_info.client_name or "unnamed",
         )
+
+    def _evict_excess_clients(self) -> None:
+        """Drop oldest client registrations when above MAX_CLIENTS.
+
+        Sorts by client_id_issued_at ascending and removes from the front
+        until len <= MAX_CLIENTS. Also revokes any tokens tied to the
+        evicted client_ids so a stale dump can't smuggle live tokens past
+        the cap.
+        """
+        excess = len(self._store.clients) - MAX_CLIENTS
+        if excess <= 0:
+            return
+
+        by_age = sorted(
+            self._store.clients.items(),
+            key=lambda kv: kv[1].get("client_id_issued_at") or 0,
+        )
+        for client_id, _ in by_age[:excess]:
+            del self._store.clients[client_id]
+            for tok, data in list(self._store.access_tokens.items()):
+                if data.get("client_id") == client_id:
+                    del self._store.access_tokens[tok]
+            for tok, data in list(self._store.refresh_tokens.items()):
+                if data.get("client_id") == client_id:
+                    del self._store.refresh_tokens[tok]
+            logger.warning(
+                "Evicted OAuth client over MAX_CLIENTS cap: %s",
+                client_id[:12],
+            )
 
     # ── Authorization ────────────────────────────────────────────────
 
@@ -171,6 +206,7 @@ class HaOpsOAuthProvider:
             "token": access,
             "client_id": client.client_id,
             "scopes": authorization_code.scopes,
+            "issued_at": int(now),
             "expires_at": int(now + self._access_ttl),
             "resource": authorization_code.resource,
         }
@@ -178,6 +214,7 @@ class HaOpsOAuthProvider:
             "token": refresh,
             "client_id": client.client_id,
             "scopes": authorization_code.scopes,
+            "issued_at": int(now),
             "expires_at": int(now + self._refresh_ttl) if self._refresh_ttl else None,
         }
         self._store.save()
@@ -236,12 +273,14 @@ class HaOpsOAuthProvider:
             "token": new_access,
             "client_id": client.client_id,
             "scopes": effective_scopes,
+            "issued_at": int(now),
             "expires_at": int(now + self._access_ttl),
         }
         self._store.refresh_tokens[new_refresh] = {
             "token": new_refresh,
             "client_id": client.client_id,
             "scopes": effective_scopes,
+            "issued_at": int(now),
             "expires_at": int(now + self._refresh_ttl) if self._refresh_ttl else None,
         }
         self._store.save()

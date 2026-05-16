@@ -346,3 +346,126 @@ async def test_refresh_token_exchange_logs_at_info(
     seen = [r.message for r in caplog.records]
     assert matches, f"expected refresh-exchange INFO log, got: {seen}"
     assert matches[0].levelname == "INFO"
+
+
+# ── Hardening: client cap + issued_at forensics ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_tokens_record_issued_at(tmp_path: Path):
+    """Access + refresh records carry issued_at for forensic auditing."""
+    provider = HaOpsOAuthProvider(data_dir=tmp_path)
+    client_info = _make_client_info()
+    before = int(time.time())
+    token = await _issue_token(provider, client_info)
+    after = int(time.time())
+
+    access_raw = provider._store.access_tokens[token.access_token]
+    refresh_raw = provider._store.refresh_tokens[token.refresh_token]
+    assert before <= access_raw["issued_at"] <= after
+    assert before <= refresh_raw["issued_at"] <= after
+
+
+@pytest.mark.asyncio
+async def test_issued_at_resets_on_refresh_exchange(tmp_path: Path):
+    """exchange_refresh_token stamps a fresh issued_at on the new pair."""
+    provider = HaOpsOAuthProvider(data_dir=tmp_path)
+    client_info = _make_client_info()
+    token = await _issue_token(provider, client_info)
+    old_issued = provider._store.access_tokens[token.access_token]["issued_at"]
+
+    # Rewind the new pair's clock floor below old_issued by sleeping past 1s
+    # would be slow; instead just verify the new record carries any issued_at
+    # field and is >= the old one (same-second is acceptable in test).
+    refresh = await provider.load_refresh_token(client_info, token.refresh_token)
+    new_pair = await provider.exchange_refresh_token(client_info, refresh, [])
+    new_issued = provider._store.access_tokens[new_pair.access_token]["issued_at"]
+    assert new_issued >= old_issued
+
+
+@pytest.mark.asyncio
+async def test_register_client_evicts_oldest_when_over_cap(tmp_path: Path):
+    """When clients exceed MAX_CLIENTS, oldest (by client_id_issued_at) is evicted."""
+    from mcp.shared.auth import OAuthClientInformationFull
+
+    from ha_ops_mcp.auth import provider as provider_mod
+
+    provider = HaOpsOAuthProvider(data_dir=tmp_path)
+
+    # Monkey-patch the cap low so the test runs fast
+    original_cap = provider_mod.MAX_CLIENTS
+    provider_mod.MAX_CLIENTS = 3
+    try:
+        for i in range(4):
+            info = OAuthClientInformationFull(
+                redirect_uris=["http://localhost:3000/callback"],
+                client_name=f"client-{i}",
+                token_endpoint_auth_method="none",
+            )
+            # Force monotonically increasing issued_at so eviction is deterministic
+            info.client_id = f"cid-{i:02d}"
+            info.client_id_issued_at = 1_000_000 + i
+            await provider.register_client(info)
+
+        # Cap holds and the oldest (cid-00) is gone
+        assert len(provider._store.clients) == 3
+        assert "cid-00" not in provider._store.clients
+        assert "cid-03" in provider._store.clients
+    finally:
+        provider_mod.MAX_CLIENTS = original_cap
+
+
+@pytest.mark.asyncio
+async def test_evict_revokes_tokens_for_dropped_client(tmp_path: Path):
+    """Evicting a client also revokes any access/refresh tokens it owns."""
+    from mcp.shared.auth import OAuthClientInformationFull
+
+    from ha_ops_mcp.auth import provider as provider_mod
+
+    provider = HaOpsOAuthProvider(data_dir=tmp_path)
+
+    # Register a client and mint tokens against it
+    victim = OAuthClientInformationFull(
+        redirect_uris=["http://localhost:3000/callback"],
+        client_name="victim",
+        token_endpoint_auth_method="none",
+    )
+    victim.client_id = "victim-id"
+    victim.client_id_issued_at = 1
+    await provider.register_client(victim)
+
+    # Manually plant a token for the victim (avoid full auth-code dance)
+    provider._store.access_tokens["victim-access"] = {
+        "token": "victim-access",
+        "client_id": "victim-id",
+        "scopes": [],
+        "issued_at": 1,
+        "expires_at": int(time.time() + 10_000),
+    }
+    provider._store.refresh_tokens["victim-refresh"] = {
+        "token": "victim-refresh",
+        "client_id": "victim-id",
+        "scopes": [],
+        "issued_at": 1,
+        "expires_at": int(time.time() + 10_000),
+    }
+    provider._store.save()
+
+    # Drive eviction by lowering cap and registering a newer client
+    original_cap = provider_mod.MAX_CLIENTS
+    provider_mod.MAX_CLIENTS = 1
+    try:
+        newer = OAuthClientInformationFull(
+            redirect_uris=["http://localhost:3000/callback"],
+            client_name="newer",
+            token_endpoint_auth_method="none",
+        )
+        newer.client_id = "newer-id"
+        newer.client_id_issued_at = 999
+        await provider.register_client(newer)
+
+        assert "victim-id" not in provider._store.clients
+        assert "victim-access" not in provider._store.access_tokens
+        assert "victim-refresh" not in provider._store.refresh_tokens
+    finally:
+        provider_mod.MAX_CLIENTS = original_cap

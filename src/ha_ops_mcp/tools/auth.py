@@ -38,9 +38,9 @@ def _mask_token(token: str) -> str:
     description=(
         "Show OAuth authentication status and metadata. "
         "Reports whether OAuth is enabled, registered clients (id, name, "
-        "registered_at), active access tokens (client_id, scopes, expires_at, "
-        "masked token prefix), active refresh tokens (client_id, scopes, "
-        "expires_at), and pending authorization codes. "
+        "registered_at), active access tokens (client_id, scopes, issued_at, "
+        "expires_at, masked token prefix), active refresh tokens (client_id, "
+        "scopes, issued_at, expires_at), and pending authorization codes. "
         "Token values are masked — only the first 8 characters are shown. "
         "Read-only, no parameters."
     ),
@@ -71,6 +71,7 @@ async def haops_auth_status(ctx: HaOpsContext) -> dict[str, Any]:
             "token_prefix": _mask_token(tok),
             "client_id": _mask_token(data.get("client_id", "")),
             "scopes": data.get("scopes", []),
+            "issued_at": _ts_to_iso(data.get("issued_at")),
             "expires_at": _ts_to_iso(expires_at),
             "expired": expires_at is not None and expires_at < now,
             "ttl_seconds": max(0, int(expires_at - now)) if expires_at else None,
@@ -83,6 +84,7 @@ async def haops_auth_status(ctx: HaOpsContext) -> dict[str, Any]:
             "token_prefix": _mask_token(tok),
             "client_id": _mask_token(data.get("client_id", "")),
             "scopes": data.get("scopes", []),
+            "issued_at": _ts_to_iso(data.get("issued_at")),
             "expires_at": _ts_to_iso(expires_at),
             "expired": expires_at is not None and expires_at < now,
         })

@@ -1,3 +1,13 @@
+## 0.34.1
+
+**OAuth provider hardening: cap client registrations + record `issued_at` on tokens.** Two defensive changes targeting the LAN-anonymous DCR surface and forensic gaps in the token store.
+
+1. **`MAX_CLIENTS = 100` cap on `oauth.json` client registrations.** DCR is anonymous — anyone reachable on the LAN can POST to `/register`. Without a cap, a buggy client looping registration or a hostile peer could grow `oauth.json` unboundedly. On overflow, `register_client` evicts the oldest entries by `client_id_issued_at` (LRU-by-age) and also revokes any access/refresh tokens owned by the dropped client so a leaked dump can't smuggle live tokens past the cap. Eviction logs at WARNING. Cap is well above the steady-state count (production currently runs at 2 clients).
+
+2. **`issued_at` field added to access + refresh token records and surfaced via `haops_auth_status`.** Previously only `expires_at` was stored; with the 30-day sliding TTL on access tokens, `expires_at` reveals nothing about when a token was minted. `issued_at` is stamped on both `exchange_authorization_code` and `exchange_refresh_token`, persisted in `oauth.json`, and rendered as ISO-8601 in `haops_auth_status` output. Pure forensic value — no behaviour change.
+
+Drop on `tools_check` — no auth tool reference exists there. Lock count unchanged at 63. 537 tests pass.
+
 ## 0.34.0
 
 **Switch addon default transport from `sse` to `streamable-http`.** Field-observed reliability problem on the SSE transport: long-lived `GET /sse` streams get torn down by the Supervisor IPv6 proxy after periods of idleness, and the MCP Python SDK's SSE handler (`mcp/server/sse.py:249`) raises `anyio.ClosedResourceError` on the next POST to that session. Client sees the POST 202-accept but never receives the JSON-RPC reply, surfaces as `MCP error -32602` and forces a manual `/mcp` reconnect every session.
