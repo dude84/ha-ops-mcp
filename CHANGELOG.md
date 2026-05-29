@@ -1,3 +1,9 @@
+## 0.34.3
+
+**Fix `haops_config_validate`: it called a service that returns nothing.** The tool POSTed `/api/services/homeassistant/check_config?return_response`, which HA rejects with `HTTP 400: "Service does not support responses. Remove return_response from request."` — `homeassistant.check_config` has no response object, so the tool always errored out.
+
+Switched to the WebSocket `config/check_config` command, which returns the verdict directly (`{"result": "valid"|"invalid", "errors": <str|null>, "warnings": <str|null>}`) — also the path `CLAUDE.md` prescribes for config validation ("WebSocket config/check_config is the only option"). The dead REST call and its broken `call_service` + `return_response` WS fallback are removed. `_format_check_result` now also honours the explicit `result` field. Tests updated to the WS path; 540 pass. No tool signature change; `tools_check` already groups this tool under its WS self-check.
+
 ## 0.34.2
 
 **Fix `haops_db_execute` write path: read-only state leaked across the connection pool.** Any write (INSERT/UPDATE/DELETE) issued *after* a prior `haops_db_query` failed with `(1792, 'Cannot execute statement in a READ ONLY transaction')` on MariaDB — and `attempt to write a readonly database` on SQLite. `EXPLAIN` of a write statement in the two-phase preview failed the same way.

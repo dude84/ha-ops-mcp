@@ -724,53 +724,45 @@ async def haops_config_apply(ctx: HaOpsContext, token: str) -> dict[str, Any]:
     name="haops_config_validate",
     description=(
         "Run Home Assistant's config check without making changes. "
-        "Calls the homeassistant.check_config service via REST. "
+        "Uses the WebSocket config/check_config command — HA's "
+        "homeassistant.check_config service returns no response object, so the "
+        "WS command is the only way to read the verdict. "
         "Returns valid/invalid with error details. Read-only, no parameters."
     ),
 )
 async def haops_config_validate(ctx: HaOpsContext) -> dict[str, Any]:
-    from ha_ops_mcp.connections.rest import RestClientError
+    from ha_ops_mcp.connections.websocket import WebSocketError
 
-    # POST to the service endpoint with return_response to get the result
+    # The homeassistant.check_config *service* does not support return_response
+    # (HA rejects it with HTTP 400). The WS config/check_config command returns
+    # the verdict directly: {"result": "valid"|"invalid", "errors": <str|null>,
+    # "warnings": <str|null>}.
     try:
-        result = await ctx.rest.post(
-            "/api/services/homeassistant/check_config?return_response",
-        )
-    except RestClientError as e:
-        # Fall back to WS if REST doesn't support return_response on this service
-        try:
-            from ha_ops_mcp.connections.websocket import WebSocketError
-            ws_result = await ctx.ws.send_command(
-                "call_service",
-                domain="homeassistant",
-                service="check_config",
-                return_response=True,
-            )
-            if isinstance(ws_result, dict):
-                response = ws_result.get("response", {})
-                return _format_check_result(response)
-        except WebSocketError:
-            pass
+        result = await ctx.ws.send_command("config/check_config")
+    except WebSocketError as e:
         return {"error": f"Config check failed: {e}"}
 
-    # REST with return_response returns {"service_response": {...}, "changed_states": [...]}
     if isinstance(result, dict):
-        service_response = result.get("service_response", result)
-        return _format_check_result(service_response)
+        return _format_check_result(result)
 
     return {"valid": True, "result": str(result)}
 
 
 def _format_check_result(response: dict[str, Any]) -> dict[str, Any]:
-    """Format the check_config service response into valid/invalid output."""
+    """Format a config/check_config response into valid/invalid output.
+
+    HA returns {"result": "valid"|"invalid", "errors": <str|null>,
+    "warnings": <str|null>}.
+    """
     errors = response.get("errors")
     warnings = response.get("warnings")
+    valid = response.get("result") != "invalid" and not errors
+    formatted: dict[str, Any] = {"valid": valid}
     if errors:
-        return {"valid": False, "errors": errors, "warnings": warnings}
-    result: dict[str, Any] = {"valid": True}
+        formatted["errors"] = errors
     if warnings:
-        result["warnings"] = warnings
-    return result
+        formatted["warnings"] = warnings
+    return formatted
 
 
 @registry.tool(

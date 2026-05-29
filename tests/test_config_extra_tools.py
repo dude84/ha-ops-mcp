@@ -11,17 +11,19 @@ from ha_ops_mcp.tools.config import haops_config_search, haops_config_validate
 
 @pytest.mark.asyncio
 async def test_config_validate_valid(ctx):
-    ctx.rest.post = AsyncMock(return_value={
-        "service_response": {"errors": None, "warnings": None},
+    ctx.ws.send_command = AsyncMock(return_value={
+        "result": "valid", "errors": None, "warnings": None,
     })
     result = await haops_config_validate(ctx)
     assert result["valid"] is True
+    # Must use the WS command, not the (response-less) REST service.
+    ctx.ws.send_command.assert_awaited_once_with("config/check_config")
 
 
 @pytest.mark.asyncio
 async def test_config_validate_invalid(ctx):
-    ctx.rest.post = AsyncMock(return_value={
-        "service_response": {"errors": "Invalid platform: foo"},
+    ctx.ws.send_command = AsyncMock(return_value={
+        "result": "invalid", "errors": "Invalid platform: foo", "warnings": None,
     })
     result = await haops_config_validate(ctx)
     assert result["valid"] is False
