@@ -101,14 +101,26 @@ class DatabaseBackend(ABC):
 
     async def execute(self, sql: str, params: dict[str, Any] | None = None) -> int:
         """Execute a write query and return affected row count."""
-        async with self._engine.begin() as conn:
-            result = await conn.execute(text(sql), params or {})
-            return int(result.rowcount or 0)
+        async with self._engine.connect() as conn:
+            # A prior read query may have left this pooled connection in a
+            # read-only state (SET SESSION TRANSACTION READ ONLY / PRAGMA
+            # query_only) that outlives its own context. Clear it before
+            # opening the write transaction, then end the autobegun tx so
+            # begin() starts a fresh read-write transaction.
+            await self._set_writable(conn)
+            await conn.rollback()
+            async with conn.begin():
+                result = await conn.execute(text(sql), params or {})
+                return int(result.rowcount or 0)
 
     async def explain(self, sql: str, params: dict[str, Any] | None = None) -> list[str]:
         """Run EXPLAIN on a query and return the plan lines."""
         explain_sql = self._explain_prefix() + sql
         async with self._engine.connect() as conn:
+            # Reset read-only state left by a prior read query so EXPLAIN of a
+            # write statement (DELETE/UPDATE) isn't rejected by the backend.
+            await self._set_writable(conn)
+            await conn.rollback()
             result = await conn.execute(text(explain_sql), params or {})
             return [str(row) for row in result.fetchall()]
 
@@ -179,6 +191,11 @@ class DatabaseBackend(ABC):
         """Set the connection to read-only mode."""
 
     @abstractmethod
+    async def _set_writable(self, conn: Any) -> None:
+        """Clear read-only state on the connection (counterpart of
+        _set_read_only) so the write path isn't poisoned by a prior read."""
+
+    @abstractmethod
     async def _get_version(self) -> str:
         """Get the database server version."""
 
@@ -202,6 +219,9 @@ class SqliteBackend(DatabaseBackend):
 
     async def _set_read_only(self, conn: Any) -> None:
         await conn.execute(text("PRAGMA query_only = ON"))
+
+    async def _set_writable(self, conn: Any) -> None:
+        await conn.execute(text("PRAGMA query_only = OFF"))
 
     async def _get_version(self) -> str:
         async with self._engine.connect() as conn:
@@ -240,6 +260,9 @@ class MariaDbBackend(DatabaseBackend):
 
     async def _set_read_only(self, conn: Any) -> None:
         await conn.execute(text("SET SESSION TRANSACTION READ ONLY"))
+
+    async def _set_writable(self, conn: Any) -> None:
+        await conn.execute(text("SET SESSION TRANSACTION READ WRITE"))
 
     async def _get_version(self) -> str:
         async with self._engine.connect() as conn:
@@ -312,6 +335,9 @@ class PostgresBackend(DatabaseBackend):
 
     async def _set_read_only(self, conn: Any) -> None:
         await conn.execute(text("SET TRANSACTION READ ONLY"))
+
+    async def _set_writable(self, conn: Any) -> None:
+        await conn.execute(text("SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE"))
 
     async def _get_version(self) -> str:
         async with self._engine.connect() as conn:

@@ -1,3 +1,13 @@
+## 0.34.2
+
+**Fix `haops_db_execute` write path: read-only state leaked across the connection pool.** Any write (INSERT/UPDATE/DELETE) issued *after* a prior `haops_db_query` failed with `(1792, 'Cannot execute statement in a READ ONLY transaction')` on MariaDB — and `attempt to write a readonly database` on SQLite. `EXPLAIN` of a write statement in the two-phase preview failed the same way.
+
+Root cause: `query()` marks its connection read-only with a **session/connection-scoped** setting — MariaDB `SET SESSION TRANSACTION READ ONLY`, SQLite `PRAGMA query_only = ON` — which persists on the connection after it returns to the pool. A later `execute()` / `explain()` checking out that same pooled connection inherited the read-only state. No test caught it because none ran a read query before a write; a live MCP session does so constantly (every `haops_db_query` before a `haops_db_execute`).
+
+Fix: added a `_set_writable()` backend counterpart to `_set_read_only()` (SQLite `PRAGMA query_only = OFF`, MariaDB `SET SESSION TRANSACTION READ WRITE`, Postgres `SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE`). `execute()` and `explain()` now reset writability on the connection, end the autobegun transaction, then open a fresh read-write transaction — so a connection poisoned by an earlier read can no longer block a write.
+
+3 regression tests added (read-query-then-write at both backend and tool level). 540 tests pass. No tool signatures or descriptions changed; `tools_check` lock count unchanged at 63.
+
 ## 0.34.1
 
 **OAuth provider hardening: cap client registrations + record `issued_at` on tokens.** Two defensive changes targeting the LAN-anonymous DCR surface and forensic gaps in the token store.
