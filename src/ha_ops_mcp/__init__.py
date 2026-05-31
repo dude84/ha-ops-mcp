@@ -1,3 +1,3 @@
 """ha-ops-mcp — MCP server for Home Assistant operations."""
 
-__version__ = "0.36.5"
+__version__ = "0.37.0"

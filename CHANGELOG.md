@@ -1,3 +1,11 @@
+## 0.37.0
+
+**Design System v1.1 brand mark + Timeline/Health polish.**
+
+- **New brand mark** (DS v1.1 — robot hand gripping a cone drill bit, cyan/indigo/green on navy). Addon store icons swapped: `icon.png` → 256² mark, `logo.png` → the wide `ha-ops` wordmark lockup. The sideload header now shows the inlined mark beside "HA Ops", and the page favicon is the real mark (inline SVG data-URI — the server serves only `/ui`, so brand assets are inlined, not `<link>`ed).
+- **Removed the "Show reads / Mutations only" filter chip** from the Timeline — it was clutter. The Timeline shows mutations + destructive operations; read-only calls are still logged to `activity.jsonl` for forensics, just not surfaced in the UI. (The backend `classes` query param is retained.)
+- **Health → Tools check:** per-test `ok`/`fail` badges now right-align in a column under the group `pass`/`partial` badge, instead of leading each row — matches the block convention and reads far cleaner.
+
 ## 0.36.5
 
 **Timeline rows: move the timestamp to the right.** The date led every row and crowded the identity. It's now right-aligned and faint, so each row reads left-to-right as area-icon + tool + type, with the timestamp parked on the right edge. Left content wraps independently of the date (verified desktop + 390px mobile).

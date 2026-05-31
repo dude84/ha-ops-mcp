@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HA Ops</title>
-<link rel="icon" href="data:,">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNTYgMjU2IiB3aWR0aD0iMjU2IiBoZWlnaHQ9IjI1NiI+CiAgCiAgPHJlY3Qgd2lkdGg9IjI1NiIgaGVpZ2h0PSIyNTYiIHJ4PSI1OCIgZmlsbD0iIzBmMTQxYiI+PC9yZWN0PgogIDxwYXRoIGQ9Ik0gMjAgMTIwIEwgMTA4IDk4IEwgMTA4IDE0MiBaIiBmaWxsPSIjMjliNmY2Ij48L3BhdGg+CiAgPHJlY3QgeD0iMTAwIiB5PSIxMDUiIHdpZHRoPSIyNCIgaGVpZ2h0PSIzMCIgcng9IjQiIGZpbGw9IiMwZTdiYjAiPjwvcmVjdD4KICA8cmVjdCB4PSIxMjYiIHk9IjU4IiB3aWR0aD0iMjIiIGhlaWdodD0iNDAiIHJ4PSIxMCIgZmlsbD0iIzE2Mjk0ZSI+PC9yZWN0PgogIDxyZWN0IHg9IjE1NiIgeT0iNTIiIHdpZHRoPSIyMiIgaGVpZ2h0PSI0NiIgcng9IjEwIiBmaWxsPSIjMTYyOTRlIj48L3JlY3Q+CiAgPHJlY3QgeD0iMTg2IiB5PSI1OCIgd2lkdGg9IjIyIiBoZWlnaHQ9IjQwIiByeD0iMTAiIGZpbGw9IiMxNjI5NGUiPjwvcmVjdD4KICA8cmVjdCB4PSIxMTgiIHk9Ijg0IiB3aWR0aD0iOTgiIGhlaWdodD0iOTIiIHJ4PSIyMCIgZmlsbD0iIzI5YjZmNiI+PC9yZWN0PgogIDxyZWN0IHg9IjE0OCIgeT0iMTEyIiB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHJ4PSI2IiBmaWxsPSIjMGU3YmIwIj48L3JlY3Q+CiAgPHJlY3QgeD0iMTUwIiB5PSIxNzYiIHdpZHRoPSI0MCIgaGVpZ2h0PSIzNCIgcng9IjkiIGZpbGw9IiMyOWI2ZjYiPjwvcmVjdD4KPC9zdmc+">
 <script>
   (function() {
     var stored = localStorage.getItem('haops-theme');
@@ -231,7 +231,54 @@
 
 <header class="bg-surface-raised border-b border-border px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between gap-x-3 gap-y-2 flex-wrap">
   <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-    <span class="text-lg font-semibold whitespace-nowrap">HA Ops</span>
+    <span class="inline-flex items-center gap-2 whitespace-nowrap">
+      <!-- Brand mark (DS v1.1) — inlined logo.svg; server serves only /ui so
+           no sibling <img src>. currentColor not used (multi-tone mark). -->
+      <svg class="w-6 h-6 shrink-0" viewBox="0 0 256 256" aria-hidden="true">
+        <g stroke="#16294e" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M 14 106 L 110 85 L 110 127 Z" fill="#cdd3d9"></path>
+          <rect x="103" y="91" width="23" height="30" rx="4" fill="#9aa3ad"></rect>
+        </g>
+        <g stroke="#16294e" stroke-width="5" stroke-linecap="round">
+          <line x1="37" y1="111" x2="48" y2="99"></line>
+          <line x1="57" y1="115" x2="68" y2="94"></line>
+          <line x1="77" y1="120" x2="90" y2="90"></line>
+        </g>
+        <circle cx="116" cy="106" r="12" fill="#29b6f6" stroke="#16294e" stroke-width="7"></circle>
+        <circle cx="116" cy="106" r="3.4" fill="#16294e"></circle>
+        <g fill="#3b3baf" stroke="#16294e" stroke-width="7" stroke-linejoin="round">
+          <rect x="124" y="38" width="19" height="34" rx="9"></rect>
+          <rect x="147" y="38" width="19" height="34" rx="9"></rect>
+          <rect x="170" y="38" width="19" height="34" rx="9"></rect>
+          <rect x="193" y="38" width="19" height="34" rx="9"></rect>
+        </g>
+        <rect x="116" y="60" width="98" height="92" rx="20" fill="#29b6f6" stroke="#16294e" stroke-width="7"></rect>
+        <rect x="208" y="96" width="18" height="22" rx="5" fill="#29b6f6" stroke="#16294e" stroke-width="7"></rect>
+        <g fill="#16294e">
+          <circle cx="131" cy="74" r="2.5"></circle><circle cx="144" cy="74" r="2.5"></circle><circle cx="157" cy="74" r="2.5"></circle>
+          <circle cx="170" cy="74" r="2.5"></circle><circle cx="183" cy="74" r="2.5"></circle><circle cx="196" cy="74" r="2.5"></circle>
+          <circle cx="198" cy="88" r="2.5"></circle><circle cx="198" cy="101" r="2.5"></circle><circle cx="198" cy="114" r="2.5"></circle>
+        </g>
+        <g stroke="#16294e" stroke-width="5" stroke-linecap="round">
+          <line x1="135" y1="84" x2="135" y2="90"></line><line x1="147" y1="84" x2="147" y2="90"></line><line x1="159" y1="84" x2="159" y2="90"></line>
+          <line x1="135" y1="130" x2="135" y2="124"></line><line x1="147" y1="130" x2="147" y2="124"></line><line x1="159" y1="130" x2="159" y2="124"></line>
+          <line x1="117" y1="96" x2="123" y2="96"></line><line x1="117" y1="107" x2="123" y2="107"></line><line x1="117" y1="118" x2="123" y2="118"></line>
+          <line x1="177" y1="96" x2="171" y2="96"></line><line x1="177" y1="107" x2="171" y2="107"></line><line x1="177" y1="118" x2="171" y2="118"></line>
+        </g>
+        <rect x="123" y="88" width="48" height="38" rx="5" fill="#54b85a" stroke="#16294e" stroke-width="6"></rect>
+        <rect x="135" y="97" width="24" height="20" rx="3" fill="#b6e0ad"></rect>
+        <rect x="150" y="150" width="30" height="16" rx="4" fill="#29b6f6" stroke="#16294e" stroke-width="7"></rect>
+        <rect x="200" y="146" width="18" height="44" rx="9" fill="#29b6f6" stroke="#16294e" stroke-width="7" transform="rotate(26 209 168)"></rect>
+        <rect x="142" y="162" width="46" height="26" rx="12" fill="#29b6f6" stroke="#16294e" stroke-width="7"></rect>
+        <path d="M152 188 A 13 13 0 0 1 178 188" fill="none" stroke="#16294e" stroke-width="6" stroke-linecap="round"></path>
+        <rect x="150" y="188" width="30" height="34" rx="5" fill="#29b6f6" stroke="#16294e" stroke-width="7"></rect>
+        <g stroke="#16294e" stroke-width="5" stroke-linecap="round">
+          <line x1="159" y1="194" x2="159" y2="216"></line><line x1="166" y1="194" x2="166" y2="216"></line><line x1="173" y1="194" x2="173" y2="216"></line>
+        </g>
+        <rect x="142" y="220" width="46" height="15" rx="5" fill="#29b6f6" stroke="#16294e" stroke-width="7"></rect>
+      </svg>
+      <span class="text-lg font-semibold">HA Ops</span>
+    </span>
     <nav class="flex gap-1 flex-wrap">
       <template x-for="t in tabs" :key="t.id">
         <button
@@ -323,19 +370,19 @@
               </div>
               <div class="text-xs space-y-1 mb-2" x-show="group.tests">
                 <template x-for="(test, tname) in (group.tests || {})" :key="tname">
-                  <div class="flex items-start gap-2">
-                    <span class="badge whitespace-nowrap"
-                          :class="test.ok ? 'bg-state-ok-bg text-state-ok-fg' : 'bg-state-fail-bg text-state-fail-fg'"
-                          x-text="test.ok ? 'ok' : 'fail'"></span>
-                    <div class="flex-1">
+                  <div class="flex items-start justify-between gap-2">
+                    <div class="flex-1 min-w-0">
                       <span class="font-mono" x-text="tname"></span>
                       <template x-if="test.error">
-                        <span class="text-red-700 dark:text-red-300 ml-2 font-mono" x-text="test.error"></span>
+                        <span class="text-banner-fail-fg ml-2 font-mono" x-text="test.error"></span>
                       </template>
                       <template x-if="!test.error && testSummary(test)">
                         <span class="text-text-muted ml-2" x-text="testSummary(test)"></span>
                       </template>
                     </div>
+                    <span class="badge whitespace-nowrap shrink-0"
+                          :class="test.ok ? 'bg-state-ok-bg text-state-ok-fg' : 'bg-state-fail-bg text-state-fail-fg'"
+                          x-text="test.ok ? 'ok' : 'fail'"></span>
                   </div>
                 </template>
               </div>
@@ -368,20 +415,6 @@
       <span x-show="auditClearInFlight">Clearing…</span>
     </button>
   </div>
-  <!-- Filter bar -->
-  <div class="flex items-center gap-2 text-xs mb-4">
-    <button
-      @click="toggleReads()"
-      class="px-2.5 py-1 rounded border font-medium"
-      :class="showReads
-        ? 'bg-blue-600 text-white border-blue-600'
-        : 'text-text-muted border-border hover:bg-surface-hover'"
-      title="Include read-only tool calls in the Timeline">
-      <span x-text="showReads ? '✓ Reads shown' : 'Show reads'"></span>
-    </button>
-    <span class="text-text-faint" x-show="!showReads">Mutations only</span>
-  </div>
-
   <template x-if="!timeline?.entries?.length">
     <p class="text-text-muted text-sm">No audit entries yet.</p>
   </template>
@@ -694,7 +727,6 @@ function app() {
     expandedTimeline: -1,
     timelinePage: 0,
     timelinePageSize: 50,
-    showReads: false,
     selfCheck: null,
     toolsCheck: null,
     selfCheckLoading: false,
@@ -707,7 +739,6 @@ function app() {
 
     async init() {
       this.themeMode = localStorage.getItem('haops-theme') || 'auto';
-      this.showReads = localStorage.getItem('haops-timeline-reads') === '1';
       this.applyTheme();
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
         if (this.themeMode === 'auto') this.applyTheme();
@@ -818,7 +849,7 @@ function app() {
           return;
         }
         try {
-          var fresh = await this.fetchJson('/timeline?offset=0&limit=' + this.timelinePageSize + this._timelineClasses());
+          var fresh = await this.fetchJson('/timeline?offset=0&limit=' + this.timelinePageSize);
           // Only update if the count changed — avoids re-rendering
           // (and collapsing expanded rows) on every tick. Carry over
           // any already-loaded diffs (keyed by ts+tool) so the user
@@ -840,22 +871,6 @@ function app() {
       }
     },
 
-    // Class filter suffix for timeline fetches. Reads are opt-in; when on
-    // we ask for all three classes (merged stream), when off the server
-    // defaults to mutations only.
-    _timelineClasses() {
-      return this.showReads ? '&classes=read,mutate,destructive' : '';
-    },
-
-    toggleReads() {
-      this.showReads = !this.showReads;
-      localStorage.setItem('haops-timeline-reads', this.showReads ? '1' : '0');
-      // Filter changes the result set — reset to page 1 and reload.
-      this.timelinePage = 0;
-      this.expandedTimeline = -1;
-      this.load('timeline');
-    },
-
     async load(id) {
       try {
         if (id === 'health')        await this.loadHealth();
@@ -863,7 +878,6 @@ function app() {
           var offset = this.timelinePage * this.timelinePageSize;
           this.timeline = await this.fetchJson(
             '/timeline?offset=' + offset + '&limit=' + this.timelinePageSize
-            + this._timelineClasses()
           );
         }
         else if (id === 'backups')  this.backups  = await this.fetchJson('/backups');
