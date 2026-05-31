@@ -4,7 +4,7 @@ function Header({ tabs, active, onTab, version, lastRefresh, themeMode, onTheme 
   return (
     <header className="header">
       <div className="header-left">
-        <span className="wordmark">HA Ops</span>
+        <span className="wordmark"><img className="wordmark-mark" src="../../assets/logo.svg" alt="" />HA Ops</span>
         <nav className="tabnav">
           {tabs.map(t => (
             <button key={t.id}

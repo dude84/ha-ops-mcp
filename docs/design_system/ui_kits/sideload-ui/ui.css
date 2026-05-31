@@ -24,7 +24,8 @@ code { font-family: var(--font-mono); }
   display: flex; align-items: center; justify-content: space-between;
 }
 .header-left { display: flex; align-items: center; gap: var(--space-3); }
-.wordmark { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
+.wordmark { font-size: var(--text-lg); font-weight: var(--weight-semibold); display: inline-flex; align-items: center; gap: 8px; }
+.wordmark-mark { width: 26px; height: 26px; display: block; }
 .tabnav { display: flex; gap: var(--space-1); }
 .tab {
   padding: var(--space-1) var(--space-3); border: none; border-radius: var(--radius-sm);

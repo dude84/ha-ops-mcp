@@ -68,8 +68,9 @@ these to go deeper:
 | `colors_and_type.css` | **The tokens.** Two-tier (primitive → semantic) colors + type/spacing/radii/shadow, light + dark |
 | `IMPLEMENTATION.md` | One-page guide: wiring tokens into the buildless Tailwind `ui.html` + the `sev-*` → semantic migration table |
 | `RELEASE_BRIEF_v1.0.md` | Versioned handoff brief for the dev implementation team — scope, steps, acceptance criteria, deferred decisions |
+| `CHANGELOG.md` | Versioned log of every change — v1.0 (foundations) and v1.1 (brand mark) |
 | `SKILL.md` | Agent-Skill manifest so this system works as a downloadable Claude skill |
-| `assets/` | `logo.png`, `icon.png` (the add-on mark) + `area-icons.svg` sprite and `area-icons/` (15 per-area SVGs) |
+| `assets/` | `logo.svg` + `logo-128/256/512.png` (v1.1 mark), `logo.png`/`icon.png` (live add-on icon), `favicon.svg` + `favicon-16/32/64.png`, `area-icons.svg` sprite and `area-icons/` (15+misc SVGs) |
 | `preview/` | Small HTML specimen cards that populate the Design System tab |
 | `ui_kits/sideload-ui/` | High-fidelity, interactive recreation of the admin panel (Timeline / Backups / Health) — `README.md`, `index.html`, and JSX components |
 
@@ -252,9 +253,11 @@ curated set of **Unicode glyphs** rendered in the text color:
 - **The 15 areas** (authoritative, from `classification.py`): `config, automation,
   script, scene, dashboard, entity, registry, database, system, addon, shell, helper,
   backup, service, references`.
-- **The add-on mark** (`assets/logo.png` / `icon.png`) is a generic robot-arm-with-wrench
-  raster used only as the HA add-on store icon. The in-app header is **text-only**
-  ("HA Ops") — there is no logo lockup in the UI itself.
+- **The add-on mark** (`assets/logo.svg` + `logo-128/256/512.png`, also `logo.png` / `icon.png`)
+  is the **v1.1 redraw**: a robot hand gripping a cone drill bit, in the original cyan /
+  indigo / green palette with a navy outline. The favicon (`assets/favicon.svg` +
+  `favicon-16/32/64.png`) is a flat two-tone cut for tiny sizes. The in-app header stays
+  **text-only** ("HA Ops") — the mark is for the add-on store, favicon, and docs.
 - **No emoji** as content anywhere.
 
 ### Area icon set
