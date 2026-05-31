@@ -394,31 +394,35 @@
           <span class="mt-0.5 text-gray-400 text-xs font-mono"
                 x-text="expandedTimeline === eidx ? '▾' : '▸'"></span>
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-x-2 gap-y-1 flex-wrap text-sm">
-              <span class="font-mono text-xs text-text-faint"
+            <div class="flex items-start gap-x-3">
+              <!-- left: the meaningful identity — area, tool, type, error -->
+              <div class="flex items-center gap-x-2 gap-y-1 flex-wrap min-w-0 text-sm">
+                <span class="inline-flex items-center gap-1 text-text-muted"
+                      x-show="e.area" :title="'Area: ' + e.area">
+                  <svg class="w-4 h-4 shrink-0" aria-hidden="true"><use :href="'#area-' + e.area"></use></svg>
+                  <span x-text="e.area"></span>
+                </span>
+                <span class="font-medium" x-text="e.tool"></span>
+                <span class="inline-flex items-center gap-1.5"
+                      :title="'Risk: ' + (e.op_class || 'unknown')">
+                  <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="dotClass(e.op_class)"></span>
+                  <span class="text-text-muted" x-text="e.type"></span>
+                </span>
+                <span x-show="!e.success"
+                      class="text-xs font-medium px-1.5 py-0.5 rounded bg-op-dstr-bg text-op-dstr-fg">error</span>
+                <template x-if="e.paired_with">
+                  <button
+                    @click.stop="scrollToPair(e.paired_with.index)"
+                    class="text-xs font-mono px-2 py-0.5 rounded bg-rel-bg text-rel-fg hover:opacity-80"
+                    :title="'Jump to ' + e.paired_with.tool + ' at ' + formatTimestamp(e.paired_with.timestamp)">
+                    <span x-show="e.paired_with.relation === 'rolled_back_by'">↺ rolled back</span>
+                    <span x-show="e.paired_with.relation === 'reverts'">↶ reverts apply</span>
+                  </button>
+                </template>
+              </div>
+              <!-- right: timestamp, pushed away from the content -->
+              <span class="ml-auto shrink-0 font-mono text-xs text-text-faint whitespace-nowrap"
                     x-text="formatTimestamp(e.timestamp)"></span>
-              <span class="inline-flex items-center gap-1 text-text-muted"
-                    x-show="e.area" :title="'Area: ' + e.area">
-                <svg class="w-4 h-4 shrink-0" aria-hidden="true"><use :href="'#area-' + e.area"></use></svg>
-                <span x-text="e.area"></span>
-              </span>
-              <span class="font-medium" x-text="e.tool"></span>
-              <span class="inline-flex items-center gap-1.5"
-                    :title="'Risk: ' + (e.op_class || 'unknown')">
-                <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="dotClass(e.op_class)"></span>
-                <span class="text-text-muted" x-text="e.type"></span>
-              </span>
-              <span x-show="!e.success"
-                    class="text-xs font-medium px-1.5 py-0.5 rounded bg-op-dstr-bg text-op-dstr-fg">error</span>
-              <template x-if="e.paired_with">
-                <button
-                  @click.stop="scrollToPair(e.paired_with.index)"
-                  class="text-xs font-mono px-2 py-0.5 rounded bg-rel-bg text-rel-fg hover:opacity-80"
-                  :title="'Jump to ' + e.paired_with.tool + ' at ' + formatTimestamp(e.paired_with.timestamp)">
-                  <span x-show="e.paired_with.relation === 'rolled_back_by'">↺ rolled back</span>
-                  <span x-show="e.paired_with.relation === 'reverts'">↶ reverts apply</span>
-                </button>
-              </template>
             </div>
             <div class="text-sm text-text mt-1" x-text="e.summary"></div>
           </div>
