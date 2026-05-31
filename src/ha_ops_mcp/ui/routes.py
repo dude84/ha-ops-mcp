@@ -29,6 +29,8 @@ from typing import TYPE_CHECKING, Any
 
 from starlette.responses import JSONResponse, Response
 
+from ha_ops_mcp.safety.classification import classify
+
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
     from starlette.requests import Request
@@ -168,11 +170,31 @@ def register_ui_routes(mcp: FastMCP, ctx: HaOpsContext) -> None:
         except ValueError:
             offset = 0
 
+        # op-class filter. Default = mutations only (mutate + destructive);
+        # reads are opt-in so the high-volume activity stream doesn't bury
+        # the operations the operator actually acts on. When `read` is not
+        # requested we read the mutation stream alone — no merge cost.
+        classes_raw = request.query_params.get("classes", "")
+        classes = {c.strip() for c in classes_raw.split(",") if c.strip()}
+        include_reads = "read" in classes
+
         # Read one extra entry past the requested window so we can answer
-        # has_more without a second pass. read_recent is tail-bounded
-        # by line count; pulling offset+limit+1 stays cheap up to tens
-        # of thousands of audit lines.
-        audit = ctx.audit.read_recent(limit=offset + limit + 1)
+        # has_more without a second pass. Both readers are tail-bounded by
+        # line count; pulling offset+limit+1 stays cheap up to tens of
+        # thousands of audit lines.
+        if include_reads:
+            audit = ctx.audit.read_recent_merged(limit=offset + limit + 1)
+        else:
+            audit = ctx.audit.read_recent(limit=offset + limit + 1)
+        # Apply an explicit class filter when the caller narrowed it (e.g.
+        # destructive-only). Empty/default set means "all mutation classes".
+        if classes:
+            wanted = classes
+            audit = [
+                e for e in audit
+                if classify(e.get("tool", ""), e.get("details") or {})[0] in wanted
+                or e.get("op_class") in wanted
+            ]
         has_more = len(audit) > offset + limit
         prior_pages = audit[:offset]
         page = audit[offset:offset + limit]
@@ -720,12 +742,24 @@ def _render_audit_entry(
     details = entry.get("details") or {}
     success = bool(entry.get("success", True))
 
+    # op_class/area are stamped at write time (v0.35+). Legacy entries
+    # lack them — derive via the same classify() the logger uses so old and
+    # new rows render identically.
+    op_class = entry.get("op_class")
+    area = entry.get("area")
+    if op_class is None or area is None:
+        oc, ar = classify(tool, details)
+        op_class = op_class or oc
+        area = area or ar
+
     out: dict[str, Any] = {
         "timestamp": entry.get("timestamp", ""),
         # Display-prefixed name so Timeline matches the MCP tool name the
         # client actually calls. The raw audit log keeps the bare form.
         "tool": _display_tool_name(tool),
         "success": success,
+        "op_class": op_class,
+        "area": area,
         "token_id": entry.get("token_id"),
         "backup_path": entry.get("backup_path"),
         "summary": _summarise_audit_entry(tool, details, success, entry.get("error")),

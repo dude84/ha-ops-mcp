@@ -10,6 +10,7 @@ declare db_url
 declare backup_dir
 declare backup_max_age_days
 declare backup_max_per_type
+declare audit_log_reads
 declare log_level
 declare refindex_exclude_dirs
 declare refindex_exclude_globs
@@ -51,6 +52,16 @@ export HA_OPS_CONFIG_ROOT="/config"
 export HA_OPS_BACKUP_DIR="${backup_dir}"
 export HA_OPS_BACKUP_MAX_AGE_DAYS="${backup_max_age_days}"
 export HA_OPS_BACKUP_MAX_PER_TYPE="${backup_max_per_type}"
+
+# Audit read-logging — default true. Export in both directions so a
+# config-set false beats config.py's True default (same reasoning as
+# auth_enabled below).
+audit_log_reads=$(bashio::config 'audit_log_reads')
+if bashio::var.true "${audit_log_reads}"; then
+    export HA_OPS_AUDIT_LOG_READS="true"
+else
+    export HA_OPS_AUDIT_LOG_READS="false"
+fi
 
 if bashio::var.has_value "${db_url}"; then
     export HA_OPS_DB_URL="${db_url}"

@@ -167,14 +167,56 @@
       <span x-show="auditClearInFlight">Clearing…</span>
     </button>
   </div>
-  <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
-    Inspection of recent mutations. Click a row to see the diff. Apply
+  <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+    Inspection of recent operations. Click a row to see the diff. Apply
     rows whose transaction is still in-session expose a Revert button
     that fires haops_rollback via the sidebar; once the transaction is
     gone (addon restart), revert falls back to
     call <code class="font-mono text-xs bg-gray-100 dark:bg-gray-700 px-1 rounded">haops_backup_revert</code>
     via the MCP flow.
   </p>
+
+  <!-- Filter + legend bar -->
+  <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+    <div class="flex items-center gap-2 text-xs">
+      <button
+        @click="toggleReads()"
+        class="px-2.5 py-1 rounded border font-medium"
+        :class="showReads
+          ? 'bg-blue-600 text-white border-blue-600'
+          : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'"
+        title="Include read-only tool calls in the Timeline">
+        <span x-text="showReads ? '✓ Reads shown' : 'Show reads'"></span>
+      </button>
+      <span class="text-gray-400 dark:text-gray-500"
+            x-show="!showReads">Mutations only</span>
+    </div>
+    <button
+      @click="showLegend = !showLegend"
+      class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+      <span x-text="showLegend ? 'Hide legend' : 'What do the tags mean?'"></span>
+    </button>
+  </div>
+  <div x-show="showLegend" x-cloak
+       class="mb-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 text-xs flex flex-wrap items-center gap-x-4 gap-y-2">
+    <span class="flex items-center gap-1.5">
+      <span class="badge font-mono sev-info">READ</span>
+      <span class="text-gray-500 dark:text-gray-400">observes state, changes nothing</span>
+    </span>
+    <span class="flex items-center gap-1.5">
+      <span class="badge font-mono sev-warn">MUTATE</span>
+      <span class="text-gray-500 dark:text-gray-400">changes state, recoverable</span>
+    </span>
+    <span class="flex items-center gap-1.5">
+      <span class="badge font-mono sev-breaking">DELETE</span>
+      <span class="text-gray-500 dark:text-gray-400">irreversible / data loss</span>
+    </span>
+    <span class="flex items-center gap-1.5">
+      <span class="font-mono text-gray-400 dark:text-gray-500">·area·</span>
+      <span class="text-gray-500 dark:text-gray-400">subsystem touched (config, database, dashboard…)</span>
+    </span>
+  </div>
+
   <template x-if="!timeline?.entries?.length">
     <p class="text-gray-500 dark:text-gray-400 text-sm">No audit entries yet.</p>
   </template>
@@ -190,7 +232,13 @@
             <div class="flex items-center gap-2 flex-wrap">
               <span class="font-mono text-xs text-gray-500 dark:text-gray-400"
                     x-text="formatTimestamp(e.timestamp)"></span>
+              <span class="badge font-mono"
+                    :class="opBadgeClass(e.op_class)"
+                    x-text="opLabel(e.op_class)"
+                    :title="'Operation class: ' + (e.op_class || 'unknown')"></span>
               <span class="font-medium text-sm" x-text="e.tool"></span>
+              <span class="text-xs font-mono text-gray-400 dark:text-gray-500"
+                    x-show="e.area" x-text="'·' + e.area + '·'"></span>
               <span class="badge"
                     :class="e.success ? 'sev-safe' : 'sev-breaking'"
                     x-text="e.success ? 'ok' : 'fail'"></span>
@@ -474,6 +522,8 @@ function app() {
     expandedTimeline: -1,
     timelinePage: 0,
     timelinePageSize: 50,
+    showReads: false,
+    showLegend: false,
     selfCheck: null,
     toolsCheck: null,
     selfCheckLoading: false,
@@ -486,6 +536,7 @@ function app() {
 
     async init() {
       this.themeMode = localStorage.getItem('haops-theme') || 'auto';
+      this.showReads = localStorage.getItem('haops-timeline-reads') === '1';
       this.applyTheme();
       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
         if (this.themeMode === 'auto') this.applyTheme();
@@ -596,7 +647,7 @@ function app() {
           return;
         }
         try {
-          var fresh = await this.fetchJson('/timeline?offset=0&limit=' + this.timelinePageSize);
+          var fresh = await this.fetchJson('/timeline?offset=0&limit=' + this.timelinePageSize + this._timelineClasses());
           // Only update if the count changed — avoids re-rendering
           // (and collapsing expanded rows) on every tick. Carry over
           // any already-loaded diffs (keyed by ts+tool) so the user
@@ -618,6 +669,22 @@ function app() {
       }
     },
 
+    // Class filter suffix for timeline fetches. Reads are opt-in; when on
+    // we ask for all three classes (merged stream), when off the server
+    // defaults to mutations only.
+    _timelineClasses() {
+      return this.showReads ? '&classes=read,mutate,destructive' : '';
+    },
+
+    toggleReads() {
+      this.showReads = !this.showReads;
+      localStorage.setItem('haops-timeline-reads', this.showReads ? '1' : '0');
+      // Filter changes the result set — reset to page 1 and reload.
+      this.timelinePage = 0;
+      this.expandedTimeline = -1;
+      this.load('timeline');
+    },
+
     async load(id) {
       try {
         if (id === 'health')        await this.loadHealth();
@@ -625,6 +692,7 @@ function app() {
           var offset = this.timelinePage * this.timelinePageSize;
           this.timeline = await this.fetchJson(
             '/timeline?offset=' + offset + '&limit=' + this.timelinePageSize
+            + this._timelineClasses()
           );
         }
         else if (id === 'backups')  this.backups  = await this.fetchJson('/backups');
@@ -763,6 +831,20 @@ function app() {
       if (!dashboardId) return '';
       if (dashboardId === 'lovelace') return '/config/.storage/lovelace';
       return '/config/.storage/lovelace.' + dashboardId.replace(/-/g, '_');
+    },
+
+    // Op-class pill: short label + severity color. "destructive" reads as
+    // "DELETE" (shorter, lands as the danger word). Unknown → MUTATE colors
+    // (conservative, matches the server-side default).
+    opLabel(c) {
+      return c === 'read' ? 'READ'
+           : c === 'destructive' ? 'DELETE'
+           : 'MUTATE';
+    },
+    opBadgeClass(c) {
+      return c === 'read' ? 'sev-info'
+           : c === 'destructive' ? 'sev-breaking'
+           : 'sev-warn';
     },
 
     formatTimestamp(iso) {

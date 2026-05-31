@@ -70,6 +70,9 @@ class AuditConfig:
     # Empty string means "derive from backup.dir" for back-compat with deploys
     # that predate this option. server.py resolves and canonicalises the path.
     dir: str = ""
+    # Log read-only tool calls to activity.jsonl so the Timeline is a full
+    # activity feed, not just mutations. Rotated at 5 MB. Off = mutations only.
+    log_reads: bool = True
 
 
 @dataclass
@@ -112,6 +115,7 @@ _ENV_MAP: dict[str, tuple[str, str]] = {
     "BACKUP_MAX_AGE_DAYS": ("backup", "max_age_days"),
     "BACKUP_MAX_PER_TYPE": ("backup", "max_per_type"),
     "AUDIT_DIR": ("audit", "dir"),
+    "AUDIT_LOG_READS": ("audit", "log_reads"),
     "AUTH_ENABLED": ("auth", "enabled"),
     "AUTH_DATA_DIR": ("auth", "data_dir"),
     "AUTH_ISSUER_URL": ("auth", "issuer_url"),

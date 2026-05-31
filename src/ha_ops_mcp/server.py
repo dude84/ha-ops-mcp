@@ -20,6 +20,7 @@ from ha_ops_mcp.connections.rest import RestClient
 from ha_ops_mcp.connections.websocket import WebSocketClient
 from ha_ops_mcp.safety.audit import AuditLog
 from ha_ops_mcp.safety.backup import BackupManager
+from ha_ops_mcp.safety.classification import classify
 from ha_ops_mcp.safety.confirmation import SafetyManager
 from ha_ops_mcp.safety.path_guard import PathGuard
 from ha_ops_mcp.safety.rollback import RollbackManager
@@ -349,6 +350,26 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
     return mcp, ctx
 
 
+def _read_summary(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Compact a read tool's call args for the activity log.
+
+    Keep scalars (entity_id, path, limit, sql first line) and drop bulky
+    payloads — the activity feed wants "what was looked at", not full data.
+    """
+    out: dict[str, Any] = {}
+    for k, v in kwargs.items():
+        if isinstance(v, (str, int, float, bool)) or v is None:
+            s = v
+            if isinstance(v, str) and len(v) > 200:
+                s = v[:200] + f"… ({len(v)} chars)"
+            out[k] = s
+        elif isinstance(v, (list, tuple)):
+            out[k] = f"[{len(v)} items]"
+        elif isinstance(v, dict):
+            out[k] = f"{{{len(v)} keys}}"
+    return out
+
+
 def _register_tool(
     mcp: FastMCP,
     name: str,
@@ -368,7 +389,25 @@ def _register_tool(
     new_sig = orig_sig.replace(parameters=params)
 
     async def tool_wrapper(**kwargs: Any) -> Any:
-        return await handler(ctx, **kwargs)
+        result = await handler(ctx, **kwargs)
+        # Read-only calls don't self-log; the central wrapper records them
+        # to the activity stream so the Timeline can show a full feed.
+        # Mutating/destructive tools call ctx.audit.log() themselves — skip
+        # them here to avoid double-logging.
+        if ctx.config.audit.log_reads:
+            bare = name[len("haops_"):] if name.startswith("haops_") else name
+            op_class, area = classify(bare, kwargs)
+            if op_class == "read":
+                try:
+                    await ctx.audit.log_activity(
+                        tool=bare,
+                        details=_read_summary(kwargs),
+                        op_class=op_class,
+                        area=area,
+                    )
+                except Exception:  # noqa: BLE001 - logging must never break a tool
+                    logger.debug("activity log failed for %s", bare, exc_info=True)
+        return result
 
     # Set signature BEFORE FastMCP's @mcp.tool decorator introspects it
     functools.update_wrapper(tool_wrapper, handler)

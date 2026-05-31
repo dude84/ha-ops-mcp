@@ -1,3 +1,15 @@
+## 0.35.0
+
+**Timeline op-class + area classification, read-only activity logging, and a Design System brief.** Every Timeline row now carries an **op-class** pill (`READ` / `MUTATE` / `DELETE`) and an **area** tag (`·database·`, `·automation·`, …) so an operator can see at a glance whether a row observed state, changed it recoverably, or did something irreversible — and which subsystem it touched. `db_execute` is refined by SQL verb (SELECT→read, UPDATE→mutate, DELETE/DROP/TRUNCATE→destructive); `config_*` writes derive a sub-area (automation/script/scene/config) from the file basename.
+
+New `safety/classification.py` is the single source of truth mapping every registered tool to `(op_class, area)`; `AuditLog.log()` stamps both onto each entry, and the UI timeline endpoint derives them for legacy rows via the same function so old and new entries render identically.
+
+**Reads are now logged too.** Read-only tool calls land in a separate `activity.jsonl` stream (rotated at 5 MB, one backup) via the central tool wrapper in `server.py` — no per-tool edits, no double-logging of mutations. The Timeline defaults to mutations-only; a "Show reads" toggle merges the activity stream in (persisted in `localStorage`). New `audit.log_reads` config option (default on; addon option `audit_log_reads`, env `HA_OPS_AUDIT_LOG_READS`) disables it for operators who don't want the volume. Clearing the audit log now also clears the activity streams.
+
+UI adds the op-class pills, area tags, a reads filter, and a dismissible legend. The op-class colors reuse the existing `sev-*` classes as a stopgap — see the new `docs/DESIGN_SYSTEM_BRIEF.md`, which hands the design team a two-tier token system to replace them.
+
+32 new tests (classification incl. SQL/path refinement, registry-coverage guard, audit stamping, activity stream, rotation, clear); 572 pass. ruff + mypy clean.
+
 ## 0.34.3
 
 **Fix `haops_config_validate`: it called a service that returns nothing.** The tool POSTed `/api/services/homeassistant/check_config?return_response`, which HA rejects with `HTTP 400: "Service does not support responses. Remove return_response from request."` — `homeassistant.check_config` has no response object, so the tool always errored out.
