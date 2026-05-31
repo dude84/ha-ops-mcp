@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); }
+  .wrap { display: flex; }
+  .theme { flex: 1; padding: 20px 22px; background: var(--surface); color: var(--text); }
+  .theme.d { }
+  .card { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-sm); padding: 12px 14px; }
+  .t1 { font-size: var(--text-sm); font-weight: var(--weight-medium); }
+  .t2 { font-size: var(--text-xs); color: var(--text-muted); margin-top: 2px; }
+  .t3 { font-size: var(--text-xs); color: var(--text-faint); font-family: var(--font-mono); margin-top: 6px; }
+  .tag { font-size: 10px; font-family: var(--font-mono); color: var(--text-muted); margin-bottom: 8px; display:block; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="theme">
+      <span class="tag">:root (light)</span>
+      <div class="card">
+        <div class="t1">surface-raised</div>
+        <div class="t2">muted secondary text</div>
+        <div class="t3">·border· ·shadow-sm·</div>
+      </div>
+    </div>
+    <div class="theme d dark">
+      <span class="tag">.dark</span>
+      <div class="card">
+        <div class="t1">surface-raised</div>
+        <div class="t2">muted secondary text</div>
+        <div class="t3">·border· (no shadow)</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

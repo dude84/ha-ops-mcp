@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); background: #fff; color: var(--text); }
+  .wrap { padding: 22px 26px; display: flex; gap: 36px; align-items: center; }
+  .item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .box { width: 90px; height: 60px; background: var(--surface-hover); border: 1px solid var(--border); }
+  .nm { font-size: 12px; font-weight: var(--weight-medium); }
+  .tok { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="item"><div class="box" style="border-radius:var(--radius-sm)"></div><span class="nm">0.25rem</span><span class="tok">--radius-sm · pills, buttons, chips</span></div>
+    <div class="item"><div class="box" style="border-radius:var(--radius-lg)"></div><span class="nm">0.5rem</span><span class="tok">--radius-lg · cards, panels, banners</span></div>
+  </div>
+</body>
+</html>

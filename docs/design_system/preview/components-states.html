@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); background: var(--surface); color: var(--text); }
+  .wrap { padding: 18px 22px; display: flex; gap: 16px; }
+  .card { flex: 1; background: var(--surface-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+          padding: 14px 16px; }
+  .cap { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); margin-bottom: 8px; }
+  .empty { font-size: var(--text-sm); color: var(--text-muted); font-style: italic; line-height: 1.5; }
+  .load { font-size: var(--text-sm); color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="cap">Empty state</div>
+      <p class="empty">No prune has been logged yet. Retention runs automatically after every backup write — this will populate once the first prune removes something.</p>
+    </div>
+    <div class="card">
+      <div class="cap">Loading state</div>
+      <div class="load"><span class="dot"></span>Loading tools check…</div>
+    </div>
+  </div>
+</body>
+</html>

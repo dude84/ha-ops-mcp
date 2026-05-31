@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); background: #fff; color: var(--text); }
+  .wrap { padding: 20px 26px; display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .chip { font-family: inherit; border-radius: var(--radius-sm); font-size: var(--text-xs);
+          font-weight: var(--weight-medium); padding: 5px 10px; cursor: pointer; }
+  .on { background: var(--accent); color: #fff; border: 1px solid var(--accent); }
+  .off { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  .rel { font-family: var(--font-mono); background: var(--rel-bg); color: var(--rel-fg);
+         border-radius: var(--radius-sm); font-size: var(--text-xs); padding: 3px 8px; }
+  .cap { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); width: 78px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <span class="cap">filter toggle</span>
+      <span class="chip on">✓ Reads shown</span>
+      <span class="chip off">Show reads</span>
+    </div>
+    <div class="row">
+      <span class="cap">relational</span>
+      <span class="rel">↺ rolled back</span>
+      <span class="rel">↶ reverts apply</span>
+    </div>
+  </div>
+</body>
+</html>

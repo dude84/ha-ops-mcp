@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); background: #fff; color: var(--text); }
+  .wrap { padding: 20px 26px; display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button { box-sizing: border-box; height: 36px; display: inline-flex; align-items: center;
+           font-family: inherit; border: none; cursor: pointer; border-radius: var(--radius-sm);
+           font-size: var(--text-sm); font-weight: var(--weight-medium); padding: 0 16px; }
+  .primary { background: var(--accent); color: #fff; }
+  .danger { background: var(--op-destructive-solid); color: #fff; }
+  .mutate { background: var(--op-mutate-solid); color: #fff; padding: 0 12px; font-size: var(--text-xs); }
+  .ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  .ghost-danger { background: transparent; color: var(--op-destructive-solid); border: 1px solid var(--red-200);
+                  font-size: var(--text-xs); padding: 0 12px; }
+  .disabled { background: var(--blue-400); color: #fff; cursor: not-allowed; }
+  .cap { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); width: 64px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row">
+      <span class="cap">solid</span>
+      <button class="primary">Prune now</button>
+      <button class="danger">Clear all now</button>
+      <button class="mutate">Revert</button>
+      <button class="disabled">Pruning…</button>
+    </div>
+    <div class="row">
+      <span class="cap">ghost</span>
+      <button class="ghost">Older →</button>
+      <button class="ghost-danger">Clear audit log</button>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); background: var(--surface); }
+  .wrap { padding: 18px 22px; }
+  pre { margin: 0; font-family: var(--font-mono); font-size: var(--text-xs); line-height: 1.5;
+        background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+        padding: 12px 14px; overflow: hidden; }
+  .add { color: var(--diff-add); } .rem { color: var(--diff-remove); }
+  .hunk { color: var(--diff-hunk); } .meta { color: var(--diff-meta); }
+  .key { color: var(--diff-key); } .num { color: var(--diff-num); }
+  .bool { color: var(--diff-bool); } .str { color: var(--diff-string); }
+</style>
+</head>
+<body class="dark">
+  <div class="wrap">
+<pre><span class="meta">--- a/automations.yaml</span>
+<span class="hunk">@@ -12,6 +12,7 @@</span>
+   <span class="key">alias</span>: <span class="str">"Morning lights"</span>
+<span class="rem">-  <span class="key">delay</span>: <span class="num">30</span></span>
+<span class="add">+  <span class="key">delay</span>: <span class="num">45</span></span>
+<span class="add">+  <span class="key">enabled</span>: <span class="bool">true</span></span>
+   <span class="key">entity_id</span>: <span class="str">light.kitchen</span></pre>
+  </div>
+</body>
+</html>

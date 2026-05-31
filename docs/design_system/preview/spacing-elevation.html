@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); }
+  .wrap { display: flex; }
+  .pane { flex: 1; padding: 26px; display: flex; gap: 26px; align-items: center; }
+  .pane.l { background: var(--surface); }
+  .pane.d { background: var(--surface); }
+  .card { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-lg);
+          width: 120px; height: 56px; box-shadow: var(--shadow-sm); display: flex; align-items: center;
+          justify-content: center; font-size: 11px; color: var(--text-muted); }
+  .cap { font-family: var(--font-mono); font-size: 10px; color: var(--text-faint); }
+  .col { display: flex; flex-direction: column; gap: 8px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="pane l">
+      <div class="col"><div class="card">shadow-sm</div><span class="cap">light · 0 1px 2px /.05</span></div>
+    </div>
+    <div class="pane d dark">
+      <div class="col"><div class="card" style="box-shadow:none">no shadow</div><span class="cap">dark · surface contrast</span></div>
+    </div>
+  </div>
+</body>
+</html>

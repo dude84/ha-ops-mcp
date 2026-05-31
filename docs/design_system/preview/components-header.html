@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); background: var(--surface); color: var(--text); }
+  .wrap { padding: 16px 22px; }
+  header { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-lg);
+           padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; }
+  .left { display: flex; align-items: center; gap: 14px; }
+  .wm { font-size: var(--text-lg); font-weight: var(--weight-semibold); }
+  nav { display: flex; gap: 4px; }
+  .tab { padding: 5px 12px; border-radius: var(--radius-sm); font-size: var(--text-sm); cursor: pointer; }
+  .active { background: var(--accent); color: #fff; }
+  .idle { color: var(--text-muted); }
+  .right { display: flex; align-items: center; gap: 12px; }
+  .ver { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); }
+  .theme { font-size: 15px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="left">
+        <span class="wm">HA Ops</span>
+        <nav>
+          <span class="tab active">Timeline</span>
+          <span class="tab idle">Backups</span>
+          <span class="tab idle">Health</span>
+        </nav>
+      </div>
+      <div class="right">
+        <span class="ver">v0.34.1</span>
+        <span class="theme">◐</span>
+      </div>
+    </header>
+  </div>
+</body>
+</html>

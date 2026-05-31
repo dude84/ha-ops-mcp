@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin: 0; font-family: var(--font-sans); background: var(--surface); color: var(--text); }
+  .wrap { padding: 18px 22px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .card { background: var(--surface-raised); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); padding: 14px 16px; }
+  .cap { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+  .num { font-size: var(--text-2xl); font-weight: var(--weight-semibold); margin-top: 4px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card"><div class="cap">Total backups</div><div class="num">128</div></div>
+    <div class="card"><div class="cap">Disk usage</div><div class="num">1.4 GB</div></div>
+    <div class="card"><div class="cap">Max age (days)</div><div class="num">30</div></div>
+    <div class="card"><div class="cap">Max per type</div><div class="num">20</div></div>
+  </div>
+</body>
+</html>
