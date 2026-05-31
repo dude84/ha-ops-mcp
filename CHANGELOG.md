@@ -1,3 +1,9 @@
+## 0.36.1
+
+**Fix: light/dark toggle did nothing after the v0.36.0 DS adoption.** The token color utilities (`bg-surface`, `bg-op-mutate-bg`, …) were never generated, so surfaces never switched and pills had no fill — only the CSS `--vars` flipped, with nothing consuming them.
+
+Root cause: `tailwind.config` was assigned **before** the Tailwind Play CDN `<script>` loaded. The Play CDN ignores `theme.extend` when config is set ahead of it (the old `{darkMode:'class'}` survived by luck; the new token colors did not). Moved the config assignment to a `<script>` **after** the CDN tag — the documented pattern. Verified headless in both themes: body background now switches `#f9fafb` ⇄ `#111827` and all op-class pills/area icons render.
+
 ## 0.36.0
 
 **Adopt Design System v1.0 in the sideload UI + rename the mutate pill to `EDIT`.** Wires the design team's token system (`docs/design_system/`) into `static/ui.html`, retiring the four hand-rolled `sev-*` classes.

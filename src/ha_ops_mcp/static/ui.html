@@ -12,11 +12,18 @@
     var dark = stored === 'dark' || (stored !== 'light' && prefersDark);
     if (dark) document.documentElement.classList.add('dark');
   })();
-  window.tailwind = window.tailwind || {};
+</script>
+<script src="https://cdn.tailwindcss.com/3.4.1"></script>
+<script>
   // Design System v1.0 — semantic tokens exposed as Tailwind utilities,
   // resolving through the CSS vars below so both themes work without
   // dark: pairs. See docs/design_system/IMPLEMENTATION.md.
-  window.tailwind.config = {
+  // NOTE: this MUST run AFTER the Tailwind CDN <script> above. The Play
+  // CDN ignores theme.extend if tailwind.config is assigned before it
+  // loads (it only honored darkMode by luck previously) — setting it
+  // after is the documented pattern and the only way custom token colors
+  // (bg-surface, bg-op-mutate-bg, …) get generated.
+  tailwind.config = {
     darkMode: 'class',
     theme: {
       extend: {
@@ -55,7 +62,6 @@
     }
   };
 </script>
-<script src="https://cdn.tailwindcss.com/3.4.1"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
 <style>
   /* ===========================================================================
