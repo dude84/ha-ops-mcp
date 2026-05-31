@@ -1,3 +1,11 @@
+## 0.36.2
+
+**Fix: header was not responsive — the theme toggle fell off-screen on mobile.** On a phone-width viewport the single-row header overflowed, pushing the theme-cycle button past the right edge (measured x≈463 on a 390px screen) so it was untappable — which read as "the toggle doesn't work." The wordmark also wrapped and "Last refreshed" clipped.
+
+Header is now `flex-wrap` with the right-hand group pinned (`ml-auto shrink-0`) so the theme toggle stays on-screen; version (`hidden sm:`) and last-refreshed (`hidden md:`) are progressively hidden on narrow screens; wordmark/tabs `whitespace-nowrap`; page padding tightens to `p-4` under `sm`. Verified headless at 390px (toggle right edge 374 < 390) and on desktop (both labels return).
+
+**Also:** retired the `<tool> (no summary)` Timeline fallback. Now that read-only calls are logged, many tools hit it; added bespoke summaries for `service_call`, `scene_activate`, `script_run`, `automation_trigger`, `integration_reload`, `system_reload`, `system_backup`, `db_purge`, `helper_*`, and a clean humanised generic (`Entity list: light`) for everything else.
+
 ## 0.36.1
 
 **Fix: light/dark toggle did nothing after the v0.36.0 DS adoption.** The token color utilities (`bg-surface`, `bg-op-mutate-bg`, …) were never generated, so surfaces never switched and pills had no fill — only the CSS `--vars` flipped, with nothing consuming them.

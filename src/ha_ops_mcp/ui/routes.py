@@ -943,7 +943,46 @@ def _summarise_audit_entry(
         return f"Restarted addon {details.get('addon_slug', details.get('slug', '?'))}"
     if tool == "system_restart":
         return "Restarted Home Assistant"
-    return f"{tool or 'unknown'} (no summary)"
+    if tool == "service_call":
+        domain = details.get("domain", "?")
+        service = details.get("service", "?")
+        return f"Called {domain}.{service}"
+    if tool == "scene_activate":
+        return f"Activated scene {details.get('scene') or details.get('entity_id') or '?'}"
+    if tool == "script_run":
+        return f"Ran script {details.get('script') or details.get('entity_id') or '?'}"
+    if tool == "automation_trigger":
+        which = details.get("automation") or details.get("entity_id") or "?"
+        return f"Triggered automation {which}"
+    if tool == "integration_reload":
+        return f"Reloaded integration {details.get('domain') or details.get('integration') or '?'}"
+    if tool == "system_reload":
+        return f"Reloaded {details.get('domain') or 'config'}"
+    if tool == "system_backup":
+        return "Created system backup"
+    if tool == "db_purge":
+        return f"Purged recorder data (keep {details.get('keep_days', '?')} days)"
+    if tool in ("helper_create", "helper_update", "helper_delete"):
+        verb = {"helper_create": "Created", "helper_update": "Updated",
+                "helper_delete": "Deleted"}[tool]
+        return f"{verb} helper {details.get('object_id') or details.get('entity_id') or '?'}"
+
+    # Generic fallback — humanise the tool name + the most identifying scalar
+    # arg, instead of an ugly "(no summary)". Covers read-only tools (now
+    # logged to the activity stream) and any mutating tool without a bespoke
+    # case above.
+    base = (tool or "operation").replace("_", " ")
+    base = base[:1].upper() + base[1:]
+    hint = (
+        details.get("entity_id")
+        or details.get("path")
+        or details.get("domain")
+        or details.get("statistic_id")
+        or details.get("dashboard_id")
+    )
+    if isinstance(hint, str) and hint:
+        return f"{base}: {hint[:80]}"
+    return base
 
 
 def _recompute_audit_diff(tool: str, details: dict[str, Any]) -> str | None:
