@@ -10,6 +10,7 @@ from ha_ops_mcp.safety.classification import (
     _config_subarea,
     _sql_class,
     classify,
+    type_label,
 )
 
 
@@ -68,6 +69,27 @@ class TestClassify:
     def test_sql_class_direct(self):
         assert _sql_class("select 1") == "read"
         assert _sql_class("") == "destructive"
+
+
+class TestTypeLabel:
+    @pytest.mark.parametrize(
+        "tool,details,expected",
+        [
+            ("service_call", {"domain": "recorder", "service": "purge"}, "service call"),
+            ("db_execute", {"sql": "DELETE FROM x"}, "db delete"),
+            ("db_execute", {"sql": "SELECT 1"}, "db read"),
+            ("db_execute", {"sql": "UPDATE x SET a=1"}, "db write"),
+            ("config_create", {}, "new file"),
+            ("config_apply", {"old_content": ""}, "new file"),
+            ("config_apply", {"old_content": "x"}, "patch"),
+            ("entity_remove", {}, "remove"),
+            ("entity_list", {}, "list"),
+            ("helper_delete", {}, "delete helper"),
+            ("brand_new_tool", {}, "tool"),  # fallback = last name segment
+        ],
+    )
+    def test_type_label(self, tool, details, expected):
+        assert type_label(tool, details) == expected
 
 
 class TestRegistryCoverage:

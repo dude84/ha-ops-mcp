@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 from starlette.responses import JSONResponse, Response
 
-from ha_ops_mcp.safety.classification import classify
+from ha_ops_mcp.safety.classification import classify, type_label
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -760,6 +760,7 @@ def _render_audit_entry(
         "success": success,
         "op_class": op_class,
         "area": area,
+        "type": type_label(tool, details),
         "token_id": entry.get("token_id"),
         "backup_path": entry.get("backup_path"),
         "summary": _summarise_audit_entry(tool, details, success, entry.get("error")),

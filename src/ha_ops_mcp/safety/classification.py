@@ -111,6 +111,58 @@ def classify(tool: str, details: dict[str, object] | None) -> tuple[str, str]:
     return op_class, area
 
 
+# Operation-specific type label for the Timeline row — more descriptive than
+# the 3-tier op_class (which only drives the risk-dot color). e.g. db_execute
+# DELETE reads "db delete", config_create reads "new file", service_call reads
+# "service call". Risk stays in op_class; this is the human verb.
+_TYPE_LABELS: dict[str, str] = {
+    "service_call": "service call", "scene_activate": "activate scene",
+    "script_run": "run script", "automation_trigger": "trigger",
+    "integration_reload": "reload", "system_reload": "reload",
+    "system_restart": "restart", "system_backup": "backup",
+    "addon_restart": "restart addon",
+    "dashboard_apply": "dashboard edit", "dashboard_patch": "dashboard patch",
+    "entity_remove": "remove", "entity_disable": "disable",
+    "entity_customize": "customize", "entities_assign_area": "assign area",
+    "helper_create": "new helper", "helper_update": "edit helper",
+    "helper_delete": "delete helper",
+    "backup_revert": "revert", "backup_prune": "prune", "rollback": "rollback",
+    "exec_shell": "shell", "batch_apply": "batch", "batch_preview": "preview",
+    "db_purge": "db purge", "db_query": "db read", "db_health": "db health",
+    "db_statistics": "db stats",
+    # reads
+    "entity_list": "list", "entity_state": "state", "entity_audit": "audit",
+    "entity_find": "find", "entity_history": "history",
+    "config_read": "read", "config_search": "search", "config_validate": "validate",
+    "dashboard_list": "list", "dashboard_get": "get", "dashboard_diff": "diff",
+    "dashboard_resources": "resources", "dashboard_validate_yaml": "validate",
+    "system_info": "info", "system_logs": "logs", "self_check": "check",
+    "tools_check": "check", "auth_status": "status",
+    "addon_list": "list", "addon_info": "info", "addon_logs": "logs",
+    "registry_query": "query", "device_info": "info",
+    "references": "refs", "refactor_check": "refactor", "logbook": "logbook",
+    "automation_trace": "trace", "service_list": "list",
+    "template_render": "template", "backup_list": "list", "helper_list": "list",
+}
+
+
+def type_label(tool: str, details: dict[str, object] | None) -> str:
+    """Human, operation-specific verb for the Timeline row's type tag.
+
+    Refines db_execute by SQL verb and config writes by create-vs-patch;
+    everything else comes from ``_TYPE_LABELS`` with a tool-name fallback.
+    """
+    details = details or {}
+    if tool == "db_execute":
+        oc = _sql_class(str(details.get("sql", "")))
+        return {"read": "db read", "mutate": "db write", "destructive": "db delete"}[oc]
+    if tool in ("config_apply", "config_patch", "config_create"):
+        if tool == "config_create" or details.get("old_content") == "":
+            return "new file"
+        return "patch"
+    return _TYPE_LABELS.get(tool, (tool or "op").rsplit("_", 1)[-1])
+
+
 def _sql_class(sql: str) -> str:
     """Classify a SQL statement by its leading keyword.
 

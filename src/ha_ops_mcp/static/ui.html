@@ -368,56 +368,18 @@
       <span x-show="auditClearInFlight">Clearing…</span>
     </button>
   </div>
-  <p class="text-sm text-text-muted mb-3">
-    Inspection of recent operations. Click a row to see the diff. Apply
-    rows whose transaction is still in-session expose a Revert button
-    that fires haops_rollback via the sidebar; once the transaction is
-    gone (addon restart), revert falls back to
-    call <code class="font-mono text-xs bg-surface-hover px-1 rounded">haops_backup_revert</code>
-    via the MCP flow.
-  </p>
-
-  <!-- Filter + legend bar -->
-  <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
-    <div class="flex items-center gap-2 text-xs">
-      <button
-        @click="toggleReads()"
-        class="px-2.5 py-1 rounded border font-medium"
-        :class="showReads
-          ? 'bg-blue-600 text-white border-blue-600'
-          : 'text-text-muted border-border hover:bg-surface-hover'"
-        title="Include read-only tool calls in the Timeline">
-        <span x-text="showReads ? '✓ Reads shown' : 'Show reads'"></span>
-      </button>
-      <span class="text-text-faint"
-            x-show="!showReads">Mutations only</span>
-    </div>
+  <!-- Filter bar -->
+  <div class="flex items-center gap-2 text-xs mb-4">
     <button
-      @click="showLegend = !showLegend"
-      class="text-xs text-text-muted hover:text-gray-700 dark:hover:text-gray-200">
-      <span x-text="showLegend ? 'Hide legend' : 'What do the tags mean?'"></span>
+      @click="toggleReads()"
+      class="px-2.5 py-1 rounded border font-medium"
+      :class="showReads
+        ? 'bg-blue-600 text-white border-blue-600'
+        : 'text-text-muted border-border hover:bg-surface-hover'"
+      title="Include read-only tool calls in the Timeline">
+      <span x-text="showReads ? '✓ Reads shown' : 'Show reads'"></span>
     </button>
-  </div>
-  <div x-show="showLegend" x-cloak
-       class="mb-4 p-3 rounded-lg bg-surface-raised border border-border-subtle text-xs flex flex-wrap items-center gap-x-4 gap-y-2">
-    <span class="flex items-center gap-1.5">
-      <span class="badge font-mono bg-op-read-bg text-op-read-fg">READ</span>
-      <span class="text-text-muted">observes state, changes nothing</span>
-    </span>
-    <span class="flex items-center gap-1.5">
-      <span class="badge font-mono bg-op-mutate-bg text-op-mutate-fg">EDIT</span>
-      <span class="text-text-muted">changes state, recoverable</span>
-    </span>
-    <span class="flex items-center gap-1.5">
-      <span class="badge font-mono bg-op-dstr-bg text-op-dstr-fg">DELETE</span>
-      <span class="text-text-muted">irreversible / data loss</span>
-    </span>
-    <span class="flex items-center gap-1.5">
-      <span class="inline-flex items-center gap-1 font-mono text-text-faint">
-        <svg class="w-3.5 h-3.5" aria-hidden="true"><use href="#area-config"></use></svg>·area·
-      </span>
-      <span class="text-text-muted">subsystem touched (config, database, dashboard…)</span>
-    </span>
+    <span class="text-text-faint" x-show="!showReads">Mutations only</span>
   </div>
 
   <template x-if="!timeline?.entries?.length">
@@ -432,22 +394,22 @@
           <span class="mt-0.5 text-gray-400 text-xs font-mono"
                 x-text="expandedTimeline === eidx ? '▾' : '▸'"></span>
           <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-mono text-xs text-text-muted"
+            <div class="flex items-center gap-x-2 gap-y-1 flex-wrap text-sm">
+              <span class="font-mono text-xs text-text-faint"
                     x-text="formatTimestamp(e.timestamp)"></span>
-              <span class="badge font-mono"
-                    :class="opBadgeClass(e.op_class)"
-                    x-text="opLabel(e.op_class)"
-                    :title="'Operation class: ' + (e.op_class || 'unknown')"></span>
-              <span class="font-medium text-sm" x-text="e.tool"></span>
-              <span class="inline-flex items-center gap-1 text-xs font-mono text-text-faint"
+              <span class="inline-flex items-center gap-1 text-text-muted"
                     x-show="e.area" :title="'Area: ' + e.area">
-                <svg class="w-3.5 h-3.5" aria-hidden="true"><use :href="'#area-' + e.area"></use></svg>
-                <span x-text="'·' + e.area + '·'"></span>
+                <svg class="w-4 h-4 shrink-0" aria-hidden="true"><use :href="'#area-' + e.area"></use></svg>
+                <span x-text="e.area"></span>
               </span>
-              <span class="badge"
-                    :class="e.success ? 'bg-state-ok-bg text-state-ok-fg' : 'bg-state-fail-bg text-state-fail-fg'"
-                    x-text="e.success ? 'ok' : 'fail'"></span>
+              <span class="font-medium" x-text="e.tool"></span>
+              <span class="inline-flex items-center gap-1.5"
+                    :title="'Risk: ' + (e.op_class || 'unknown')">
+                <span class="w-1.5 h-1.5 rounded-full shrink-0" :class="dotClass(e.op_class)"></span>
+                <span class="text-text-muted" x-text="e.type"></span>
+              </span>
+              <span x-show="!e.success"
+                    class="text-xs font-medium px-1.5 py-0.5 rounded bg-op-dstr-bg text-op-dstr-fg">error</span>
               <template x-if="e.paired_with">
                 <button
                   @click.stop="scrollToPair(e.paired_with.index)"
@@ -458,7 +420,7 @@
                 </button>
               </template>
             </div>
-            <div class="text-sm text-gray-700 dark:text-gray-300 mt-1" x-text="e.summary"></div>
+            <div class="text-sm text-text mt-1" x-text="e.summary"></div>
           </div>
         </button>
         <div x-show="expandedTimeline === eidx" x-cloak class="px-4 pb-4 border-t border-border-subtle">
@@ -729,7 +691,6 @@ function app() {
     timelinePage: 0,
     timelinePageSize: 50,
     showReads: false,
-    showLegend: false,
     selfCheck: null,
     toolsCheck: null,
     selfCheckLoading: false,
@@ -1039,18 +1000,13 @@ function app() {
       return '/config/.storage/lovelace.' + dashboardId.replace(/-/g, '_');
     },
 
-    // Op-class pill: short label + severity color. "destructive" reads as
-    // "DELETE" (shorter, lands as the danger word). Unknown → MUTATE colors
-    // (conservative, matches the server-side default).
-    opLabel(c) {
-      return c === 'read' ? 'READ'
-           : c === 'destructive' ? 'DELETE'
-           : 'EDIT';
-    },
-    opBadgeClass(c) {
-      return c === 'read'        ? 'bg-op-read-bg text-op-read-fg'
-           : c === 'destructive' ? 'bg-op-dstr-bg text-op-dstr-fg'
-           :                       'bg-op-mutate-bg text-op-mutate-fg';
+    // Risk dot beside the operation type. Color encodes the op-class tier
+    // (read = neutral, mutate = amber, destructive = red); the type word
+    // ("patch", "db delete", "service call") carries the specifics.
+    dotClass(c) {
+      return c === 'read'        ? 'bg-op-read-fg'
+           : c === 'destructive' ? 'bg-op-dstr-solid'
+           :                       'bg-op-mutate-solid';
     },
 
     formatTimestamp(iso) {

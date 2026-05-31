@@ -1,3 +1,14 @@
+## 0.36.3
+
+**Timeline row redesign.** Reworked how each row reads, per operator feedback.
+
+- **Removed** the intro paragraph and the op-class legend / "what do the tags mean?" toggle — the row should speak for itself.
+- **New row order:** date · area-icon + area name · tool · **type** · *(error only on failure)*. The area icon now leads instead of trailing where it was lost.
+- **Operation-specific `type`** replaces the one-size `READ`/`EDIT`/`DELETE` pill. It now reads the actual action — `service call`, `db delete`, `db write`, `patch`, `new file`, `remove`, `delete helper`, `list`, … — at the same text size as the rest of the row, with a small risk-colored dot (neutral / amber / red) carrying the read/mutate/destructive tier. `service_call` is no longer mislabeled "EDIT".
+- **Dropped the `ok` badge** — success is the default; only failures show an `error` tag.
+
+New `type_label()` in `safety/classification.py` (db-verb + config create/patch aware) drives the label; surfaced as `type` on each Timeline entry. Verified headless in both themes. 583 tests pass.
+
 ## 0.36.2
 
 **Fix: header was not responsive — the theme toggle fell off-screen on mobile.** On a phone-width viewport the single-row header overflowed, pushing the theme-cycle button past the right edge (measured x≈463 on a 390px screen) so it was untappable — which read as "the toggle doesn't work." The wordmark also wrapped and "Last refreshed" clipped.
