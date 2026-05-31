@@ -13,44 +13,234 @@
     if (dark) document.documentElement.classList.add('dark');
   })();
   window.tailwind = window.tailwind || {};
-  window.tailwind.config = { darkMode: 'class' };
+  // Design System v1.0 — semantic tokens exposed as Tailwind utilities,
+  // resolving through the CSS vars below so both themes work without
+  // dark: pairs. See docs/design_system/IMPLEMENTATION.md.
+  window.tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          surface:          'var(--surface)',
+          'surface-raised': 'var(--surface-raised)',
+          'surface-sunken': 'var(--surface-sunken)',
+          'surface-hover':  'var(--surface-hover)',
+          border:           'var(--border)',
+          'border-subtle':  'var(--border-subtle)',
+          text:             'var(--text)',
+          'text-muted':     'var(--text-muted)',
+          'text-faint':     'var(--text-faint)',
+          'text-on-accent': 'var(--text-on-accent)',
+          accent:    { DEFAULT: 'var(--accent)', hover: 'var(--accent-hover)', soft: 'var(--accent-soft)' },
+          // op-class (risk language)
+          'op-read-bg':   'var(--op-read-bg)',        'op-read-fg':   'var(--op-read-fg)',
+          'op-mutate-bg': 'var(--op-mutate-bg)',      'op-mutate-fg': 'var(--op-mutate-fg)',
+          'op-dstr-bg':   'var(--op-destructive-bg)', 'op-dstr-fg':   'var(--op-destructive-fg)',
+          'op-mutate-solid':       'var(--op-mutate-solid)',       'op-mutate-solid-h':      'var(--op-mutate-solid-hover)',
+          'op-dstr-solid':         'var(--op-destructive-solid)',  'op-dstr-solid-h':        'var(--op-destructive-solid-hover)',
+          // state
+          'state-ok-bg':   'var(--state-ok-bg)',   'state-ok-fg':   'var(--state-ok-fg)',
+          'state-fail-bg': 'var(--state-fail-bg)', 'state-fail-fg': 'var(--state-fail-fg)',
+          'banner-ok-bg':   'var(--banner-ok-bg)',   'banner-ok-fg':   'var(--banner-ok-fg)',
+          'banner-fail-bg': 'var(--banner-fail-bg)', 'banner-fail-fg': 'var(--banner-fail-fg)',
+          // relational link chip (paired rows)
+          'rel-bg': 'var(--rel-bg)', 'rel-fg': 'var(--rel-fg)', 'rel-ring': 'var(--rel-ring)',
+          // diff viewer
+          'diff-add':    'var(--diff-add)',    'diff-remove': 'var(--diff-remove)',
+          'diff-hunk':   'var(--diff-hunk)',   'diff-change': 'var(--diff-change)',
+        },
+        borderRadius: { sm: 'var(--radius-sm)', lg: 'var(--radius-lg)' },
+        boxShadow:    { sm: 'var(--shadow-sm)' },
+      }
+    }
+  };
 </script>
 <script src="https://cdn.tailwindcss.com/3.4.1"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"></script>
 <style>
-  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  /* ===========================================================================
+     HA Ops Design System v1.0 — tokens inlined from
+     docs/design_system/colors_and_type.css. Inlined (not <link>ed) because the
+     server only serves /ui (single file) — keeps it buildless + offline.
+     Two-tier: Tier-1 primitive ramps, Tier-2 semantic tokens (light on :root,
+     dark under .dark). Components reference only the Tier-2 / Tailwind tokens.
+     =========================================================================== */
+  :root {
+    /* Tier 1 — primitives */
+    --gray-50:#f9fafb; --gray-100:#f3f4f6; --gray-200:#e5e7eb; --gray-300:#d1d5db;
+    --gray-400:#9ca3af; --gray-500:#6b7280; --gray-600:#4b5563; --gray-700:#374151;
+    --gray-750:#2b3544; --gray-800:#1f2937; --gray-900:#111827;
+    --blue-50:#eff6ff; --blue-400:#60a5fa; --blue-600:#2563eb; --blue-700:#1d4ed8;
+    --amber-100:#fef3c7; --amber-200:#fde68a; --amber-400:#fbbf24; --amber-600:#d97706;
+    --amber-700:#b45309; --amber-900:#78350f;
+    --red-50:#fef2f2; --red-100:#fee2e2; --red-200:#fecaca; --red-300:#fca5a5;
+    --red-400:#f87171; --red-600:#dc2626; --red-700:#b91c1c; --red-800:#991b1b; --red-900:#7f1d1d;
+    --green-100:#dcfce7; --green-200:#bbf7d0; --green-400:#4ade80; --green-700:#15803d;
+    --green-800:#166534; --green-900:#14532d;
+    --indigo-50:#eef2ff; --indigo-300:#a5b4fc; --indigo-500:#6366f1; --indigo-700:#4338ca;
+    --cyan-400:#22d3ee; --cyan-700:#0e7490; --purple-400:#c084fc; --purple-700:#7e22ce;
+    --orange-400:#fb923c; --orange-700:#c2410c; --emerald-400:#34d399; --emerald-700:#047857;
+    --yellow-400:#facc15; --yellow-700:#a16207;
+
+    /* Tier 2 — semantic (LIGHT) */
+    --surface:var(--gray-50); --surface-raised:#ffffff; --surface-sunken:var(--gray-50);
+    --surface-hover:var(--gray-100); --border:var(--gray-200); --border-subtle:var(--gray-100);
+    --text:var(--gray-900); --text-muted:var(--gray-500); --text-faint:var(--gray-400);
+    --text-on-accent:#ffffff;
+    --accent:var(--blue-600); --accent-hover:var(--blue-700); --accent-soft:var(--blue-50);
+    --op-read-bg:var(--gray-200); --op-read-fg:var(--gray-700);
+    --op-mutate-bg:var(--amber-100); --op-mutate-fg:var(--amber-700);
+    --op-destructive-bg:var(--red-200); --op-destructive-fg:var(--red-900);
+    --op-mutate-solid:var(--amber-600); --op-mutate-solid-hover:var(--amber-700);
+    --op-destructive-solid:var(--red-600); --op-destructive-solid-hover:var(--red-700);
+    --state-ok-bg:var(--green-100); --state-ok-fg:var(--green-800);
+    --state-fail-bg:var(--red-200); --state-fail-fg:var(--red-900);
+    --banner-ok-bg:var(--green-100); --banner-ok-fg:var(--green-700);
+    --banner-fail-bg:var(--red-50); --banner-fail-fg:var(--red-700);
+    --rel-bg:var(--indigo-50); --rel-fg:var(--indigo-700); --rel-ring:var(--indigo-500);
+    --diff-add:var(--green-700); --diff-remove:var(--red-700); --diff-hunk:var(--blue-700);
+    --diff-change:var(--yellow-700);
+    --ring:var(--blue-600);
+    /* type + spacing */
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --font-mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+    --radius-sm:0.25rem; --radius-lg:0.5rem;
+    --shadow-sm:0 1px 2px 0 rgba(0,0,0,0.05);
+  }
+  .dark {
+    --surface:var(--gray-900); --surface-raised:var(--gray-800); --surface-sunken:var(--gray-900);
+    --surface-hover:var(--gray-750); --border:var(--gray-700); --border-subtle:var(--gray-700);
+    --text:var(--gray-100); --text-muted:var(--gray-400); --text-faint:var(--gray-500);
+    --text-on-accent:#ffffff;
+    --accent:var(--blue-600); --accent-hover:var(--blue-700); --accent-soft:rgba(37,99,235,0.15);
+    --op-read-bg:var(--gray-700); --op-read-fg:var(--gray-300);
+    --op-mutate-bg:var(--amber-900); --op-mutate-fg:var(--amber-200);
+    --op-destructive-bg:var(--red-900); --op-destructive-fg:var(--red-200);
+    --state-ok-bg:var(--green-900); --state-ok-fg:var(--green-200);
+    --state-fail-bg:var(--red-900); --state-fail-fg:var(--red-200);
+    --banner-ok-bg:rgba(20,83,45,0.4); --banner-ok-fg:var(--green-200);
+    --banner-fail-bg:rgba(127,29,29,0.3); --banner-fail-fg:var(--red-300);
+    --rel-bg:rgba(67,56,202,0.4); --rel-fg:var(--indigo-300); --rel-ring:var(--indigo-500);
+    --diff-add:var(--green-400); --diff-remove:var(--red-400); --diff-hunk:var(--blue-400);
+    --diff-change:var(--yellow-400);
+    --ring:var(--blue-400);
+  }
+  body { font-family: var(--font-sans); }
   [x-cloak] { display: none !important; }
   .badge { @apply inline-block px-2 py-0.5 rounded text-xs font-medium; }
-  .sev-safe  { background:#dcfce7; color:#166534; }
-  .sev-warn  { background:#fef3c7; color:#92400e; }
-  .sev-breaking { background:#fecaca; color:#7f1d1d; }
-  .sev-info  { background:#e5e7eb; color:#374151; }
-  .dark .sev-safe  { background:#14532d; color:#bbf7d0; }
-  .dark .sev-warn  { background:#78350f; color:#fde68a; }
-  .dark .sev-breaking { background:#7f1d1d; color:#fecaca; }
-  .dark .sev-info  { background:#374151; color:#d1d5db; }
 </style>
 </head>
-<body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100" x-data="app()" x-init="init()" x-cloak>
+<body class="bg-surface text-text" x-data="app()" x-init="init()" x-cloak>
 
-<header class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex items-center justify-between">
+<!-- Design System v1.0 area-icon sprite (Lucide, ISC) — inlined so <use href="#area-…">
+     resolves in-document with no file fetch (server serves only /ui). currentColor
+     inherits the ·area· tag's text color. From docs/design_system/assets/area-icons.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="area-config" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path>
+    <circle cx="12" cy="12" r="3"></circle>
+  </symbol>
+  <symbol id="area-automation" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"></path>
+  </symbol>
+  <symbol id="area-script" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 12h-5"></path>
+    <path d="M15 8h-5"></path>
+    <path d="M19 17V5a2 2 0 0 0-2-2H4"></path>
+    <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"></path>
+  </symbol>
+  <symbol id="area-scene" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 11h.01"></path>
+    <path d="M14 6h.01"></path>
+    <path d="M18 6h.01"></path>
+    <path d="M6.5 13.1h.01"></path>
+    <path d="M22 5c0 9-4 12-6 12s-6-3-6-12c0-2 2-3 6-3s6 1 6 3"></path>
+    <path d="M17.4 9.9c-.8.8-2 .8-2.8 0"></path>
+    <path d="M10.1 7.1C9 7.2 7.7 7.7 6 8.6c-3.5 2-4.7 3.9-3.7 5.6 4.5 7.8 9.5 8.4 11.2 7.4.9-.5 1.9-2.1 1.9-4.7"></path>
+    <path d="M9.1 16.5c.3-1.1 1.4-1.7 2.4-1.4"></path>
+  </symbol>
+  <symbol id="area-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect width="7" height="9" x="3" y="3" rx="1"></rect>
+    <rect width="7" height="5" x="14" y="3" rx="1"></rect>
+    <rect width="7" height="9" x="14" y="12" rx="1"></rect>
+    <rect width="7" height="5" x="3" y="16" rx="1"></rect>
+  </symbol>
+  <symbol id="area-entity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path>
+    <path d="m3.3 7 8.7 5 8.7-5"></path>
+    <path d="M12 22V12"></path>
+  </symbol>
+  <symbol id="area-registry" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m16 6 4 14"></path>
+    <path d="M12 6v14"></path>
+    <path d="M8 8v12"></path>
+    <path d="M4 4v16"></path>
+  </symbol>
+  <symbol id="area-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+    <path d="M3 5V19A9 3 0 0 0 21 19V5"></path>
+    <path d="M3 12A9 3 0 0 0 21 12"></path>
+  </symbol>
+  <symbol id="area-system" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 20v2"></path><path d="M12 2v2"></path><path d="M17 20v2"></path><path d="M17 2v2"></path>
+    <path d="M2 12h2"></path><path d="M2 17h2"></path><path d="M2 7h2"></path>
+    <path d="M20 12h2"></path><path d="M20 17h2"></path><path d="M20 7h2"></path>
+    <path d="M7 20v2"></path><path d="M7 2v2"></path>
+    <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+    <rect x="8" y="8" width="8" height="8" rx="1"></rect>
+  </symbol>
+  <symbol id="area-addon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15.39 4.39a1 1 0 0 0 1.68-.474 2.5 2.5 0 1 1 3.014 3.015 1 1 0 0 0-.474 1.68l1.683 1.682a2.414 2.414 0 0 1 0 3.414L19.61 15.39a1 1 0 0 1-1.68-.474 2.5 2.5 0 1 0-3.014 3.015 1 1 0 0 1 .474 1.68l-1.683 1.682a2.414 2.414 0 0 1-3.414 0L8.61 19.61a1 1 0 0 0-1.68.474 2.5 2.5 0 1 1-3.014-3.015 1 1 0 0 0 .474-1.68l-1.683-1.682a2.414 2.414 0 0 1 0-3.414L4.39 8.61a1 1 0 0 1 1.68.474 2.5 2.5 0 1 0 3.014-3.015 1 1 0 0 1-.474-1.68l1.683-1.682a2.414 2.414 0 0 1 3.414 0z"></path>
+  </symbol>
+  <symbol id="area-shell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 19h8"></path>
+    <path d="m4 17 6-6-6-6"></path>
+  </symbol>
+  <symbol id="area-helper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 5H3"></path><path d="M12 19H3"></path><path d="M14 3v4"></path><path d="M16 17v4"></path>
+    <path d="M21 12h-9"></path><path d="M21 19h-5"></path><path d="M21 5h-7"></path>
+    <path d="M8 10v4"></path><path d="M8 12H3"></path>
+  </symbol>
+  <symbol id="area-backup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect width="20" height="5" x="2" y="3" rx="1"></rect>
+    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"></path>
+    <path d="M10 12h4"></path>
+  </symbol>
+  <symbol id="area-service" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"></path>
+  </symbol>
+  <symbol id="area-references" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="16" y="16" width="6" height="6" rx="1"></rect>
+    <rect x="2" y="16" width="6" height="6" rx="1"></rect>
+    <rect x="9" y="2" width="6" height="6" rx="1"></rect>
+    <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"></path>
+    <path d="M12 12V8"></path>
+  </symbol>
+  <symbol id="area-misc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"></path>
+    <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+    <circle cx="17.5" cy="17.5" r="3.5"></circle>
+  </symbol>
+</svg>
+
+<header class="bg-surface-raised border-b border-border px-6 py-3 flex items-center justify-between">
   <div class="flex items-center gap-3">
     <span class="text-lg font-semibold">HA Ops</span>
     <nav class="flex gap-1">
       <template x-for="t in tabs" :key="t.id">
         <button
           class="px-3 py-1 rounded text-sm"
-          :class="active === t.id ? 'bg-blue-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          :class="active === t.id ? 'bg-blue-600 text-white' : 'text-text-muted hover:bg-surface-hover'"
           @click="switchTab(t.id)"
           x-text="t.label"></button>
       </template>
     </nav>
   </div>
   <div class="flex items-center gap-3">
-    <span class="text-xs text-gray-500 dark:text-gray-400 font-mono" x-show="version" x-text="'v' + version"></span>
-    <span class="text-xs text-gray-400 dark:text-gray-500" x-text="'Last refreshed: ' + (lastRefresh || 'never')"></span>
+    <span class="text-xs text-text-muted font-mono" x-show="version" x-text="'v' + version"></span>
+    <span class="text-xs text-text-faint" x-text="'Last refreshed: ' + (lastRefresh || 'never')"></span>
     <button
-      class="px-2 py-1 rounded text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+      class="px-2 py-1 rounded text-sm text-text-muted hover:bg-surface-hover"
       @click="cycleTheme()"
       :title="'Theme: ' + themeMode + ' (click to cycle)'"
       x-text="themeMode === 'dark' ? '☾' : themeMode === 'light' ? '☀' : '◐'"></button>
@@ -66,20 +256,20 @@
   <div class="space-y-6">
     <div>
       <h3 class="font-medium mb-2">Self check (config + connectivity)</h3>
-      <p class="text-sm text-gray-500 dark:text-gray-400 mb-2" x-show="selfCheckLoading && !selfCheck">Loading self check…</p>
+      <p class="text-sm text-text-muted mb-2" x-show="selfCheckLoading && !selfCheck">Loading self check…</p>
       <template x-if="selfCheckError">
-        <p class="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono mb-2" x-text="selfCheckError"></p>
+        <p class="text-sm text-banner-fail-fg bg-banner-fail-bg p-2 rounded font-mono mb-2" x-text="selfCheckError"></p>
       </template>
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 text-sm space-y-3" x-show="selfCheck">
+      <div class="bg-surface-raised rounded-lg shadow-sm p-3 text-sm space-y-3" x-show="selfCheck">
         <template x-for="(check, name) in selfCheckEntries" :key="name">
-          <div class="border-b border-gray-100 dark:border-gray-700 pb-3 last:border-b-0 last:pb-0">
+          <div class="border-b border-border-subtle pb-3 last:border-b-0 last:pb-0">
             <div class="flex items-start justify-between mb-1">
               <div class="font-medium" x-text="name"></div>
               <span class="badge whitespace-nowrap"
-                    :class="check.status === 'ok' ? 'sev-safe'
-                          : check.status === 'fail' ? 'sev-breaking'
-                          : check.status === 'degraded' ? 'sev-warn'
-                          : 'sev-info'"
+                    :class="check.status === 'ok' ? 'bg-state-ok-bg text-state-ok-fg'
+                          : check.status === 'fail' ? 'bg-state-fail-bg text-state-fail-fg'
+                          : check.status === 'degraded' ? 'bg-op-mutate-bg text-op-mutate-fg'
+                          : 'bg-op-read-bg text-op-read-fg'"
                     x-text="check.status || '?'"></span>
             </div>
             <template x-if="check.error || check.dashboard_error">
@@ -101,30 +291,30 @@
 
     <div>
       <h3 class="font-medium mb-2">Tools check (per-group capabilities)</h3>
-      <p class="text-sm text-gray-500 dark:text-gray-400 mb-2" x-show="toolsCheckLoading && !toolsCheck">Loading tools check…</p>
+      <p class="text-sm text-text-muted mb-2" x-show="toolsCheckLoading && !toolsCheck">Loading tools check…</p>
       <template x-if="toolsCheckError">
-        <p class="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono mb-2" x-text="toolsCheckError"></p>
+        <p class="text-sm text-banner-fail-fg bg-banner-fail-bg p-2 rounded font-mono mb-2" x-text="toolsCheckError"></p>
       </template>
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-3 text-sm" x-show="toolsCheck">
-        <div class="text-xs uppercase text-gray-500 dark:text-gray-400 mb-3"
+      <div class="bg-surface-raised rounded-lg shadow-sm p-3 text-sm" x-show="toolsCheck">
+        <div class="text-xs uppercase text-text-muted mb-3"
              x-text="'Overall: ' + (toolsCheck?.summary?.overall || '')"></div>
 
         <div class="space-y-3">
           <template x-for="(group, name) in toolsCheckGroups" :key="name">
-            <div class="border border-gray-100 dark:border-gray-700 rounded p-2">
+            <div class="border border-border-subtle rounded p-2">
               <div class="flex items-start justify-between mb-2">
                 <div class="font-medium" x-text="name"></div>
                 <span class="badge whitespace-nowrap"
-                  :class="group.status === 'pass' ? 'sev-safe'
-                        : group.status === 'fail' ? 'sev-breaking'
-                        : group.status === 'partial' ? 'sev-warn' : 'sev-info'"
+                  :class="group.status === 'pass' ? 'bg-state-ok-bg text-state-ok-fg'
+                        : group.status === 'fail' ? 'bg-state-fail-bg text-state-fail-fg'
+                        : group.status === 'partial' ? 'bg-op-mutate-bg text-op-mutate-fg' : 'bg-op-read-bg text-op-read-fg'"
                   x-text="group.status"></span>
               </div>
               <div class="text-xs space-y-1 mb-2" x-show="group.tests">
                 <template x-for="(test, tname) in (group.tests || {})" :key="tname">
                   <div class="flex items-start gap-2">
                     <span class="badge whitespace-nowrap"
-                          :class="test.ok ? 'sev-safe' : 'sev-breaking'"
+                          :class="test.ok ? 'bg-state-ok-bg text-state-ok-fg' : 'bg-state-fail-bg text-state-fail-fg'"
                           x-text="test.ok ? 'ok' : 'fail'"></span>
                     <div class="flex-1">
                       <span class="font-mono" x-text="tname"></span>
@@ -132,13 +322,13 @@
                         <span class="text-red-700 dark:text-red-300 ml-2 font-mono" x-text="test.error"></span>
                       </template>
                       <template x-if="!test.error && testSummary(test)">
-                        <span class="text-gray-500 dark:text-gray-400 ml-2" x-text="testSummary(test)"></span>
+                        <span class="text-text-muted ml-2" x-text="testSummary(test)"></span>
                       </template>
                     </div>
                   </div>
                 </template>
               </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 font-mono"
+              <div class="text-xs text-text-muted font-mono"
                    x-show="(group.tools_affected || []).length && group.status !== 'pass'">
                 Affects: <span x-text="(group.tools_affected || []).join(', ')"></span>
               </div>
@@ -167,12 +357,12 @@
       <span x-show="auditClearInFlight">Clearing…</span>
     </button>
   </div>
-  <p class="text-sm text-gray-500 dark:text-gray-400 mb-3">
+  <p class="text-sm text-text-muted mb-3">
     Inspection of recent operations. Click a row to see the diff. Apply
     rows whose transaction is still in-session expose a Revert button
     that fires haops_rollback via the sidebar; once the transaction is
     gone (addon restart), revert falls back to
-    call <code class="font-mono text-xs bg-gray-100 dark:bg-gray-700 px-1 rounded">haops_backup_revert</code>
+    call <code class="font-mono text-xs bg-surface-hover px-1 rounded">haops_backup_revert</code>
     via the MCP flow.
   </p>
 
@@ -184,68 +374,73 @@
         class="px-2.5 py-1 rounded border font-medium"
         :class="showReads
           ? 'bg-blue-600 text-white border-blue-600'
-          : 'text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'"
+          : 'text-text-muted border-border hover:bg-surface-hover'"
         title="Include read-only tool calls in the Timeline">
         <span x-text="showReads ? '✓ Reads shown' : 'Show reads'"></span>
       </button>
-      <span class="text-gray-400 dark:text-gray-500"
+      <span class="text-text-faint"
             x-show="!showReads">Mutations only</span>
     </div>
     <button
       @click="showLegend = !showLegend"
-      class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+      class="text-xs text-text-muted hover:text-gray-700 dark:hover:text-gray-200">
       <span x-text="showLegend ? 'Hide legend' : 'What do the tags mean?'"></span>
     </button>
   </div>
   <div x-show="showLegend" x-cloak
-       class="mb-4 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 text-xs flex flex-wrap items-center gap-x-4 gap-y-2">
+       class="mb-4 p-3 rounded-lg bg-surface-raised border border-border-subtle text-xs flex flex-wrap items-center gap-x-4 gap-y-2">
     <span class="flex items-center gap-1.5">
-      <span class="badge font-mono sev-info">READ</span>
-      <span class="text-gray-500 dark:text-gray-400">observes state, changes nothing</span>
+      <span class="badge font-mono bg-op-read-bg text-op-read-fg">READ</span>
+      <span class="text-text-muted">observes state, changes nothing</span>
     </span>
     <span class="flex items-center gap-1.5">
-      <span class="badge font-mono sev-warn">MUTATE</span>
-      <span class="text-gray-500 dark:text-gray-400">changes state, recoverable</span>
+      <span class="badge font-mono bg-op-mutate-bg text-op-mutate-fg">EDIT</span>
+      <span class="text-text-muted">changes state, recoverable</span>
     </span>
     <span class="flex items-center gap-1.5">
-      <span class="badge font-mono sev-breaking">DELETE</span>
-      <span class="text-gray-500 dark:text-gray-400">irreversible / data loss</span>
+      <span class="badge font-mono bg-op-dstr-bg text-op-dstr-fg">DELETE</span>
+      <span class="text-text-muted">irreversible / data loss</span>
     </span>
     <span class="flex items-center gap-1.5">
-      <span class="font-mono text-gray-400 dark:text-gray-500">·area·</span>
-      <span class="text-gray-500 dark:text-gray-400">subsystem touched (config, database, dashboard…)</span>
+      <span class="inline-flex items-center gap-1 font-mono text-text-faint">
+        <svg class="w-3.5 h-3.5" aria-hidden="true"><use href="#area-config"></use></svg>·area·
+      </span>
+      <span class="text-text-muted">subsystem touched (config, database, dashboard…)</span>
     </span>
   </div>
 
   <template x-if="!timeline?.entries?.length">
-    <p class="text-gray-500 dark:text-gray-400 text-sm">No audit entries yet.</p>
+    <p class="text-text-muted text-sm">No audit entries yet.</p>
   </template>
   <div class="space-y-2">
     <template x-for="(e, eidx) in (timeline?.entries || [])" :key="eidx">
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm" :id="'tl-row-' + eidx">
+      <div class="bg-surface-raised rounded-lg shadow-sm" :id="'tl-row-' + eidx">
         <button
-          class="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-750"
+          class="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-surface-hover"
           @click="toggleTimelineEntry(eidx)">
           <span class="mt-0.5 text-gray-400 text-xs font-mono"
                 x-text="expandedTimeline === eidx ? '▾' : '▸'"></span>
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-mono text-xs text-gray-500 dark:text-gray-400"
+              <span class="font-mono text-xs text-text-muted"
                     x-text="formatTimestamp(e.timestamp)"></span>
               <span class="badge font-mono"
                     :class="opBadgeClass(e.op_class)"
                     x-text="opLabel(e.op_class)"
                     :title="'Operation class: ' + (e.op_class || 'unknown')"></span>
               <span class="font-medium text-sm" x-text="e.tool"></span>
-              <span class="text-xs font-mono text-gray-400 dark:text-gray-500"
-                    x-show="e.area" x-text="'·' + e.area + '·'"></span>
+              <span class="inline-flex items-center gap-1 text-xs font-mono text-text-faint"
+                    x-show="e.area" :title="'Area: ' + e.area">
+                <svg class="w-3.5 h-3.5" aria-hidden="true"><use :href="'#area-' + e.area"></use></svg>
+                <span x-text="'·' + e.area + '·'"></span>
+              </span>
               <span class="badge"
-                    :class="e.success ? 'sev-safe' : 'sev-breaking'"
+                    :class="e.success ? 'bg-state-ok-bg text-state-ok-fg' : 'bg-state-fail-bg text-state-fail-fg'"
                     x-text="e.success ? 'ok' : 'fail'"></span>
               <template x-if="e.paired_with">
                 <button
                   @click.stop="scrollToPair(e.paired_with.index)"
-                  class="text-xs font-mono px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                  class="text-xs font-mono px-2 py-0.5 rounded bg-rel-bg text-rel-fg hover:opacity-80"
                   :title="'Jump to ' + e.paired_with.tool + ' at ' + formatTimestamp(e.paired_with.timestamp)">
                   <span x-show="e.paired_with.relation === 'rolled_back_by'">↺ rolled back</span>
                   <span x-show="e.paired_with.relation === 'reverts'">↶ reverts apply</span>
@@ -255,22 +450,22 @@
             <div class="text-sm text-gray-700 dark:text-gray-300 mt-1" x-text="e.summary"></div>
           </div>
         </button>
-        <div x-show="expandedTimeline === eidx" x-cloak class="px-4 pb-4 border-t border-gray-100 dark:border-gray-700">
+        <div x-show="expandedTimeline === eidx" x-cloak class="px-4 pb-4 border-t border-border-subtle">
           <template x-if="e.error">
             <div class="mt-3 text-xs text-red-700 dark:text-red-300 font-mono bg-red-50 dark:bg-red-900/30 p-2 rounded"
                  x-text="e.error"></div>
           </template>
           <template x-if="e.diff_present && e.diff === undefined && !e._diff_error">
-            <div class="mt-3 text-xs text-gray-500 dark:text-gray-400 italic">
+            <div class="mt-3 text-xs text-text-muted italic">
               Loading diff…
             </div>
           </template>
           <template x-if="e._diff_error">
-            <div class="mt-3 text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono" x-text="'Failed to load diff: ' + e._diff_error"></div>
+            <div class="mt-3 text-xs text-banner-fail-fg bg-banner-fail-bg p-2 rounded font-mono" x-text="'Failed to load diff: ' + e._diff_error"></div>
           </template>
           <template x-if="typeof e.diff === 'string' && e.diff">
             <div class="mt-3">
-              <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">
+              <div class="text-xs text-text-muted mb-1">
                 Diff
                 <template x-if="e.diff_truncated">
                   <span class="ml-2 text-orange-700 dark:text-orange-400">
@@ -278,38 +473,38 @@
                   </span>
                 </template>
               </div>
-              <pre class="text-xs font-mono bg-gray-50 dark:bg-gray-900 p-3 rounded overflow-x-auto max-h-96 border border-gray-100 dark:border-gray-700"
+              <pre class="text-xs font-mono bg-surface-sunken p-3 rounded overflow-x-auto max-h-96 border border-border-subtle"
                    x-html="renderDiffHtml(e.diff)"></pre>
             </div>
           </template>
           <template x-if="typeof e.diff === 'string' && !e.diff">
-            <div class="mt-3 text-xs text-gray-500 dark:text-gray-400 italic">
+            <div class="mt-3 text-xs text-text-muted italic">
               No changes recorded (empty diff).
             </div>
           </template>
           <template x-if="e.details_excerpt && Object.keys(e.details_excerpt).length">
             <div class="mt-3">
-              <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Details</div>
-              <pre class="text-xs font-mono bg-gray-50 dark:bg-gray-900 p-3 rounded overflow-x-auto max-h-64 border border-gray-100 dark:border-gray-700"
+              <div class="text-xs text-text-muted mb-1">Details</div>
+              <pre class="text-xs font-mono bg-surface-sunken p-3 rounded overflow-x-auto max-h-64 border border-border-subtle"
                    x-text="JSON.stringify(e.details_excerpt, null, 2)"></pre>
             </div>
           </template>
           <template x-if="e.details_excerpt?.path || e.details_excerpt?.dashboard_id">
             <div class="mt-3 text-xs">
-              <span class="text-gray-500 dark:text-gray-400">Target: </span>
+              <span class="text-text-muted">Target: </span>
               <span class="font-mono text-gray-700 dark:text-gray-300"
                     x-text="e.details_excerpt?.path || dashboardStoragePath(e.details_excerpt?.dashboard_id)"></span>
             </div>
           </template>
           <template x-if="e.backup_path">
             <div class="mt-1 text-xs">
-              <span class="text-gray-500 dark:text-gray-400">Backup: </span>
+              <span class="text-text-muted">Backup: </span>
               <span class="font-mono text-gray-700 dark:text-gray-300" x-text="e.backup_path"></span>
             </div>
           </template>
           <template x-if="e.token_id">
             <div class="mt-1 text-xs">
-              <span class="text-gray-500 dark:text-gray-400">Token: </span>
+              <span class="text-text-muted">Token: </span>
               <span class="font-mono text-gray-700 dark:text-gray-300" x-text="e.token_id"></span>
             </div>
           </template>
@@ -318,21 +513,21 @@
               <button
                 @click="revertEntry(e, eidx)"
                 :disabled="timelineActionInFlight === eidx"
-                class="px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 disabled:bg-amber-400 text-white text-xs font-medium">
+                class="px-3 py-1.5 rounded bg-op-mutate-solid hover:bg-op-mutate-solid-h disabled:opacity-50 text-text-on-accent text-xs font-medium">
                 <span x-show="timelineActionInFlight !== eidx">Revert</span>
                 <span x-show="timelineActionInFlight === eidx">Reverting…</span>
               </button>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
+              <span class="text-xs text-text-muted">
                 Undoes this apply via in-session rollback. Disappears after addon restart — fall back to
                 <code class="font-mono">haops_backup_revert</code> then.
               </span>
             </div>
           </template>
           <template x-if="timelineActionError[eidx]">
-            <div class="mt-2 text-xs text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono" x-text="timelineActionError[eidx]"></div>
+            <div class="mt-2 text-xs text-banner-fail-fg bg-banner-fail-bg p-2 rounded font-mono" x-text="timelineActionError[eidx]"></div>
           </template>
           <template x-if="timelineActionResult[eidx]">
-            <div class="mt-2 text-xs text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 p-2 rounded" x-text="timelineActionResult[eidx]"></div>
+            <div class="mt-2 text-xs text-banner-ok-fg bg-banner-ok-bg p-2 rounded" x-text="timelineActionResult[eidx]"></div>
           </template>
         </div>
       </div>
@@ -345,10 +540,10 @@
     <button
       @click="timelinePrevPage()"
       :disabled="timelinePage === 0"
-      class="px-3 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+      class="px-3 py-1 rounded border border-border text-text-muted hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed">
       ← Newer
     </button>
-    <span class="text-xs text-gray-500 dark:text-gray-400 font-mono">
+    <span class="text-xs text-text-muted font-mono">
       <span x-text="'Page ' + (timelinePage + 1)"></span>
       <span x-show="timelinePage === 0 && timelineAutoRefresh" class="ml-2">· auto-refreshing</span>
       <span x-show="timelinePage > 0" class="ml-2">· auto-refresh paused</span>
@@ -356,7 +551,7 @@
     <button
       @click="timelineNextPage()"
       :disabled="!timeline?.has_more"
-      class="px-3 py-1 rounded border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+      class="px-3 py-1 rounded border border-border text-text-muted hover:bg-surface-hover disabled:opacity-40 disabled:cursor-not-allowed">
       Older →
     </button>
   </div>
@@ -365,7 +560,7 @@
 <!-- Backups -->
 <section x-show="active === 'backups'">
   <h2 class="text-xl font-semibold mb-1">Backups</h2>
-  <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+  <p class="text-sm text-text-muted mb-4">
     Summary of persistent backups plus admin-convenience prune actions.
     Full control (revert, targeted deletion) stays in the MCP flow —
     use <code class="font-mono">haops_backup_revert</code> /
@@ -373,7 +568,7 @@
   </p>
 
   <template x-if="!backups">
-    <p class="text-gray-500 dark:text-gray-400">Loading…</p>
+    <p class="text-text-muted">Loading…</p>
   </template>
 
   <template x-if="backups">
@@ -390,47 +585,47 @@
         <button
           @click="clearAllNow()"
           :disabled="backupActionInFlight"
-          class="px-4 py-2 rounded bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-medium">
+          class="px-4 py-2 rounded bg-op-dstr-solid hover:bg-op-dstr-solid-h disabled:opacity-50 text-text-on-accent text-sm font-medium">
           <span x-show="!backupActionInFlight">Clear all now</span>
           <span x-show="backupActionInFlight && backupActionLabel === 'clear_all'">Clearing…</span>
         </button>
       </div>
 
       <template x-if="backupActionError">
-        <div class="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/30 p-2 rounded font-mono" x-text="backupActionError"></div>
+        <div class="text-sm text-banner-fail-fg bg-banner-fail-bg p-2 rounded font-mono" x-text="backupActionError"></div>
       </template>
       <template x-if="backupActionResult">
-        <div class="text-sm text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 p-2 rounded">
+        <div class="text-sm text-banner-ok-fg bg-banner-ok-bg p-2 rounded">
           <span x-text="backupActionResult"></span>
         </div>
       </template>
 
       <!-- Totals + retention -->
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
-          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">Total backups</div>
+        <div class="bg-surface-raised rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-text-muted">Total backups</div>
           <div class="text-2xl font-semibold mt-1" x-text="backups?.summary?.total_count ?? 0"></div>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
-          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">Disk usage</div>
+        <div class="bg-surface-raised rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-text-muted">Disk usage</div>
           <div class="text-2xl font-semibold mt-1" x-text="formatBytes(backups?.summary?.total_bytes ?? 0)"></div>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
-          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">Max age (days)</div>
+        <div class="bg-surface-raised rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-text-muted">Max age (days)</div>
           <div class="text-2xl font-semibold mt-1" x-text="backups?.retention?.max_age_days"></div>
         </div>
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
-          <div class="text-xs uppercase text-gray-500 dark:text-gray-400">Max per type</div>
+        <div class="bg-surface-raised rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-text-muted">Max per type</div>
           <div class="text-2xl font-semibold mt-1" x-text="backups?.retention?.max_per_type"></div>
         </div>
       </div>
 
       <!-- Per-type breakdown -->
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
-        <div class="px-4 py-2 border-b border-gray-100 dark:border-gray-700 text-xs uppercase text-gray-500 dark:text-gray-400">By type</div>
+      <div class="bg-surface-raised rounded-lg shadow-sm overflow-hidden">
+        <div class="px-4 py-2 border-b border-border-subtle text-xs uppercase text-text-muted">By type</div>
         <table class="w-full text-sm">
-          <thead class="text-xs uppercase text-gray-500 dark:text-gray-400">
-            <tr class="border-b border-gray-100 dark:border-gray-700">
+          <thead class="text-xs uppercase text-text-muted">
+            <tr class="border-b border-border-subtle">
               <th class="text-left px-4 py-2">Type</th>
               <th class="text-right px-4 py-2">Count</th>
               <th class="text-right px-4 py-2">Bytes</th>
@@ -441,12 +636,12 @@
           </thead>
           <tbody>
             <template x-for="row in backupsByType" :key="row.type">
-              <tr class="border-t border-gray-100 dark:border-gray-700">
+              <tr class="border-t border-border-subtle">
                 <td class="px-4 py-2 font-medium" x-text="row.type"></td>
                 <td class="px-4 py-2 text-right" x-text="row.count"></td>
                 <td class="px-4 py-2 text-right font-mono text-xs" x-text="formatBytes(row.bytes)"></td>
-                <td class="px-4 py-2 font-mono text-xs text-gray-500 dark:text-gray-400" x-text="formatTimestamp(row.oldest_ts)"></td>
-                <td class="px-4 py-2 font-mono text-xs text-gray-500 dark:text-gray-400" x-text="formatTimestamp(row.newest_ts)"></td>
+                <td class="px-4 py-2 font-mono text-xs text-text-muted" x-text="formatTimestamp(row.oldest_ts)"></td>
+                <td class="px-4 py-2 font-mono text-xs text-text-muted" x-text="formatTimestamp(row.newest_ts)"></td>
                 <td class="px-4 py-2 text-right">
                   <button
                     x-show="row.count > 0"
@@ -464,25 +659,25 @@
       </div>
 
       <!-- Last prune -->
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
-        <div class="text-xs uppercase text-gray-500 dark:text-gray-400 mb-2">Last prune</div>
+      <div class="bg-surface-raised rounded-lg shadow-sm p-4">
+        <div class="text-xs uppercase text-text-muted mb-2">Last prune</div>
         <template x-if="!backups?.last_prune">
-          <p class="text-gray-500 dark:text-gray-400 text-sm italic">
+          <p class="text-text-muted text-sm italic">
             No prune has been logged yet. Retention runs automatically after every backup write — this will populate once the first prune removes something.
           </p>
         </template>
         <template x-if="backups?.last_prune">
           <div class="text-sm space-y-1">
             <div>
-              <span class="text-gray-500 dark:text-gray-400">When:</span>
+              <span class="text-text-muted">When:</span>
               <span class="font-mono" x-text="formatTimestamp(backups.last_prune.ts)"></span>
             </div>
             <div>
-              <span class="text-gray-500 dark:text-gray-400">Removed:</span>
+              <span class="text-text-muted">Removed:</span>
               <span x-text="backups.last_prune.pruned_count + ' backup(s), ' + formatBytes(backups.last_prune.bytes_freed) + ' freed'"></span>
             </div>
             <div>
-              <span class="text-gray-500 dark:text-gray-400">Scope:</span>
+              <span class="text-text-muted">Scope:</span>
               <span x-text="backups.last_prune.type + (backups.last_prune.clear_all ? ' (clear_all)' : '')"></span>
             </div>
           </div>
@@ -490,7 +685,7 @@
       </div>
 
       <!-- Backup location -->
-      <div class="text-xs text-gray-500 dark:text-gray-400">
+      <div class="text-xs text-text-muted">
         Backup directory: <span class="font-mono" x-text="backups?.backup_dir"></span>
       </div>
     </div>
@@ -839,12 +1034,12 @@ function app() {
     opLabel(c) {
       return c === 'read' ? 'READ'
            : c === 'destructive' ? 'DELETE'
-           : 'MUTATE';
+           : 'EDIT';
     },
     opBadgeClass(c) {
-      return c === 'read' ? 'sev-info'
-           : c === 'destructive' ? 'sev-breaking'
-           : 'sev-warn';
+      return c === 'read'        ? 'bg-op-read-bg text-op-read-fg'
+           : c === 'destructive' ? 'bg-op-dstr-bg text-op-dstr-fg'
+           :                       'bg-op-mutate-bg text-op-mutate-fg';
     },
 
     formatTimestamp(iso) {
@@ -986,9 +1181,9 @@ function app() {
         var el = document.getElementById('tl-row-' + idx);
         if (el) {
           el.scrollIntoView({behavior: 'smooth', block: 'center'});
-          el.classList.add('ring-2', 'ring-indigo-500');
+          el.classList.add('ring-2', 'ring-rel-ring');
           setTimeout(() => {
-            el.classList.remove('ring-2', 'ring-indigo-500');
+            el.classList.remove('ring-2', 'ring-rel-ring');
           }, 1500);
         }
       });
@@ -1069,32 +1264,32 @@ function app() {
           return '<span class="text-gray-500">' + line + '</span>';
         }
         if (line.startsWith('+')) {
-          return '<span class="text-green-700 dark:text-green-400">' + line + '</span>';
+          return '<span class="text-diff-add">' + line + '</span>';
         }
         if (line.startsWith('-')) {
-          return '<span class="text-red-700 dark:text-red-400">' + line + '</span>';
+          return '<span class="text-diff-remove">' + line + '</span>';
         }
         if (line.startsWith('@@')) {
-          return '<span class="text-blue-700 dark:text-blue-400">' + line + '</span>';
+          return '<span class="text-diff-hunk">' + line + '</span>';
         }
         // ── Indented add/remove from format_json_diff / patch-aware diff ──
         var trimmed = line.trimStart();
         if (trimmed.startsWith('+ ')) {
-          return '<span class="text-green-700 dark:text-green-400">' + line + '</span>';
+          return '<span class="text-diff-add">' + line + '</span>';
         }
         if (trimmed.startsWith('- ') && !trimmed.match(/^- [a-z_]+:/)) {
           // Diff removal, not a YAML list marker (list markers are "- key:")
-          return '<span class="text-red-700 dark:text-red-400">' + line + '</span>';
+          return '<span class="text-diff-remove">' + line + '</span>';
         }
         if (trimmed.startsWith('~ ')) {
           return '<span class="text-yellow-700 dark:text-yellow-400">' + line + '</span>';
         }
         if (trimmed.startsWith('? ')) {
-          return '<span class="text-blue-700 dark:text-blue-400">' + line + '</span>';
+          return '<span class="text-diff-hunk">' + line + '</span>';
         }
         // ── Section headers (Added items:, Changed values:, etc.) ──
         if (line.match(/^[A-Z][a-z].*:$/) || line.match(/^\(array at /)) {
-          return '<span class="text-gray-500 dark:text-gray-400 font-semibold">' + line + '</span>';
+          return '<span class="text-text-muted font-semibold">' + line + '</span>';
         }
         // ── YAML syntax highlighting for indented content blocks ──
         // Key: value — color the key cyan, colon gray

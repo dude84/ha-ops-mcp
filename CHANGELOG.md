@@ -1,3 +1,15 @@
+## 0.36.0
+
+**Adopt Design System v1.0 in the sideload UI + rename the mutate pill to `EDIT`.** Wires the design team's token system (`docs/design_system/`) into `static/ui.html`, retiring the four hand-rolled `sev-*` classes.
+
+- **Tokens inlined.** `colors_and_type.css`'s two-tier token set (primitive ramps → semantic `--surface/--text/--border/--op-*/--state-*/--diff-*` …, light on `:root`, dark under `.dark`) is inlined into the `<style>` block — inlined rather than `<link>`ed because the server serves only `/ui`, keeping it buildless + offline.
+- **Tailwind config** extended to expose the semantic tokens as utilities (`bg-surface`, `text-text-muted`, `bg-op-mutate-bg`, `text-diff-add`, …) that resolve through the CSS vars, so both themes work without `dark:` pairs.
+- **`sev-*` gone.** Every call site migrated to op-class / state tokens: Health + tools_check status badges, the Timeline op-class pills and `ok`/`fail` badge, the diff viewer, the Revert/danger buttons, the paired-row link chip, and inline result banners. Surfaces/text/borders swept to `surface-*`/`text-*`/`border-*` tokens (also fixes the dead `dark:hover:bg-gray-750`).
+- **Area icons.** Self-hosted Lucide sprite (`area-icons.svg`, ISC) inlined into the document; each `·area·` tag now renders its subsystem glyph (`currentColor`, never icon-only — text label retained for a11y).
+- **Pill rename**: the `mutate` op-class now reads `EDIT` (was `MUTATE`); internal `op_class` value unchanged.
+
+Buildless, offline, dark-parity, and "color is never the sole signal" constraints all held. 572 tests pass (UI tests unaffected). Visual check in both themes recommended after deploy.
+
 ## 0.35.0
 
 **Timeline op-class + area classification, read-only activity logging, and a Design System brief.** Every Timeline row now carries an **op-class** pill (`READ` / `MUTATE` / `DELETE`) and an **area** tag (`·database·`, `·automation·`, …) so an operator can see at a glance whether a row observed state, changed it recoverably, or did something irreversible — and which subsystem it touched. `db_execute` is refined by SQL verb (SELECT→read, UPDATE→mutate, DELETE/DROP/TRUNCATE→destructive); `config_*` writes derive a sub-area (automation/script/scene/config) from the file basename.
