@@ -1,3 +1,7 @@
+## 0.36.4
+
+**Simplify Timeline summaries — drop redundant verb prefixes.** The `type` tag already names the action, so the summary line now shows just the payload: `service_call` → `recorder.purge_entities` (was "Called …"), `db_execute` → the raw statement (was "Executed SQL: …"), `exec_shell` → the raw command (was "Ran shell: …"). The `(no summary)` fallback was already retired in v0.36.2.
+
 ## 0.36.3
 
 **Timeline row redesign.** Reworked how each row reads, per operator feedback.

@@ -934,12 +934,12 @@ def _summarise_audit_entry(
         ids = details.get("entity_ids") or []
         return f"Assigned {len(ids)} entities to area {area}"
     if tool == "db_execute":
+        # The `type` tag already says "db delete/write/read" — show just the
+        # statement, no "Executed SQL:" prefix.
         sql = (details.get("sql") or "").strip().splitlines()
-        first = sql[0] if sql else ""
-        return f"Executed SQL: {first[:80]}"
+        return sql[0][:120] if sql else ""
     if tool == "exec_shell":
-        cmd = (details.get("command") or "").strip()
-        return f"Ran shell: {cmd[:80]}"
+        return (details.get("command") or "").strip()[:120]
     if tool == "addon_restart":
         return f"Restarted addon {details.get('addon_slug', details.get('slug', '?'))}"
     if tool == "system_restart":
@@ -947,7 +947,7 @@ def _summarise_audit_entry(
     if tool == "service_call":
         domain = details.get("domain", "?")
         service = details.get("service", "?")
-        return f"Called {domain}.{service}"
+        return f"{domain}.{service}"
     if tool == "scene_activate":
         return f"Activated scene {details.get('scene') or details.get('entity_id') or '?'}"
     if tool == "script_run":
