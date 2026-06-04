@@ -15,6 +15,29 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.38.0` — verified 2026-06-05 (Singapore HA)
+
+| Component | Version | How to check |
+|---|---|---|
+| ha-ops-mcp (addon) | **0.38.0** (tag `v0.38.0`, `3e2c57c`) | `haops_system_info` / `git describe --tags` |
+| Home Assistant Core | **2026.6.0** | `haops_self_check` → `rest_api.ha_version` |
+| HA DB backend | **MariaDB 11.4.10-MariaDB**, schema **53** | `haops_system_info` → `database` |
+| Claude Code CLI | **2.1.162** | `claude --version` |
+| Terminal host | **iTerm2 3.6.11** | iTerm → About / `$TERM_PROGRAM_VERSION` |
+| macOS | **26.5.1** (build 25F80, Darwin 25.5.0) | `sw_vers` |
+| Bun (CC runtime) | **1.3.14** | `bun --version` |
+| Node (local) | **v26.0.0** | `node --version` |
+| MCP transport | streamable-http, OAuth on | `claude mcp list` |
+| MCP URL | `http://homeassistant.local:8901/mcp` | must stay mDNS — OAuth resource is pinned to this host |
+| HA host LAN IP | `10.0.0.150` (stable) | `dscacheutil -q host -a name homeassistant.local` |
+
+**Notes for this baseline:**
+- v0.38.0 added `usb: true` + `uart: true` to the addon manifest — the addon can now reach USB/serial
+  devices (used to flash the Zigbee coordinator in place). Required an addon **rebuild** to take effect.
+- Zigbee coordinator (Sonoff ZBDongle-P / CC2652P) flashed **Z-Stack 20240710 → 20250321** this session;
+  ZHA auto-restored the network after the mass-erase (no re-pair).
+- `haops_self_check` returned `overall: ok` (all backends) right after the flash + core restart.
+
 ### `v0.37.0` — verified 2026-06-04 (Singapore HA)
 
 | Component | Version | How to check |
