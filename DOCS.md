@@ -49,6 +49,12 @@ Leave blank to auto-detect from HA's recorder config. Or specify explicitly:
 - **Max age days**: default 30 — backups older than this are pruned automatically.
 - **Max per type**: default 100 — cap per backup type (config, dashboard, entity, db).
 
+### Hardware access
+
+The addon requests generic USB access (`usb: true`) and auto-mapped UART/serial nodes (`uart: true`). This lets tools reach USB peripherals directly — most notably **flashing the Zigbee coordinator firmware in place** (e.g. Sonoff ZBDongle-P / CC2652P at `/dev/ttyUSB*`) via `haops_exec_shell`, without moving the dongle to another machine.
+
+This is a deliberate capability expansion: combined with shell access, the addon can read and write any USB/serial device the host exposes. It sits behind the same trust boundary as shell access — treat the addon like SSH to production. Changing these flags requires an addon **rebuild** (the device cgroup is applied at container creation, not at runtime).
+
 ## Connecting an MCP client
 
 ### Claude Code

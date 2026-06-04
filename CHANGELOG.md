@@ -1,3 +1,11 @@
+## 0.38.0
+
+**Hardware access — USB/serial device passthrough.** The addon now requests generic USB access (`usb: true`) plus auto-mapped UART nodes (`uart: true`) in `config.yaml`. Previously the container could *see* `/dev/ttyUSB*` but the cgroup device filter denied `open()` in every mode (`EPERM`), so any tool that needed raw serial — notably flashing the Zigbee coordinator in place — was blocked.
+
+- **Why:** in-place Zigbee coordinator firmware flashing (Sonoff ZBDongle-P / CC2652P) via `haops_exec_shell` + `cc2538-bsl`, without unplugging the dongle to a laptop. The same grant covers any other USB peripheral a tool may need.
+- **Scope note:** this is a deliberate capability expansion. Combined with `haops_exec_shell`, the addon can now read and write any USB/serial device the host exposes. It sits behind the same shell-access trust boundary already documented under Safety — treat the addon like SSH-to-production.
+- **Requires a rebuild** to take effect (Supervisor → addon → Update / Rebuild). The device cgroup is applied at container creation, not at runtime.
+
 ## 0.37.0
 
 **Design System v1.1 brand mark + Timeline/Health polish.**
