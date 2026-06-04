@@ -50,6 +50,14 @@ To clear all stored OAuth state (after a client mismatch or revocation), tick `c
 
 Defensive caps added in v0.34.1: `MAX_CLIENTS = 100` on persisted DCR registrations with LRU-by-`client_id_issued_at` eviction (revokes tokens for dropped clients too), and `issued_at` stamped on every access + refresh token for forensic auditing via `haops_auth_status`.
 
+### Troubleshooting connectivity
+
+If your MCP client suddenly **"Failed to connect"** but `curl http://homeassistant.local:8901/mcp` returns `401` from the same machine, the server is fine — the block is client-side. The common cause on macOS is **Local Network Privacy**: a terminal-app update (iTerm, Terminal, etc.) resets that app's Local Network permission, so every process it launches — including the MCP client — loses LAN access, while `curl` keeps working because Apple system binaries are exempt. Fix: System Settings → Privacy & Security → **Local Network** → toggle your terminal off/on, then **fully quit and relaunch** it.
+
+Keep the MCP URL as the mDNS hostname (`http://homeassistant.local:8901/mcp`), not an IP — the OAuth resource metadata is pinned to the hostname and an IP URL fails resource matching.
+
+Full triage steps and a known-good version baseline (diff against it to spot which component moved) are in [`docs/CONNECTIVITY_TROUBLESHOOTING.md`](https://github.com/dude84/ha-ops-mcp/blob/main/docs/CONNECTIVITY_TROUBLESHOOTING.md) and [`docs/KNOWN_GOOD_ENV.md`](https://github.com/dude84/ha-ops-mcp/blob/main/docs/KNOWN_GOOD_ENV.md).
+
 ## Usage
 
 Mutating tools support two modes: **two-phase confirmation** (preview returns a diff + token, a second call applies it) and **auto-apply** (`auto_apply=true` — preview + apply in a single call). Both modes create backups and rollback savepoints automatically. The AI assistant can use either mode autonomously, or you can require manual review — it depends on your MCP client's permission settings, not the server.

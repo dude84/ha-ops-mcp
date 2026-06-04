@@ -285,6 +285,28 @@ At startup, the connection layer must:
 - No classes where a function will do — but use classes for stateful things (connections, backends)
 - Error handling: catch specific exceptions, return structured error messages to MCP client (never raw tracebacks)
 
+## Known-good environment baseline — keep it current (agent routine)
+
+`docs/KNOWN_GOOD_ENV.md` holds a version snapshot of the **full client+server stack**
+(ha-ops-mcp, HA Core, DB backend+schema, Claude Code, terminal app, macOS, Bun/Node) at which
+the MCP connection is verified working end-to-end. It exists so that "it broke for no reason"
+breakages are resolved by **diffing the live environment against the last baseline** instead of
+guessing. This maintenance is the agent's job, not the user's — do not hand it back to them.
+
+**When to append a new baseline row (do it automatically, no need to ask):**
+- After cutting a release / tag (alongside `./scripts/sync-version.sh`), or
+- After confirming a clean `haops_self_check` (all backends ok) following any environment change.
+
+**How:** gather the versions (`haops_system_info`, `haops_self_check`, `claude --version`,
+`sw_vers`, `bun --version`, `node --version`, `$TERM_PROGRAM_VERSION`, `git describe --tags`),
+add a new dated row tied to the current git tag, and **keep the old rows** — the history is the diff.
+
+**When the MCP connection breaks**, consult `docs/CONNECTIVITY_TROUBLESHOOTING.md` FIRST. The
+recurring culprit is macOS **Local Network Privacy**: a terminal-app (iTerm/Terminal) update resets
+the app's Local Network grant, killing all LAN MCP sockets while `curl` still works (Apple binaries
+are exempt). Do not chase HA/Claude-Code updates or swap the MCP URL to an IP (breaks OAuth resource
+matching — the URL must stay the mDNS hostname).
+
 ## What NOT to do
 
 - Do NOT use SQLAlchemy ORM models or mapped classes — raw SQL via `text()` only
