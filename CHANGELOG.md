@@ -1,3 +1,7 @@
+## 0.39.2
+
+**`haops_zha_reconfigure_device` now resolves a device by friendly name.** Previously it accepted only ieee / device_id / entity_id — but `haops_zigbee_info` *returns* friendly names, so the natural round-trip (read a name, reconfigure it) failed with "could not resolve". Now matches the device's friendly name (`name_by_user`/`name`) case-insensitively. An ambiguous name (>1 matching device) deliberately does **not** resolve, so a reconfigure never fires at a guessed device. ieee / device_id / entity_id paths unchanged.
+
 ## 0.39.1
 
 **Fixes for two v0.39.0 Zigbee tool bugs found on first live use** (both root-caused against the live instance, not guessed).

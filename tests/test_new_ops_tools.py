@@ -11,6 +11,7 @@ from ha_ops_mcp.tools.entity import haops_monitor_entity
 from ha_ops_mcp.tools.ws import _looks_read_only, haops_ws_command
 from ha_ops_mcp.tools.zigbee import (
     _read_zigbee_db,
+    _resolve_ieee,
     _zha_ieee_map,
     haops_zigbee_info,
     haops_zigbee_scan,
@@ -202,6 +203,49 @@ async def test_zigbee_scan_fast_success(ctx, mock_ws):
     result = await haops_zigbee_scan(ctx)
     assert result["success"] is True
     assert result["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_resolve_ieee_by_name(ctx, monkeypatch):
+    """Friendly name (as shown by zigbee_info) resolves case-insensitively."""
+    from ha_ops_mcp.tools import zigbee as zmod
+
+    async def _reg(ctx):
+        return [
+            {"id": "d1", "name": "Aqara Motion Office",
+             "connections": [["zigbee", "54:ef:44:10:00:58:48:be"]],
+             "identifiers": []},
+            {"id": "d2", "name_by_user": "Kitchen Plug",
+             "connections": [["zigbee", "a4:c1:38:00:00:00:00:01"]],
+             "identifiers": []},
+        ]
+    monkeypatch.setattr(zmod, "_get_device_registry", _reg)
+
+    assert await _resolve_ieee(ctx, "aqara motion office") == "54:ef:44:10:00:58:48:be"
+    assert await _resolve_ieee(ctx, "Kitchen Plug") == "a4:c1:38:00:00:00:00:01"
+    # raw ieee still passes through untouched
+    assert await _resolve_ieee(ctx, "00:15:8D:00:07:F2:A7:00") == "00:15:8d:00:07:f2:a7:00"
+
+
+@pytest.mark.asyncio
+async def test_resolve_ieee_ambiguous_name_returns_none(ctx, monkeypatch):
+    """A name matching >1 device must NOT resolve — never reconfigure a guess."""
+    from ha_ops_mcp.tools import zigbee as zmod
+
+    async def _reg(ctx):
+        return [
+            {"id": "d1", "name": "Plug",
+             "connections": [["zigbee", "aa:aa:aa:aa:aa:aa:aa:01"]], "identifiers": []},
+            {"id": "d2", "name": "plug",
+             "connections": [["zigbee", "bb:bb:bb:bb:bb:bb:bb:02"]], "identifiers": []},
+        ]
+    monkeypatch.setattr(zmod, "_get_device_registry", _reg)
+
+    async def _ents(ctx):
+        return []
+    monkeypatch.setattr("ha_ops_mcp.tools.entity._get_entity_registry", _ents)
+
+    assert await _resolve_ieee(ctx, "plug") is None
 
 
 @pytest.mark.asyncio

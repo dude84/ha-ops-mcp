@@ -296,7 +296,10 @@ async def haops_zigbee_info(
 
 
 async def _resolve_ieee(ctx: HaOpsContext, ident: str) -> str | None:
-    """Resolve an entity_id, device_id, or raw ieee to a lowercased ieee."""
+    """Resolve an ieee, device_id, entity_id, or device friendly name to a
+    lowercased ieee. Friendly name (as shown by haops_zigbee_info) matches
+    case-insensitively; an ambiguous name (>1 device) does NOT resolve, so a
+    reconfigure never fires at a guessed device."""
     if ":" in ident and ident.count(":") >= 6:
         return ident.lower()  # looks like an ieee already
 
@@ -315,6 +318,15 @@ async def _resolve_ieee(ctx: HaOpsContext, ident: str) -> str | None:
         for ieee, meta in name_map.items():
             if meta.get("device_id") == ent["device_id"]:
                 return ieee
+
+    # friendly-name match (case-insensitive, exact). Only resolve when unique.
+    needle = ident.strip().casefold()
+    name_hits = [
+        ieee for ieee, meta in name_map.items()
+        if (meta.get("name") or "").strip().casefold() == needle
+    ]
+    if len(name_hits) == 1:
+        return name_hits[0]
     return None
 
 
@@ -329,8 +341,10 @@ async def _resolve_ieee(ctx: HaOpsContext, ident: str) -> str | None:
         "Aqara FP1 (lumi.motion.ac01) presence sensor dropping its report "
         "bindings until reconfigured. This is the only thing that recovers "
         "such a device; an on-device reset button does not. "
-        "Identify the device by ieee (00:15:8d:...), device_id, or any of "
-        "its entity_ids. Runs over WebSocket (zha/devices/reconfigure)."
+        "Identify the device by ieee (00:15:8d:...), device_id, any of its "
+        "entity_ids, or its friendly name as shown by haops_zigbee_info "
+        "(case-insensitive; an ambiguous name matching >1 device won't "
+        "resolve). Runs over WebSocket (zha/devices/reconfigure)."
     ),
     params={
         "device": {
@@ -350,8 +364,9 @@ async def haops_zha_reconfigure_device(
 ) -> dict[str, Any]:
     ieee = await _resolve_ieee(ctx, device)
     if not ieee:
-        return {"error": f"Could not resolve '{device}' to a ZHA device ieee. "
-                "Pass an ieee, device_id, or a valid entity_id."}
+        return {"error": f"Could not resolve '{device}' to a single ZHA "
+                "device. Pass an ieee, device_id, entity_id, or an unambiguous "
+                "friendly name (see haops_zigbee_info for exact names)."}
 
     reg = await _get_device_registry(ctx)
     name = _zha_ieee_map(reg).get(ieee, {}).get("name")
