@@ -243,6 +243,22 @@ The HA error log mixes critical errors, flaky-integration warnings,
 and noise. `haops_system_logs` supports filtering by integration and
 severity. Raw dump is useless without filters.
 
+### Supervisor `/core/{restart,stop,start}` block until done → the POST times out
+
+These Supervisor endpoints are **synchronous**: they don't reply until the
+operation finishes (a restart only answers once Core is back up). So an HTTP
+client with a normal timeout (`_supervisor_post` uses 30s) routinely raises
+`asyncio.TimeoutError` — whose `str()` is **empty** — or sees the socket drop
+mid-request, even though the action fired and succeeded. A timeout / empty
+connection error here is **success-in-progress, not failure** (verified live:
+`/core/restart` timed out, REST/WS 502'd while Core was down, then HA came
+back clean). Mirror `haops_system_restart`: treat a 502/503/504, a connection
+drop, or a timeout as "initiated"; only a real HTTP-status body (`HTTP 401/403`
+— auth/permission) is a genuine failure. `haops_system_core` does this via
+`_core_post_outcome` (fixed in v0.39.3 — it previously reported a working
+restart as `success: false`). After any of these, poll `haops_self_check`
+until `rest_api` goes from 502 back to `ok`.
+
 ### `MCP error -32602: Invalid request parameters` on every tool call → suspect auth expiry
 
 When *every* tool call returns `-32602`, including no-arg ones like
