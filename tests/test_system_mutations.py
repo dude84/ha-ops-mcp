@@ -5,10 +5,87 @@ from __future__ import annotations
 import pytest
 
 from ha_ops_mcp.tools.system import (
+    _core_post_outcome,
     haops_system_backup,
+    haops_system_core,
     haops_system_reload,
     haops_system_restart,
 )
+
+
+def test_core_post_outcome():
+    """Classifier behind haops_system_core's success reporting."""
+    # clean responses -> ok, not async
+    assert _core_post_outcome(None) == (True, False)
+    assert _core_post_outcome({}) == (True, False)
+    assert _core_post_outcome({"slug": "x"}) == (True, False)
+    # timeout (empty str) / connection drop -> ok + initiated async
+    assert _core_post_outcome({"error": "Supervisor API unavailable: "}) == (True, True)
+    assert _core_post_outcome(
+        {"error": "Supervisor API unavailable: Server disconnected"}) == (True, True)
+    # real HTTP status error -> failure
+    assert _core_post_outcome({"error": "HTTP 401: forbidden"}) == (False, False)
+
+
+@pytest.mark.asyncio
+async def test_system_core_invalid_action(ctx):
+    result = await haops_system_core(ctx, action="reboot")
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_system_core_preview(ctx):
+    result = await haops_system_core(ctx, action="restart")
+    assert "token" in result
+    assert "warning" in result
+
+
+@pytest.mark.asyncio
+async def test_system_core_restart_timeout_is_initiated(ctx, monkeypatch):
+    """Regression (v0.39.2 live test): Supervisor /core/restart BLOCKS until
+    Core is back, so the POST times out (TimeoutError -> empty str ->
+    'Supervisor API unavailable: '). That must read as success/initiated, not
+    failure — the restart DID fire (verified live: Core 502'd then recovered)."""
+    async def _post(ctx, path, data=None):
+        return {"error": "Supervisor API unavailable: "}
+    monkeypatch.setattr("ha_ops_mcp.tools.addon._supervisor_post", _post)
+
+    preview = await haops_system_core(ctx, action="restart")
+    result = await haops_system_core(
+        ctx, action="restart", confirm=True, token=preview["token"])
+    assert result["success"] is True
+    assert result["status"] == "initiated"
+
+
+@pytest.mark.asyncio
+async def test_system_core_restart_http_error_is_failure(ctx, monkeypatch):
+    """A genuine HTTP status error (auth/permission) must NOT be masked."""
+    async def _post(ctx, path, data=None):
+        return {"error": "HTTP 403: forbidden"}
+    monkeypatch.setattr("ha_ops_mcp.tools.addon._supervisor_post", _post)
+
+    preview = await haops_system_core(ctx, action="restart")
+    result = await haops_system_core(
+        ctx, action="restart", confirm=True, token=preview["token"])
+    assert result["success"] is False
+    assert result["status"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_system_core_stop_disables_watchdog_first(ctx, monkeypatch):
+    """stop must POST watchdog=false before /core/stop."""
+    calls: list[tuple[str, object]] = []
+
+    async def _post(ctx, path, data=None):
+        calls.append((path, data))
+        return {}
+    monkeypatch.setattr("ha_ops_mcp.tools.addon._supervisor_post", _post)
+
+    preview = await haops_system_core(ctx, action="stop")
+    await haops_system_core(
+        ctx, action="stop", confirm=True, token=preview["token"])
+    assert calls[0] == ("/core/options", {"watchdog": False})
+    assert calls[1] == ("/core/stop", None)
 
 
 @pytest.mark.asyncio

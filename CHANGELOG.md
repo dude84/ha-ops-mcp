@@ -1,3 +1,7 @@
+## 0.39.3
+
+**`haops_system_core` reported `success: false` on a restart that actually worked.** Live test: `haops_system_core(restart)` bounced Core correctly (verified — REST/WS went 502 while down, then HA 2026.6.0 came back clean) but the tool returned failure. Root cause: Supervisor's `/core/{restart,stop,start}` endpoints **block until the operation completes**, so the POST exceeds `_supervisor_post`'s 30s timeout → `asyncio.TimeoutError` (whose `str()` is empty) → `{"error": "Supervisor API unavailable: "}`. The tool treated any error as failure; `haops_system_restart` already treats a drop/timeout as "initiated" — `system_core` now does the same. A timeout/connection-drop reads as `status: "initiated"` (success); only a real HTTP-status error (e.g. `HTTP 401/403` — auth/permission) is reported as `status: "failed"`. New `_core_post_outcome` classifier + 6 tests (restart-timeout-initiated, http-error-failure, stop-disables-watchdog-first, etc.). Full suite 612 green.
+
 ## 0.39.2
 
 **`haops_zha_reconfigure_device` now resolves a device by friendly name.** Previously it accepted only ieee / device_id / entity_id — but `haops_zigbee_info` *returns* friendly names, so the natural round-trip (read a name, reconfigure it) failed with "could not resolve". Now matches the device's friendly name (`name_by_user`/`name`) case-insensitively. An ambiguous name (>1 matching device) deliberately does **not** resolve, so a reconfigure never fires at a guessed device. ieee / device_id / entity_id paths unchanged.

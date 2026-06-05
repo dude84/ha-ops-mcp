@@ -487,6 +487,27 @@ async def haops_system_restart(
 _CORE_ACTIONS = ("stop", "start", "restart")
 
 
+def _core_post_outcome(res: dict[str, Any] | None) -> tuple[bool, bool]:
+    """Classify a Supervisor /core/{stop,start,restart} POST result as
+    ``(ok, initiated_async)``.
+
+    These endpoints BLOCK until the operation finishes (Supervisor restarts
+    Core and only then replies), so the POST routinely exceeds the 30s
+    client timeout: ``asyncio.TimeoutError`` (whose ``str()`` is empty) or a
+    mid-request socket drop both surface from ``_supervisor_post`` as
+    ``{"error": "Supervisor API unavailable: ..."}``. That is NOT a failure —
+    the action fired and Core is tearing down, exactly like
+    ``haops_system_restart`` treats a 502/connection-drop as success. Only a
+    real HTTP status error (``"HTTP 401: ..."`` etc. — auth/permission) is a
+    genuine failure.
+    """
+    if not (isinstance(res, dict) and res.get("error")):
+        return True, False
+    if str(res["error"]).startswith("Supervisor API unavailable"):
+        return True, True  # timeout / connection drop -> initiated async
+    return False, False  # HTTP-status error -> real failure
+
+
 @registry.tool(
     name="haops_system_core",
     description=(
@@ -561,6 +582,7 @@ async def haops_system_core(
     action = token_data.details.get("core_action", action)
 
     steps: list[dict[str, Any]] = []
+    initiated = False
 
     if action == "stop":
         # Disable watchdog first, else the Supervisor revives Core in seconds.
@@ -568,22 +590,22 @@ async def haops_system_core(
         steps.append({"step": "watchdog_off", "result": wd})
         stop_res = await _supervisor_post(ctx, "/core/stop")
         steps.append({"step": "core_stop", "result": stop_res})
-        ok = not (isinstance(stop_res, dict) and stop_res.get("error"))
+        ok, initiated = _core_post_outcome(stop_res)
     elif action == "start":
         start_res = await _supervisor_post(ctx, "/core/start")
         steps.append({"step": "core_start", "result": start_res})
         wd = await _supervisor_post(ctx, "/core/options", {"watchdog": True})
         steps.append({"step": "watchdog_on", "result": wd})
-        ok = not (isinstance(start_res, dict) and start_res.get("error"))
+        ok, initiated = _core_post_outcome(start_res)
     else:  # restart
         res = await _supervisor_post(ctx, "/core/restart")
         steps.append({"step": "core_restart", "result": res})
-        ok = not (isinstance(res, dict) and res.get("error"))
+        ok, initiated = _core_post_outcome(res)
 
     ctx.safety.consume_token(token)
     await ctx.audit.log(
         tool="system_core",
-        details={"action": action, "steps": steps},
+        details={"action": action, "initiated_async": initiated, "steps": steps},
         success=ok, token_id=token,
     )
 
@@ -595,7 +617,20 @@ async def haops_system_core(
         "restart": "HA Core restart requested. Allow 30-120s; poll "
         "haops_self_check until the API is back.",
     }[action]
-    return {"success": ok, "action": action, "steps": steps, "message": msg}
+    if not ok:
+        msg = (
+            f"HA Core {action} failed at the Supervisor API (not a timeout — a "
+            f"real error). See steps. Core was likely NOT {action}ed."
+        )
+    return {
+        "success": ok,
+        "action": action,
+        # The blocking /core/* endpoint usually times out before Core is back;
+        # that's reported as initiated (success), not failure.
+        "status": "initiated" if (ok and initiated) else ("ok" if ok else "failed"),
+        "steps": steps,
+        "message": msg,
+    }
 
 
 @registry.tool(
