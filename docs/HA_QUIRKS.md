@@ -213,6 +213,20 @@ HACS integrations store config in config flows, not `configuration.yaml`.
 Tuning parameters are only accessible via HA UI or REST API config
 entries. `haops_registry_query(registry='config_entries')` surfaces these.
 
+### Device-registry `identifiers`/`connections` tuples are NOT always 2-element
+
+`core.device_registry` entries carry `connections` and `identifiers` as
+lists of pairs — *usually* `[type, value]`. But some integrations store
+**longer** tuples: HomeKit uses a 3-element identifier
+`["homekit", "<id>", "homekit.bridge"]`. Any code that iterates them with a
+strict `for kind, value in dev["identifiers"]:` raises *"too many values to
+unpack (expected 2)"* the moment it hits such a device — and since it's one
+loop over the whole registry, that takes down the entire call (this crashed
+`haops_zigbee_info` + `haops_zha_reconfigure_device` in v0.39.0, fixed in
+v0.39.1). Always index defensively: `if len(el) >= 2 and el[0] == ...: el[1]`.
+ZHA's own entries are clean 2-tuples (`["zha", ieee]` / `["zigbee", ieee]`);
+the offender is unrelated devices sharing the same registry.
+
 ---
 
 ## System Operational Patterns
