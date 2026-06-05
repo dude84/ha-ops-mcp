@@ -808,22 +808,35 @@ async def haops_entity_remove(
 
 
 @registry.tool(
-    name="haops_entity_disable",
+    name="haops_entity_toggle",
     description=(
-        "Bulk disable entities in the HA entity registry. Two-phase: "
-        "1) Call without confirm to preview. "
+        "Bulk disable OR enable entities in the HA entity registry. "
+        "Symmetric — set enable=true to flip disabled entities back on "
+        "(disabled_by -> null), enable=false (default) to disable. "
+        "Two-phase: 1) Call without confirm to preview. "
         "2) Call with confirm=true and the token to execute. "
-        "Disabled entities stop updating and free resources. "
+        "Disabled entities stop updating and free resources; enabling a "
+        "previously-disabled entity resumes updates. "
+        "WARNING (enabling ZHA entities): enabling/disabling a ZHA entity "
+        "triggers a ZHA config-entry reload (~30s) that can wedge some "
+        "devices (e.g. Aqara FP1 presence) until a device Reconfigure "
+        "(see haops_zha_reconfigure_device). "
         "Parameters: entity_ids (list of strings, required), "
+        "enable (bool, default false — true to enable instead of disable), "
         "confirm (bool, default false), token (string, if confirming)."
     ),
     params={
         "entity_ids": {
             "type": "array",
-            "description": "Entity IDs to disable",
+            "description": "Entity IDs to disable (or enable if enable=true)",
+        },
+        "enable": {
+            "type": "boolean",
+            "description": "True to ENABLE (disabled_by=null); false (default) to disable",
+            "default": False,
         },
         "confirm": {
-            "type": "boolean", "description": "Execute disable",
+            "type": "boolean", "description": "Execute the change",
             "default": False,
         },
         "token": {
@@ -832,52 +845,62 @@ async def haops_entity_remove(
         },
     },
 )
-async def haops_entity_disable(
+async def haops_entity_toggle(
     ctx: HaOpsContext,
     entity_ids: list[str],
+    enable: bool = False,
     confirm: bool = False,
     token: str | None = None,
 ) -> dict[str, Any]:
     if not entity_ids:
         return {"error": "No entity_ids provided"}
 
+    verb = "enable" if enable else "disable"
     entities = await _get_entity_registry(ctx)
     states = await _get_states(ctx)
 
-    to_disable: list[dict[str, Any]] = []
-    already_disabled: list[str] = []
+    targets: list[dict[str, Any]] = []
+    already: list[str] = []  # already in the requested state
     not_found: list[str] = []
 
     for eid in entity_ids:
         entry = next((e for e in entities if e.get("entity_id") == eid), None)
         if not entry:
             not_found.append(eid)
-        elif entry.get("disabled_by"):
-            already_disabled.append(eid)
-        else:
-            state_info = states.get(eid, {})
-            to_disable.append({
-                "entity_id": eid,
-                "friendly_name": (
-                    state_info.get("attributes", {}).get("friendly_name")
-                    or entry.get("name")
-                ),
-                "platform": entry.get("platform"),
-                "current_state": state_info.get("state"),
-            })
+            continue
+        is_disabled = bool(entry.get("disabled_by"))
+        # enable wants currently-disabled; disable wants currently-enabled.
+        if (enable and not is_disabled) or (not enable and is_disabled):
+            already.append(eid)
+            continue
+        state_info = states.get(eid, {})
+        targets.append({
+            "entity_id": eid,
+            "friendly_name": (
+                state_info.get("attributes", {}).get("friendly_name")
+                or entry.get("name")
+            ),
+            "platform": entry.get("platform"),
+            "current_state": state_info.get("state"),
+        })
+
+    already_key = "already_enabled" if enable else "already_disabled"
 
     if not confirm:
         tk = ctx.safety.create_token(
-            action="entity_disable",
-            details={"entity_ids": [d["entity_id"] for d in to_disable]},
+            action="entity_toggle",
+            details={
+                "entity_ids": [d["entity_id"] for d in targets],
+                "enable": enable,
+            },
         )
         return {
-            "preview": to_disable,
-            "already_disabled": already_disabled,
+            "preview": targets,
+            already_key: already,
             "not_found": not_found,
             "token": tk.id,
-            "message": "Review entities above. Call again with "
-            "confirm=true and this token to disable.",
+            "message": f"Review entities above. Call again with "
+            f"confirm=true and this token to {verb}.",
         }
 
     # Phase 2: execute
@@ -890,20 +913,25 @@ async def haops_entity_disable(
         return {"error": str(e)}
 
     target_ids = token_data.details.get("entity_ids", [])
+    # Trust the token's recorded intent over the current call's default.
+    enable = bool(token_data.details.get("enable", enable))
+    verb = "enable" if enable else "disable"
+    new_disabled_by = None if enable else "user"
+    undo_action = "disable" if enable else "enable"
 
     from ha_ops_mcp.connections.websocket import WebSocketError
 
-    txn = ctx.rollback.begin("entity_disable")
+    txn = ctx.rollback.begin("entity_toggle")
 
-    disabled: list[str] = []
+    changed: list[str] = []
     errors: list[dict[str, str]] = []
     for eid in target_ids:
         txn.savepoint(
-            name=f"disable:{eid}",
+            name=f"{verb}:{eid}",
             undo=UndoEntry(
                 type=UndoType.ENTITY,
-                description=f"Re-enable entity {eid}",
-                data={"entity_id": eid, "action": "enable"},
+                description=f"Re-{undo_action} entity {eid}",
+                data={"entity_id": eid, "action": undo_action},
             ),
         )
         # HA removed POST /api/config/entity_registry/<id> from the REST API;
@@ -912,9 +940,9 @@ async def haops_entity_disable(
             await ctx.ws.send_command(
                 "config/entity_registry/update",
                 entity_id=eid,
-                disabled_by="user",
+                disabled_by=new_disabled_by,
             )
-            disabled.append(eid)
+            changed.append(eid)
         except WebSocketError as e:
             errors.append({"entity_id": eid, "error": str(e)})
 
@@ -922,17 +950,174 @@ async def haops_entity_disable(
     ctx.rollback.commit(txn.id)
 
     await ctx.audit.log(
-        tool="entity_disable",
-        details={"disabled": disabled, "errors": errors},
+        tool="entity_toggle",
+        details={"enable": enable, verb + "d": changed, "errors": errors},
         success=not errors,
         token_id=token,
     )
 
+    result_key = "enabled" if enable else "disabled"
     return {
         # `success` reflects whether every per-entity call succeeded — a
         # 100%-failure run no longer reports success: true.
         "success": not errors,
-        "disabled": disabled,
+        result_key: changed,
         "errors": errors,
         "transaction_id": txn.id,
     }
+
+
+# Hard ceiling on the blocking window. The tool holds the MCP call open for
+# the whole duration, so this is also bounded by the MCP client's request
+# timeout (often ~120s) — values above that risk the call dying mid-sample.
+_MONITOR_MAX_DURATION_S = 600.0
+_MONITOR_MIN_INTERVAL_S = 1.0
+_MONITOR_MAX_SAMPLES_RETURNED = 300
+
+
+@registry.tool(
+    name="haops_monitor_entity",
+    description=(
+        "Watch a single entity LIVE for a fixed window, polling its current "
+        "state (or a named attribute) every interval and returning the time "
+        "series plus summary stats. Read-only. "
+        "USE FOR: averaging a noisy reading before deciding (e.g. Zigbee LQI/"
+        "RSSI, which jitters — sample several times, don't trust one read); "
+        "watching a value settle after a change; catching a transient. "
+        "NOT FOR: long-range history — use haops_entity_history (DB-backed, "
+        "after-the-fact) for hours/days. "
+        "BLOCKING: this holds the tool call open for the whole duration. Keep "
+        "duration_s under your MCP client's request timeout (commonly ~120s); "
+        "the hard ceiling is 600s but long windows risk the call dying "
+        "mid-sample. "
+        "Parameters: entity_id (string, required), duration_s (number, "
+        "default 30, max 600), interval_s (number, default 5, min 1), "
+        "attribute (string, optional — monitor attributes[attribute] instead "
+        "of state). "
+        "Returns: samples [{t, value}], plus stats (count, change_count, "
+        "distinct_values; for numeric series also min/max/mean/stdev/last)."
+    ),
+    params={
+        "entity_id": {"type": "string", "description": "Entity to watch"},
+        "duration_s": {
+            "type": "number",
+            "description": "Total window in seconds (max 600)",
+            "default": 30,
+        },
+        "interval_s": {
+            "type": "number",
+            "description": "Seconds between samples (min 1)",
+            "default": 5,
+        },
+        "attribute": {
+            "type": "string",
+            "description": "Optional: monitor this attribute instead of state",
+        },
+    },
+)
+async def haops_monitor_entity(
+    ctx: HaOpsContext,
+    entity_id: str,
+    duration_s: float = 30,
+    interval_s: float = 5,
+    attribute: str | None = None,
+) -> dict[str, Any]:
+    import asyncio
+    import statistics
+    import time as _time
+
+    if not entity_id:
+        return {"error": "entity_id is required"}
+
+    duration_s = max(0.0, min(float(duration_s), _MONITOR_MAX_DURATION_S))
+    interval_s = max(_MONITOR_MIN_INTERVAL_S, float(interval_s))
+    capped = duration_s >= _MONITOR_MAX_DURATION_S
+
+    samples: list[dict[str, Any]] = []
+    errors = 0
+    start = _time.monotonic()
+
+    def _extract(raw: dict[str, Any]) -> Any:
+        if attribute is not None:
+            return raw.get("attributes", {}).get(attribute)
+        return raw.get("state")
+
+    # Sample at t=0, then every interval until the window closes.
+    while True:
+        elapsed = round(_time.monotonic() - start, 2)
+        try:
+            raw = await ctx.rest.get(f"/api/states/{entity_id}")
+            samples.append({"t": elapsed, "value": _extract(raw)})
+        except RestClientError as e:
+            errors += 1
+            samples.append({"t": elapsed, "value": None, "error": str(e)[:120]})
+
+        if _time.monotonic() - start + interval_s > duration_s:
+            break
+        await asyncio.sleep(interval_s)
+
+    values = [s["value"] for s in samples if s.get("value") is not None]
+    change_count = sum(
+        1 for a, b in zip(values, values[1:], strict=False) if a != b
+    )
+    distinct = list(dict.fromkeys(values))  # preserves order, dedups
+
+    # numeric stats when every present value parses as a float
+    numeric: list[float] = []
+    is_numeric = bool(values)
+    for v in values:
+        try:
+            numeric.append(float(v))
+        except (TypeError, ValueError):
+            is_numeric = False
+            break
+
+    stats: dict[str, Any] = {
+        "count": len(samples),
+        "ok_count": len(values),
+        "error_count": errors,
+        "change_count": change_count,
+        "distinct_values": distinct[:50],
+        "distinct_count": len(distinct),
+        "first": values[0] if values else None,
+        "last": values[-1] if values else None,
+    }
+    if is_numeric and numeric:
+        stats["numeric"] = {
+            "min": min(numeric),
+            "max": max(numeric),
+            "mean": round(statistics.fmean(numeric), 4),
+            "stdev": round(statistics.pstdev(numeric), 4) if len(numeric) > 1 else 0.0,
+            "last": numeric[-1],
+        }
+
+    # Cap the returned series so a long fast poll can't blow the output limit.
+    out_samples = samples
+    truncated = False
+    if len(samples) > _MONITOR_MAX_SAMPLES_RETURNED:
+        out_samples = samples[-_MONITOR_MAX_SAMPLES_RETURNED:]
+        truncated = True
+
+    await ctx.audit.log(
+        tool="monitor_entity",
+        details={"entity_id": entity_id, "duration_s": duration_s,
+                 "samples": len(samples)},
+        op_class="read",
+    )
+
+    result: dict[str, Any] = {
+        "entity_id": entity_id,
+        "attribute": attribute,
+        "duration_s": duration_s,
+        "interval_s": interval_s,
+        "stats": stats,
+        "samples": out_samples,
+    }
+    if truncated:
+        result["samples_truncated"] = (
+            f"Showing last {_MONITOR_MAX_SAMPLES_RETURNED} of {len(samples)} "
+            "samples; stats cover all samples."
+        )
+    if capped:
+        result["note"] = "duration_s was capped at the 600s hard maximum."
+    return result

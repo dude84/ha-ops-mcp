@@ -185,6 +185,29 @@ async def _execute_undo(
         except WebSocketError as e:
             return {"target": did, "restore_failed": str(e)}
 
+    if undo.type == UndoType.ENTITY:
+        # entity enable/disable undo. data["action"] is the direction to
+        # apply on rollback: "enable" -> disabled_by=None, "disable" ->
+        # disabled_by="user". HA exposes this WS-only (REST endpoint removed).
+        from ha_ops_mcp.connections.websocket import WebSocketError
+
+        eid = undo.data["entity_id"]
+        action = undo.data.get("action", "enable")
+        new_disabled_by = None if action == "enable" else "user"
+        try:
+            await ctx.ws.send_command(
+                "config/entity_registry/update",
+                entity_id=eid,
+                disabled_by=new_disabled_by,
+            )
+            return {
+                "target": eid,
+                "action": action,
+                "restored": f"entity {action}d",
+            }
+        except WebSocketError as e:
+            return {"target": eid, "restore_failed": str(e)}
+
     return {
         "target": undo.description,
         "restore_failed": f"unsupported undo type: {undo.type.value}",

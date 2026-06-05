@@ -484,6 +484,120 @@ async def haops_system_restart(
     }
 
 
+_CORE_ACTIONS = ("stop", "start", "restart")
+
+
+@registry.tool(
+    name="haops_system_core",
+    description=(
+        "SUPERUSER TOOL (HA OS / Supervised only — uses the Supervisor API). "
+        "Stop, start, or restart the Home Assistant Core container. Unlike "
+        "haops_system_restart (which asks a RUNNING HA to restart itself via "
+        "service call), this drives the Supervisor, so it can STOP Core fully "
+        "and START it again — needed when you must free a resource HA holds "
+        "(e.g. a serial/USB port for in-place Zigbee coordinator flashing). "
+        "Two-phase: call without confirm to preview + get a token, then "
+        "confirm=true + token. "
+        "WATCHDOG: on action=stop the Supervisor watchdog is disabled first "
+        "(otherwise it would auto-restart Core within seconds); on "
+        "action=start it is re-enabled. So the stop/flash/start sequence is: "
+        "haops_system_core(stop) -> do the work -> haops_system_core(start). "
+        "After stop, the HA REST/WS API is unreachable BY DESIGN — that is "
+        "success, not failure; the Supervisor API (and this tool) still work. "
+        "Parameters: action ('stop'|'start'|'restart', required), "
+        "confirm (bool, default false), token (string, if confirming)."
+    ),
+    params={
+        "action": {
+            "type": "string",
+            "description": "One of: stop, start, restart",
+        },
+        "confirm": {
+            "type": "boolean", "description": "Execute the action",
+            "default": False,
+        },
+        "token": {
+            "type": "string",
+            "description": "Confirmation token from preview step",
+        },
+    },
+)
+async def haops_system_core(
+    ctx: HaOpsContext,
+    action: str,
+    confirm: bool = False,
+    token: str | None = None,
+) -> dict[str, Any]:
+    action = (action or "").lower()
+    if action not in _CORE_ACTIONS:
+        return {"error": f"action must be one of {_CORE_ACTIONS}, got {action!r}"}
+
+    from ha_ops_mcp.tools.addon import _supervisor_post
+
+    if not confirm:
+        warn = {
+            "stop": "Stops HA Core. Watchdog is disabled first so it stays "
+            "down. The HA API will be unreachable until you call "
+            "haops_system_core(start). All automations halt.",
+            "start": "Starts HA Core and re-enables the Supervisor watchdog.",
+            "restart": "Restarts HA Core via the Supervisor (full container "
+            "restart). All automations and connections interrupted.",
+        }[action]
+        tk = ctx.safety.create_token(
+            action="system_core", details={"core_action": action},
+        )
+        return {
+            "warning": warn,
+            "token": tk.id,
+            "message": f"Call again with confirm=true and this token to {action} Core.",
+        }
+
+    if token is None:
+        return {"error": "confirm=true requires a token"}
+    try:
+        token_data = ctx.safety.validate_token(token)
+    except Exception as e:
+        return {"error": str(e)}
+    action = token_data.details.get("core_action", action)
+
+    steps: list[dict[str, Any]] = []
+
+    if action == "stop":
+        # Disable watchdog first, else the Supervisor revives Core in seconds.
+        wd = await _supervisor_post(ctx, "/core/options", {"watchdog": False})
+        steps.append({"step": "watchdog_off", "result": wd})
+        stop_res = await _supervisor_post(ctx, "/core/stop")
+        steps.append({"step": "core_stop", "result": stop_res})
+        ok = not (isinstance(stop_res, dict) and stop_res.get("error"))
+    elif action == "start":
+        start_res = await _supervisor_post(ctx, "/core/start")
+        steps.append({"step": "core_start", "result": start_res})
+        wd = await _supervisor_post(ctx, "/core/options", {"watchdog": True})
+        steps.append({"step": "watchdog_on", "result": wd})
+        ok = not (isinstance(start_res, dict) and start_res.get("error"))
+    else:  # restart
+        res = await _supervisor_post(ctx, "/core/restart")
+        steps.append({"step": "core_restart", "result": res})
+        ok = not (isinstance(res, dict) and res.get("error"))
+
+    ctx.safety.consume_token(token)
+    await ctx.audit.log(
+        tool="system_core",
+        details={"action": action, "steps": steps},
+        success=ok, token_id=token,
+    )
+
+    msg = {
+        "stop": "HA Core stop requested (watchdog disabled). The HA API is now "
+        "unreachable as expected; call haops_system_core(start) when done.",
+        "start": "HA Core start requested (watchdog re-enabled). Allow 30-120s; "
+        "poll haops_self_check until the API is back.",
+        "restart": "HA Core restart requested. Allow 30-120s; poll "
+        "haops_self_check until the API is back.",
+    }[action]
+    return {"success": ok, "action": action, "steps": steps, "message": msg}
+
+
 @registry.tool(
     name="haops_system_backup",
     description=(

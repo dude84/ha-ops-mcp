@@ -44,7 +44,8 @@ All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 | `haops_entity_find` | Read | Fuzzy search across entity_id, friendly_name, device name, area name. |
 | `haops_entity_audit` | Read | Health report — unavailable, orphaned, stale, duplicate names, area:device ratio outliers. |
 | `haops_entity_remove` | Write | Two-phase entity removal with backup and rollback savepoints. |
-| `haops_entity_disable` | Write | Two-phase bulk disable with rollback savepoints. |
+| `haops_entity_toggle` | Write | Two-phase bulk enable/disable (symmetric `disabled_by` flip) with rollback savepoints. |
+| `haops_monitor_entity` | Read | Poll one entity (or attribute) live for a fixed window; returns time series + stats (min/max/mean/stdev, change count). For averaging noisy reads / catching transients. |
 
 ## Registry tools
 
@@ -72,15 +73,27 @@ Wraps HA's collection-helper WebSocket API for `input_boolean`, `input_number`, 
 | `haops_system_logs` | Read | Filtered error log — by level, integration, regex, line count. |
 | `haops_system_reload` | Write | Targeted domain reload (automations, scripts, scenes, core, all) without restart. Optional post-reload entity verification. |
 | `haops_system_restart` | Write | Two-phase HA restart. Last resort — prefer `haops_system_reload` for individual domains. |
+| `haops_system_core` | Write | Two-phase Supervisor-driven Core stop/start/restart. Stop disables the watchdog first (re-enabled on start) — needed to free a resource HA holds, e.g. a serial port for in-place Zigbee flashing. HA OS / Supervised only. |
 | `haops_system_backup` | Write | Trigger a full HA backup via Supervisor or Core API. |
 | `haops_self_check` | Read | Validate all connections — REST, WebSocket, database, filesystem, backup directory. Run first to diagnose connectivity. |
 | `haops_tools_check` | Read | Passive integration test — exercises each tool group with real read-only operations. Run after HA upgrades. |
+
+## Zigbee / ZHA tools
+
+Ground truth is `<config_root>/zigbee.db` (the zigpy SQLite DB — separate from the HA recorder, so `haops_db_*` don't touch it) plus `core.device_registry` for names. Table suffixes (`devices_v15`…) are discovered at runtime.
+
+| Tool | Type | Description |
+|---|---|---|
+| `haops_zigbee_info` | Read | Coordinator firmware/metadata + per-device last_seen, LQI-at-coordinator, parent/relationship, stale list. No HA API call. |
+| `haops_zigbee_scan` | Read | Force a fresh zigpy topology/neighbor scan (LQI snapshot is otherwise hours stale). Re-read `haops_zigbee_info` after ~30-60s. |
+| `haops_zha_reconfigure_device` | Write | Two-phase ZHA "Reconfigure device" (re-interview + re-bind reports) by ieee/device_id/entity_id. Recovers devices wedged by a ZHA reload (e.g. Aqara FP1). |
 
 ## Service tools
 
 | Tool | Type | Description |
 |---|---|---|
-| `haops_service_call` | Write | Generic HA service call — the "everything else" escape hatch. Captures before/after state. |
+| `haops_service_call` | Write | Generic HA service call — the "everything else" escape hatch (REST services). Captures before/after state. |
+| `haops_ws_command` | Write | Escape hatch for WS-only commands (registry updates, zha/*, lovelace/*, diagnostics). No allowlist (power-user tool). Read-shaped types run immediately; others are two-phase for audit. |
 
 ## Backup & rollback tools
 

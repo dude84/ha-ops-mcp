@@ -68,6 +68,7 @@ async def _check_rest_api(ctx: HaOpsContext) -> dict[str, Any]:
         "tools_affected": [
             "haops_entity_list", "haops_entity_audit", "haops_entity_state",
             "haops_system_info", "haops_system_logs", "haops_service_call",
+            "haops_monitor_entity",
         ],
         "tests": checks,
     }
@@ -140,6 +141,9 @@ async def _check_websocket(ctx: HaOpsContext) -> dict[str, Any]:
             "haops_batch_preview", "haops_batch_apply",
             "haops_dashboard_resources",
             "haops_config_validate",
+            "haops_entity_toggle", "haops_entity_remove",
+            "haops_ws_command", "haops_zha_reconfigure_device",
+            "haops_zigbee_scan",
         ],
         "tests": checks,
     }
@@ -384,6 +388,45 @@ async def _check_supervisor(ctx: HaOpsContext) -> dict[str, Any]:
         "tools_affected": [
             "haops_addon_list", "haops_addon_info",
             "haops_addon_logs", "haops_addon_restart",
+            "haops_system_core",
+        ],
+        "tests": checks,
+    }
+
+
+async def _check_zigbee(ctx: HaOpsContext) -> dict[str, Any]:
+    """Check the zigpy DB is present + readable (powers haops_zigbee_info)."""
+    from ha_ops_mcp.tools.zigbee import _read_zigbee_db, _zigbee_db_path
+
+    checks: dict[str, Any] = {}
+    db_path = _zigbee_db_path(ctx)
+    if not db_path.exists():
+        return {
+            "status": "skip",
+            "reason": f"No zigbee.db at {db_path} (not a ZHA install).",
+            "tools_affected": [
+                "haops_zigbee_info", "haops_zigbee_scan",
+                "haops_zha_reconfigure_device",
+            ],
+            "tests": {"zigbee_db_present": {"ok": False}},
+        }
+    try:
+        import asyncio
+        data = await asyncio.to_thread(_read_zigbee_db, str(db_path))
+        checks["zigbee_db_read"] = {
+            "ok": True,
+            "device_count": len(data.get("devices", [])),
+            "table_versions": data.get("tables"),
+        }
+    except Exception as e:
+        checks["zigbee_db_read"] = {"ok": False, "error": str(e)[:200]}
+
+    all_ok = all(c.get("ok") for c in checks.values())
+    return {
+        "status": "pass" if all_ok else "fail",
+        "tools_affected": [
+            "haops_zigbee_info", "haops_zigbee_scan",
+            "haops_zha_reconfigure_device",
         ],
         "tests": checks,
     }
@@ -586,6 +629,7 @@ async def haops_tools_check(ctx: HaOpsContext) -> dict[str, Any]:
     results["refs"] = await _check_refs(ctx)
     results["debugger"] = await _check_debugger(ctx)
     results["helpers"] = await _check_helpers(ctx)
+    results["zigbee"] = await _check_zigbee(ctx)
 
     # Summary
     statuses = [r.get("status") for r in results.values()]

@@ -619,7 +619,7 @@ _HAOPS_PREFIXED_TOOLS: frozenset[str] = frozenset({
     "backup_prune",
     "rollback",
     "entity_remove",
-    "entity_disable",
+    "entity_toggle",
     "entity_customize",
     "entities_assign_area",
     "integration_reload",
@@ -923,9 +923,16 @@ def _summarise_audit_entry(
     if tool == "entity_remove":
         ids = details.get("entity_ids") or []
         return f"Removed {len(ids)} entit{'y' if len(ids) == 1 else 'ies'}"
-    if tool == "entity_disable":
-        ids = details.get("entity_ids") or []
-        return f"Disabled {len(ids)} entit{'y' if len(ids) == 1 else 'ies'}"
+    if tool == "entity_toggle":
+        enable = bool(details.get("enable"))
+        # apply step records "enabled"/"disabled"; preview records "entity_ids"
+        ids = (
+            details.get("enabled" if enable else "disabled")
+            or details.get("entity_ids")
+            or []
+        )
+        word = "Enabled" if enable else "Disabled"
+        return f"{word} {len(ids)} entit{'y' if len(ids) == 1 else 'ies'}"
     if tool == "entity_customize":
         ids = details.get("entity_ids") or []
         return f"Customised {len(ids)} entit{'y' if len(ids) == 1 else 'ies'}"
@@ -1190,7 +1197,7 @@ def _audit_details_excerpt(tool: str, details: dict[str, Any]) -> dict[str, Any]
         "dashboard_apply": ["dashboard_id"],
         "backup_revert": ["type", "source_path", "dashboard_id", "backup_id"],
         "entity_remove": ["entity_ids"],
-        "entity_disable": ["entity_ids"],
+        "entity_toggle": ["entity_ids", "enable", "enabled", "disabled"],
         "entity_customize": ["entity_ids", "customizations", "overrides"],
         "entities_assign_area": ["area_id", "area", "entity_ids"],
         "db_execute": ["sql", "rowcount"],

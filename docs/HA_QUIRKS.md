@@ -157,7 +157,7 @@ cleanup.
 ### Bulk operations need care
 
 Deleting/disabling hundreds of entities rapidly can overwhelm HA's
-event bus. `haops_entity_remove` and `haops_entity_disable` batch
+event bus. `haops_entity_remove` and `haops_entity_toggle` batch
 operations.
 
 ### Input helpers are NOT in the entity registry

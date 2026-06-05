@@ -1,10 +1,37 @@
-"""Tests for entity mutation tools — remove, disable."""
+"""Tests for entity mutation tools — remove, toggle (enable/disable)."""
 
 from __future__ import annotations
 
 import pytest
 
-from ha_ops_mcp.tools.entity import haops_entity_disable, haops_entity_remove
+from ha_ops_mcp.tools import entity as entity_mod
+from ha_ops_mcp.tools.entity import haops_entity_remove, haops_entity_toggle
+
+
+@pytest.fixture
+def with_disabled_entity(monkeypatch):
+    """Inject a disabled entity into the registry view without perturbing the
+    shared fixture's entity count (many other tests assert exactly 3)."""
+    disabled = {
+        "entity_id": "sensor.disabled_diag",
+        "name": "Disabled Diagnostic",
+        "original_name": "Disabled Diagnostic",
+        "platform": "zha",
+        "area_id": None,
+        "device_id": None,
+        "disabled_by": "user",
+    }
+
+    async def _patched(ctx):
+        base = [
+            {"entity_id": "sensor.temperature", "name": "Temperature",
+             "platform": "mqtt", "disabled_by": None},
+            disabled,
+        ]
+        return base
+
+    monkeypatch.setattr(entity_mod, "_get_entity_registry", _patched)
+    return disabled
 
 
 @pytest.mark.asyncio
@@ -49,8 +76,8 @@ async def test_entity_remove_empty(ctx):
 
 
 @pytest.mark.asyncio
-async def test_entity_disable_preview(ctx):
-    result = await haops_entity_disable(
+async def test_entity_toggle_disable_preview(ctx):
+    result = await haops_entity_toggle(
         ctx, entity_ids=["sensor.temperature"]
     )
     assert "preview" in result
@@ -59,11 +86,11 @@ async def test_entity_disable_preview(ctx):
 
 
 @pytest.mark.asyncio
-async def test_entity_disable_confirm(ctx):
-    preview = await haops_entity_disable(
+async def test_entity_toggle_disable_confirm(ctx):
+    preview = await haops_entity_toggle(
         ctx, entity_ids=["sensor.temperature"]
     )
-    result = await haops_entity_disable(
+    result = await haops_entity_toggle(
         ctx,
         entity_ids=["sensor.temperature"],
         confirm=True,
@@ -74,22 +101,99 @@ async def test_entity_disable_confirm(ctx):
 
 
 @pytest.mark.asyncio
-async def test_entity_disable_empty(ctx):
-    result = await haops_entity_disable(ctx, entity_ids=[])
+async def test_entity_toggle_already_disabled_skipped(ctx, with_disabled_entity):
+    """Disabling an already-disabled entity lands in already_disabled, not preview."""
+    result = await haops_entity_toggle(
+        ctx, entity_ids=["sensor.disabled_diag"]
+    )
+    assert result["preview"] == []
+    assert "sensor.disabled_diag" in result["already_disabled"]
+
+
+@pytest.mark.asyncio
+async def test_entity_toggle_enable_preview(ctx, with_disabled_entity):
+    result = await haops_entity_toggle(
+        ctx, entity_ids=["sensor.disabled_diag"], enable=True
+    )
+    assert len(result["preview"]) == 1
+    assert result["preview"][0]["entity_id"] == "sensor.disabled_diag"
+    assert "token" in result
+
+
+@pytest.mark.asyncio
+async def test_entity_toggle_enable_already_enabled_skipped(ctx, with_disabled_entity):
+    """Enabling an already-enabled entity lands in already_enabled."""
+    result = await haops_entity_toggle(
+        ctx, entity_ids=["sensor.temperature"], enable=True
+    )
+    assert result["preview"] == []
+    assert "sensor.temperature" in result["already_enabled"]
+
+
+@pytest.mark.asyncio
+async def test_entity_toggle_enable_confirm_sends_null_disabled_by(
+    ctx, mock_ws, with_disabled_entity
+):
+    """Enable apply must send disabled_by=None over WS and report `enabled`."""
+    preview = await haops_entity_toggle(
+        ctx, entity_ids=["sensor.disabled_diag"], enable=True
+    )
+    mock_ws.send_command.reset_mock()
+    result = await haops_entity_toggle(
+        ctx,
+        entity_ids=["sensor.disabled_diag"],
+        enable=True,
+        confirm=True,
+        token=preview["token"],
+    )
+    assert result["success"] is True
+    assert "sensor.disabled_diag" in result["enabled"]
+    ws_calls = [c for c in mock_ws.send_command.await_args_list
+                if c.args and c.args[0] == "config/entity_registry/update"]
+    assert ws_calls
+    assert ws_calls[0].kwargs.get("entity_id") == "sensor.disabled_diag"
+    assert ws_calls[0].kwargs.get("disabled_by") is None
+
+
+@pytest.mark.asyncio
+async def test_entity_toggle_token_carries_intent(
+    ctx, mock_ws, with_disabled_entity
+):
+    """A token minted by an enable preview must enable even if the apply
+    call omits enable=true — intent is read from the token, not the default."""
+    preview = await haops_entity_toggle(
+        ctx, entity_ids=["sensor.disabled_diag"], enable=True
+    )
+    mock_ws.send_command.reset_mock()
+    result = await haops_entity_toggle(
+        ctx,
+        entity_ids=["sensor.disabled_diag"],
+        confirm=True,  # note: enable defaulted to False here
+        token=preview["token"],
+    )
+    assert "enabled" in result
+    ws_calls = [c for c in mock_ws.send_command.await_args_list
+                if c.args and c.args[0] == "config/entity_registry/update"]
+    assert ws_calls[0].kwargs.get("disabled_by") is None
+
+
+@pytest.mark.asyncio
+async def test_entity_toggle_empty(ctx):
+    result = await haops_entity_toggle(ctx, entity_ids=[])
     assert "error" in result
 
 
 @pytest.mark.asyncio
-async def test_entity_disable_uses_websocket_not_rest(ctx, mock_ws, mock_rest):
+async def test_entity_toggle_uses_websocket_not_rest(ctx, mock_ws, mock_rest):
     """Regression v0.8.8: the disable apply step used POST
     /api/config/entity_registry/<id> which HA removed from the REST API.
     It now uses WS config/entity_registry/update."""
-    preview = await haops_entity_disable(
+    preview = await haops_entity_toggle(
         ctx, entity_ids=["sensor.temperature"]
     )
     mock_ws.send_command.reset_mock()
     mock_rest.post.reset_mock()
-    await haops_entity_disable(
+    await haops_entity_toggle(
         ctx,
         entity_ids=["sensor.temperature"],
         confirm=True,
@@ -108,16 +212,16 @@ async def test_entity_disable_uses_websocket_not_rest(ctx, mock_ws, mock_rest):
 
 
 @pytest.mark.asyncio
-async def test_entity_disable_success_false_when_ws_fails(ctx, mock_ws):
+async def test_entity_toggle_success_false_when_ws_fails(ctx, mock_ws):
     """Regression v0.8.8: the apply step previously returned `success: true`
     even when every per-entity call failed. Now reflects errors."""
     from ha_ops_mcp.connections.websocket import WebSocketError
 
-    preview = await haops_entity_disable(
+    preview = await haops_entity_toggle(
         ctx, entity_ids=["sensor.temperature"]
     )
     mock_ws.send_command.side_effect = WebSocketError("HTTP 404")
-    result = await haops_entity_disable(
+    result = await haops_entity_toggle(
         ctx,
         entity_ids=["sensor.temperature"],
         confirm=True,

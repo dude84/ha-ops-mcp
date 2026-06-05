@@ -51,7 +51,7 @@ Legend: ● = required, ◐ = preferred (falls back to another capability), ○ 
 | `haops_entity_find` | ○ | ◐ | | ◐ | | | Any | FS preferred; REST best-effort for live names |
 | `haops_entity_audit` | | ◐ | | ◐ | | | Any | Same as list |
 | `haops_entity_remove` | | ● | | | | | Any | WS only |
-| `haops_entity_disable` | | ● | | | | | Any | WS only |
+| `haops_entity_toggle` | | ● | | | | | Any | WS only |
 | **Registry** |
 | `haops_registry_query` | | ◐ | | ◐ | | | Any | FS preferred, WS fallback |
 | `haops_device_info` | ○ | ◐ | | ◐ | | | Any | FS preferred |

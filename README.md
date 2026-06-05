@@ -76,7 +76,7 @@ The assistant reads the dashboard, builds a JSON Patch, shows you the diff, appl
 **Entity cleanup across registries and config:**
 > "Find all unavailable entities, check what references them, and disable the ones from removed devices"
 
-Runs `haops_entity_audit` to find problems, `haops_refactor_check` to map references, then `haops_entity_disable` with a preview of what changes. Cross-references YAML config, dashboards, and registries.
+Runs `haops_entity_audit` to find problems, `haops_refactor_check` to map references, then `haops_entity_toggle` with a preview of what changes. Cross-references YAML config, dashboards, and registries.
 
 **Edit config YAML with validation:**
 > "Add a template sensor for daily energy cost, validate the config, and reload"
