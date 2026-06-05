@@ -13,6 +13,7 @@ from ha_ops_mcp.tools.zigbee import (
     _read_zigbee_db,
     _zha_ieee_map,
     haops_zigbee_info,
+    haops_zigbee_scan,
 )
 
 # --- haops_monitor_entity ---------------------------------------------------
@@ -146,6 +147,61 @@ def test_zha_ieee_map():
     assert m["00:11:22:33:44:55:66:77"]["name"] == "Coordinator"
     # name_by_user wins; ieee lowercased
     assert m["aa:bb:cc:dd:ee:ff:00:11"]["name"] == "Office Motion"
+
+
+def test_zha_ieee_map_tolerates_non_2tuple_identifiers():
+    """Regression (v0.39.0 live bug): HomeKit stores 3-element identifiers,
+    e.g. ['homekit', '<id>', 'homekit.bridge']. A strict `for k, v in ids`
+    unpack raised 'too many values to unpack (expected 2)' and took down
+    haops_zigbee_info AND haops_zha_reconfigure_device for the whole registry.
+    The mapper must skip odd-length tuples, not crash."""
+    reg = [
+        {"id": "hk", "name": "HASS Bridge",
+         "connections": [],
+         "identifiers": [["homekit", "8427912b", "homekit.bridge"]]},
+        {"id": "z", "name": "Coordinator",
+         "connections": [["zigbee", "00:12:4b:00:24:c8:68:76"]],
+         "identifiers": [["zha", "00:12:4b:00:24:c8:68:76"]]},
+    ]
+    m = _zha_ieee_map(reg)  # must not raise
+    assert "00:12:4b:00:24:c8:68:76" in m
+    assert m["00:12:4b:00:24:c8:68:76"]["name"] == "Coordinator"
+    # the homekit device contributes nothing (not a ZHA device)
+    assert len(m) == 1
+
+
+@pytest.mark.asyncio
+async def test_zigbee_scan_timeout_means_initiated(ctx, mock_ws):
+    """Regression (v0.39.0 live bug): zha/topology/update is valid but
+    long-running — HA only replies after the full scan, so the default await
+    timed out and the tool reported failure even though the scan WAS started.
+    A timeout must now read as success/initiated."""
+    from ha_ops_mcp.connections.websocket import WebSocketError
+    mock_ws.send_command.side_effect = WebSocketError(
+        "Timeout waiting for response to zha/topology/update")
+    result = await haops_zigbee_scan(ctx)
+    assert result["success"] is True
+    assert result["status"] == "initiated"
+
+
+@pytest.mark.asyncio
+async def test_zigbee_scan_real_error_surfaces(ctx, mock_ws):
+    """A genuine fast error (e.g. unknown_command on a future ZHA) must NOT be
+    masked as success — only the timeout case is treated as initiated."""
+    from ha_ops_mcp.connections.websocket import WebSocketError
+    mock_ws.send_command.side_effect = WebSocketError(
+        "Command zha/topology/update failed: unknown_command")
+    result = await haops_zigbee_scan(ctx)
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_zigbee_scan_fast_success(ctx, mock_ws):
+    """Small mesh that returns before the timeout still succeeds."""
+    mock_ws.send_command.return_value = {}
+    result = await haops_zigbee_scan(ctx)
+    assert result["success"] is True
+    assert result["status"] == "completed"
 
 
 @pytest.mark.asyncio

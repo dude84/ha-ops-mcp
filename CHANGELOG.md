@@ -1,3 +1,12 @@
+## 0.39.1
+
+**Fixes for two v0.39.0 Zigbee tool bugs found on first live use** (both root-caused against the live instance, not guessed).
+
+- **`haops_zigbee_info` + `haops_zha_reconfigure_device` — `too many values to unpack (expected 2)`.** Both share `_zha_ieee_map`, which did `for kind, val in dev.get("identifiers")`. The HomeKit integration stores **3-element** identifiers (`["homekit", "<id>", "homekit.bridge"]`), so the strict 2-tuple unpack threw the moment it walked past the HomeKit bridge — taking down both tools for the entire registry on every call. Now indexes defensively (`len(el) >= 2`, `el[0]`/`el[1]`) over both `connections` and `identifiers`. Verified on the live registry (238 devices, incl. the offending HomeKit bridge): 28 ZHA devices mapped, coordinator firmware `CodeRevision 20250321` surfaced, no crash.
+- **`haops_zigbee_scan` — false "Topology scan request failed: Timeout".** `zha/topology/update` is the correct command, but it's long-running: HA only returns the WS result after the whole mesh has been walked (verified live: no reply in 15s, and no error frame — an unknown command would error immediately). The tool awaited the result with the default 30s timeout and reported failure even though the scan had started. Now fires with a short timeout and treats the timeout as `status: "initiated"` (the scan runs server-side and refreshes `zigbee.db` regardless); a genuine fast error still surfaces.
+
+New regression tests for both (the HomeKit 3-tuple mapper case and all three scan outcomes). Full suite 604 green.
+
 ## 0.39.0
 
 **Zigbee/ZHA tooling + closing the 2026-06-05 shell-gap inventory.** A long coordinator-flash session had to drop to `haops_exec_shell` repeatedly because no first-class tool existed (enable an entity, read the zigpy mesh, stop/start Core, reconfigure a ZHA device). Each shell reach was a tool gap; this release closes them.

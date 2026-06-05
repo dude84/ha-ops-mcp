@@ -129,18 +129,24 @@ def _zha_ieee_map(reg: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
     ZHA devices carry the ieee in ``connections`` as ("zigbee", ieee) and/or
     ``identifiers`` as ("zha", ieee).
+
+    Note: registry tuples are NOT guaranteed 2-element. HomeKit stores
+    3-element identifiers (``["homekit", "<id>", "homekit.bridge"]``), so we
+    index defensively rather than unpacking `for k, v in ...` — a strict
+    unpack raised "too many values to unpack (expected 2)" and took down
+    every caller for the whole registry.
     """
     out: dict[str, dict[str, Any]] = {}
     for dev in reg:
         ieee: str | None = None
-        for kind, val in dev.get("connections", []) or []:
-            if kind in ("zigbee", "zha"):
-                ieee = val
+        for el in dev.get("connections") or []:
+            if len(el) >= 2 and el[0] in ("zigbee", "zha"):
+                ieee = el[1]
                 break
         if not ieee:
-            for kind, val in dev.get("identifiers", []) or []:
-                if kind == "zha":
-                    ieee = val
+            for el in dev.get("identifiers") or []:
+                if len(el) >= 2 and el[0] == "zha":
+                    ieee = el[1]
                     break
         if not ieee:
             continue
@@ -401,9 +407,12 @@ async def haops_zha_reconfigure_device(
     description=(
         "Force a fresh ZHA topology/neighbor scan so haops_zigbee_info "
         "returns current LQI/route data instead of zigpy's hours-old "
-        "snapshot. Runs over WebSocket (zha/topology/update). The scan itself "
-        "is async on the HA side — it kicks off the refresh; allow ~30-60s "
-        "(longer on big meshes) before re-reading haops_zigbee_info. "
+        "snapshot. Runs over WebSocket (zha/topology/update). "
+        "The scan is LONG-RUNNING on the HA side — HA only sends the WS "
+        "result once the whole mesh has been walked (often >30s), so this "
+        "tool fires the scan and returns without waiting for it to finish "
+        "(status='initiated'). Allow ~30-60s (longer on big meshes), then "
+        "call haops_zigbee_info to read the refreshed data. "
         "Read-mostly (no device config change) so no confirm step. "
         "No parameters."
     ),
@@ -411,14 +420,36 @@ async def haops_zha_reconfigure_device(
 )
 async def haops_zigbee_scan(ctx: HaOpsContext) -> dict[str, Any]:
     from ha_ops_mcp.connections.websocket import WebSocketError
+
+    # zha/topology/update is a VALID command but its WS result only arrives
+    # after the full mesh scan completes (verified live: no reply in 15s, and
+    # no error frame either — an unknown command would error immediately).
+    # So we fire it with a short timeout and treat the timeout as "started":
+    # the scan runs server-side and refreshes zigbee.db regardless. A genuine
+    # fast error (unknown_command on a future ZHA) replies quickly with a
+    # "Command ... failed" message and is surfaced instead of masked.
+    # (Timeout message text is owned by websocket.py send_command.)
+    initiated = False
     try:
-        await ctx.ws.send_command("zha/topology/update")
+        await ctx.ws.send_command("zha/topology/update", timeout=8)
     except WebSocketError as e:
-        return {"error": f"Topology scan request failed: {e}. The WS command "
-                "type may differ on your HA/ZHA version."}
-    await ctx.audit.log(tool="zigbee_scan", details={}, op_class="read")
+        if "Timeout waiting for response" in str(e):
+            initiated = True
+        else:
+            return {"error": f"Topology scan request failed: {e}. The WS "
+                    "command type may differ on your HA/ZHA version."}
+
+    await ctx.audit.log(
+        tool="zigbee_scan", details={"async": initiated}, op_class="read"
+    )
     return {
         "success": True,
-        "message": "Topology scan requested. Allow ~30-60s for zigpy to "
-        "refresh, then call haops_zigbee_info to read fresh LQI/routes.",
+        "status": "initiated" if initiated else "completed",
+        "message": (
+            "Topology scan triggered; it runs asynchronously on HA (the WS "
+            "result only returns after the full mesh walk). Allow ~30-60s, "
+            "then call haops_zigbee_info for fresh LQI/routes."
+            if initiated else
+            "Topology scan completed. Call haops_zigbee_info for fresh data."
+        ),
     }
