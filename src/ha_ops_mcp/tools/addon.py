@@ -21,6 +21,22 @@ logger = logging.getLogger(__name__)
 _SUPERVISOR_URL = "http://supervisor"
 
 
+def _supervisor_token(ctx: HaOpsContext) -> str:
+    """Token for Supervisor API calls.
+
+    MUST be the addon's SUPERVISOR_TOKEN (always in the addon env), NOT the
+    configured HA-Core token. They coincide only when `ha_token` is empty (run.sh
+    aliases the empty token to SUPERVISOR_TOKEN). The moment a real HA user token
+    (LLAT) is set in `ha_token` — e.g. for the UI tools or a dedicated service
+    user — reusing it here gets a 403: a Core user token is not a Supervisor
+    token. Prefer the env var; fall back to the configured token only for
+    non-addon/dev runs where SUPERVISOR_TOKEN isn't present.
+    """
+    import os
+
+    return os.environ.get("SUPERVISOR_TOKEN") or ctx.config.ha.resolve_token()
+
+
 async def _supervisor_get(
     ctx: HaOpsContext, path: str
 ) -> dict[str, Any] | None:
@@ -33,7 +49,7 @@ async def _supervisor_get(
 
     url = f"{_SUPERVISOR_URL}{path}"
     headers = {
-        "Authorization": f"Bearer {ctx.config.ha.resolve_token()}",
+        "Authorization": f"Bearer {_supervisor_token(ctx)}",
     }
 
     try:
@@ -58,7 +74,7 @@ async def _supervisor_post(
 
     url = f"{_SUPERVISOR_URL}{path}"
     headers = {
-        "Authorization": f"Bearer {ctx.config.ha.resolve_token()}",
+        "Authorization": f"Bearer {_supervisor_token(ctx)}",
     }
 
     try:
@@ -232,7 +248,7 @@ async def haops_addon_logs(
 
     url = f"{_SUPERVISOR_URL}/addons/{slug}/logs"
     headers = {
-        "Authorization": f"Bearer {ctx.config.ha.resolve_token()}",
+        "Authorization": f"Bearer {_supervisor_token(ctx)}",
     }
 
     try:

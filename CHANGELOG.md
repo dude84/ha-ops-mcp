@@ -1,3 +1,7 @@
+## 0.40.1
+
+**Supervisor API auth fix — use `SUPERVISOR_TOKEN`, not the configured HA token.** Every `http://supervisor/*` call (`haops_addon_list/info/logs/restart`, `haops_system_core`, core-log fetch, the tools_check supervisor probe) authenticated with `ctx.config.ha.resolve_token()`. That only worked because `run.sh` aliases an **empty** `ha_token` to `SUPERVISOR_TOKEN`. The moment a real HA **long-lived access token** is set in `ha_token` (e.g. to give a tool a frontend session, or for a dedicated service user), those calls sent a *Core user token* to the Supervisor → **HTTP 403** ("supervisor_info HTTP 403", addon tools + core power dead). New `addon._supervisor_token()` prefers the `SUPERVISOR_TOKEN` env var (always present in the addon) and falls back to the configured token only for non-addon/dev runs. Applied across `addon.py`, `utils/logs.py`, and the tools_check probe. + regression test. Found on a live deploy that set a custom token; everything else (HA Core REST/WS/DB/filesystem) was unaffected.
+
 ## 0.40.0
 
 **OAuth store moved to a survival volume + a dev-deploy branch mode.** Groundwork so a future base-image migration (and any addon reinstall/slug-change) doesn't cost data or client re-auth.

@@ -41,7 +41,12 @@ async def fetch_log_text(ctx: HaOpsContext) -> tuple[str, str] | None:
             pass
 
     try:
-        headers = {"Authorization": f"Bearer {ctx.config.ha.resolve_token()}"}
+        import os
+
+        # Supervisor proxy → use SUPERVISOR_TOKEN (env), not the HA-Core token;
+        # a user LLAT in ha_token would 403 here. See addon._supervisor_token.
+        sup_token = os.environ.get("SUPERVISOR_TOKEN") or ctx.config.ha.resolve_token()
+        headers = {"Authorization": f"Bearer {sup_token}"}
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession() as session, session.get(
             "http://supervisor/core/logs", headers=headers, timeout=timeout

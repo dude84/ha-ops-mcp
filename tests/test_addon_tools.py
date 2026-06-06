@@ -168,3 +168,22 @@ async def test_addon_restart_not_found(ctx):
     ):
         result = await haops_addon_restart(ctx, slug="nonexistent")
     assert "error" in result
+
+
+def test_supervisor_token_prefers_env_over_config(monkeypatch):
+    """Supervisor calls must use SUPERVISOR_TOKEN, not the HA-Core token.
+
+    Regression: with a user LLAT in ha_token, reusing it for the Supervisor API
+    returns 403 (a Core token is not a Supervisor token). v0.40.x fix.
+    """
+    from types import SimpleNamespace
+
+    from ha_ops_mcp.tools.addon import _supervisor_token
+
+    ctx = SimpleNamespace(
+        config=SimpleNamespace(ha=SimpleNamespace(resolve_token=lambda: "LLAT"))
+    )
+    monkeypatch.setenv("SUPERVISOR_TOKEN", "SUPTOK")
+    assert _supervisor_token(ctx) == "SUPTOK"  # env wins
+    monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
+    assert _supervisor_token(ctx) == "LLAT"  # fallback for non-addon/dev

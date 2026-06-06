@@ -334,7 +334,9 @@ async def _check_supervisor(ctx: HaOpsContext) -> dict[str, Any]:
     checks: dict[str, Any] = {}
 
     try:
-        headers = {"Authorization": f"Bearer {ctx.config.ha.resolve_token()}"}
+        from ha_ops_mcp.tools.addon import _supervisor_token
+
+        headers = {"Authorization": f"Bearer {_supervisor_token(ctx)}"}
         timeout = aiohttp.ClientTimeout(total=5)
         async with aiohttp.ClientSession() as session, session.get(
             "http://supervisor/info", headers=headers, timeout=timeout
