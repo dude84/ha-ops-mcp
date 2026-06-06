@@ -434,6 +434,41 @@ async def _check_zigbee(ctx: HaOpsContext) -> dict[str, Any]:
     }
 
 
+async def _check_ui(ctx: HaOpsContext) -> dict[str, Any]:
+    """Check the headless-browser capture stack (powers haops_ui_* tools).
+
+    Read-only and cheap: reports whether Playwright/Chromium is present (Debian
+    build) and whether a frontend token is configured. Does NOT launch a browser
+    — a real capture needs a reachable HA frontend + valid LLAT, exercised by the
+    UI tools themselves.
+    """
+    from ha_ops_mcp.ui.capture import browser_available
+
+    tools = ["haops_ui_screenshot", "haops_ui_perf"]
+    if not browser_available():
+        return {
+            "status": "skipped",
+            "reason": "Playwright/Chromium not in this image (Alpine build or "
+            "browser stack absent). The UI tools need the Debian addon build.",
+            "tools_affected": tools,
+            "tests": {"browser_available": {"ok": False}},
+        }
+    has_token = bool(ctx.config.ha.resolve_token())
+    checks = {
+        "browser_available": {"ok": True},
+        "access_token_present": {"ok": has_token},
+    }
+    if not has_token:
+        return {
+            "status": "skipped",
+            "reason": "Browser present but no HA access token — UI tools need a "
+            "long-lived access token (set ha.token).",
+            "tools_affected": tools,
+            "tests": checks,
+        }
+    return {"status": "pass", "tools_affected": tools, "tests": checks}
+
+
 async def _check_shell(ctx: HaOpsContext) -> dict[str, Any]:
     """Exercise shell subprocess execution."""
     import asyncio
@@ -632,6 +667,7 @@ async def haops_tools_check(ctx: HaOpsContext) -> dict[str, Any]:
     results["debugger"] = await _check_debugger(ctx)
     results["helpers"] = await _check_helpers(ctx)
     results["zigbee"] = await _check_zigbee(ctx)
+    results["ui"] = await _check_ui(ctx)
 
     # Summary
     statuses = [r.get("status") for r in results.values()]
