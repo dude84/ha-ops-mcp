@@ -124,8 +124,11 @@ if [[ "${DEV_MODE}" == "1" ]]; then
     DEV_BASE=$(git -C "${REPO_ROOT}" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
     DEV_SHA=$(git -C "${REPO_ROOT}" rev-parse --short "${REF}" 2>/dev/null \
         || git -C "${REPO_ROOT}" rev-parse --short HEAD)
-    DEV_VERSION="${DEV_BASE}-dev.${DEV_SHA}.$(date +%H%M%S)"
-    echo "▶ Stamping dev version ${DEV_VERSION}..."
+    # PEP 440-canonical dev release (hatchling validates pyproject.toml against
+    # PEP 440 — a '-dev.<sha>.<time>' suffix is rejected). '.dev<N>' needs an
+    # integer; use a timestamp for uniqueness so Supervisor always rebuilds.
+    DEV_VERSION="${DEV_BASE}.dev$(date +%Y%m%d%H%M%S)"
+    echo "▶ Stamping dev version ${DEV_VERSION} (ref ${REF} @ ${DEV_SHA})..."
     "${REPO_ROOT}/scripts/sync-version.sh" "${DEV_VERSION}"
 else
     echo "▶ Syncing version from git tag..."
