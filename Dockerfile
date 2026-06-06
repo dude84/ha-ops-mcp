@@ -26,19 +26,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create virtual environment
 RUN python3 -m venv /opt/ha-ops-mcp
 
+# Browser stack FIRST — it doesn't depend on our source, so a code change won't
+# invalidate this layer and re-download Chromium (keeps rebuilds fast).
+# `--with-deps` apt-installs the headless shell's system libs (needs apt lists,
+# so refresh here and clean afterwards).
+RUN /opt/ha-ops-mcp/bin/pip install --no-cache-dir playwright \
+    && apt-get update \
+    && /opt/ha-ops-mcp/bin/playwright install --with-deps chromium-headless-shell \
+    && rm -rf /var/lib/apt/lists/* /root/.cache/pip
+
 # Copy project source — build context is the repo root
 COPY pyproject.toml README.md /tmp/ha-ops-mcp/
 COPY src/ /tmp/ha-ops-mcp/src/
 
-# Install the project (wheels only — fail loudly if a dep needs a build, rather
-# than silently dragging in a compiler), then Playwright + the headless Chromium
-# shell. `--with-deps` apt-installs the shell's system libraries (needs apt
-# lists, so refresh here and clean afterwards).
+# Install the project (wheels only — fail loudly if a dep needs a build rather
+# than silently dragging in a compiler).
 RUN /opt/ha-ops-mcp/bin/pip install --no-cache-dir --only-binary=:all: /tmp/ha-ops-mcp \
-    && /opt/ha-ops-mcp/bin/pip install --no-cache-dir playwright \
-    && apt-get update \
-    && /opt/ha-ops-mcp/bin/playwright install --with-deps chromium-headless-shell \
-    && rm -rf /var/lib/apt/lists/* /tmp/ha-ops-mcp /root/.cache/pip
+    && rm -rf /tmp/ha-ops-mcp /root/.cache/pip
 
 # Copy run script into the s6 service directory
 COPY run.sh /etc/services.d/ha-ops-mcp/run

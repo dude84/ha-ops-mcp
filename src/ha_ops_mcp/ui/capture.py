@@ -67,6 +67,19 @@ _PERF_READ_SCRIPT = """
   const p = window.__haops_perf || { longtasks: [], lcp: 0, cls: 0 };
   const lt = p.longtasks || [];
   const mem = performance.memory || {};
+  // HA renders entirely inside nested shadow DOM, so a flat querySelectorAll
+  // counts almost nothing. Walk light + shadow trees to get real totals.
+  let domNodes = 0, haCards = 0;
+  const walk = (root) => {
+    const els = root.querySelectorAll('*');
+    domNodes += els.length;
+    for (const e of els) {
+      const t = e.localName;
+      if (t === 'ha-card' || t === 'hui-card') haCards++;
+      if (e.shadowRoot) walk(e.shadowRoot);
+    }
+  };
+  try { walk(document); } catch (e) {}
   return {
     nav: {
       dom_content_loaded: nav.domContentLoadedEventEnd || null,
@@ -81,8 +94,8 @@ _PERF_READ_SCRIPT = """
     long_tasks: { count: lt.length, total_ms: Number(lt.reduce((a, t) => a + t.dur, 0).toFixed(1)),
                   max_ms: lt.length ? Number(Math.max(...lt.map((t) => t.dur)).toFixed(1)) : 0 },
     js_heap_mb: mem.usedJSHeapSize ? Number((mem.usedJSHeapSize / 1048576).toFixed(1)) : null,
-    dom_nodes: document.getElementsByTagName('*').length,
-    ha_cards: document.querySelectorAll('hui-card, ha-card').length,
+    dom_nodes: domNodes,
+    ha_cards: haCards,
   };
 })();
 """
