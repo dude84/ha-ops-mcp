@@ -373,6 +373,7 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
     import ha_ops_mcp.tools.shell  # noqa: F401
     import ha_ops_mcp.tools.system  # noqa: F401
     import ha_ops_mcp.tools.tools_check  # noqa: F401
+    import ha_ops_mcp.tools.ui_suite  # noqa: F401
     import ha_ops_mcp.tools.ws  # noqa: F401
     import ha_ops_mcp.tools.zigbee  # noqa: F401
 

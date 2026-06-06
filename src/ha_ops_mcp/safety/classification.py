@@ -60,6 +60,8 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "zigbee_info": ("read", "system"),
     "zigbee_scan": ("read", "system"),
     "monitor_entity": ("read", "entity"),
+    "ui_screenshot": ("read", "system"),
+    "ui_perf": ("read", "system"),
     # --- mutate ---
     "config_apply": ("mutate", "config"),  # sub-area refined from path
     "config_patch": ("mutate", "config"),
