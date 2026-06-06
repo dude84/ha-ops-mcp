@@ -179,11 +179,23 @@ echo "▶ Verifying remote files..."
 ${SSH_CMD} "${SSH_TARGET}" "ls -la ${REMOTE_ADDON_DIR}/config.yaml ${REMOTE_ADDON_DIR}/Dockerfile ${REMOTE_ADDON_DIR}/src/"
 echo "  ✓ Files verified"
 
-# ── Step 5: Rebuild (optional) ──
+# ── Step 5: Rebuild / update (optional) ──
 if [[ "${REBUILD}" == "1" ]]; then
-    echo "▶ Rebuilding app on ${HA_HOST}..."
-    ${SSH_CMD} "${SSH_TARGET}" "ha apps rebuild ${ADDON_SLUG}"
-    echo "  ✓ Rebuild complete (app auto-restarts)"
+    if [[ "${DEV_MODE}" == "1" ]]; then
+        # Dev mode bumped the version, so reload (re-scan /addons so Supervisor
+        # picks up the new version_latest) then update. Unlike `rebuild` — which
+        # rebuilds the image but leaves the recorded version label stale — update
+        # records the new version, so the addon's shown version matches the
+        # running code. The monotonic dev timestamp guarantees version_latest >
+        # installed, so update always fires.
+        echo "▶ Reloading + updating ${ADDON_SLUG} on ${HA_HOST}..."
+        ${SSH_CMD} "${SSH_TARGET}" "ha addons reload && ha addons update ${ADDON_SLUG}"
+        echo "  ✓ Updated (app auto-restarts)"
+    else
+        echo "▶ Rebuilding app on ${HA_HOST}..."
+        ${SSH_CMD} "${SSH_TARGET}" "ha apps rebuild ${ADDON_SLUG}"
+        echo "  ✓ Rebuild complete (app auto-restarts)"
+    fi
 fi
 
 # ── Read deployed version from config.yaml ──
