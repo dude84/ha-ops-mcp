@@ -15,6 +15,31 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.40.0` — verified 2026-06-06 (Singapore HA)
+
+| Component | Version | How to check |
+|---|---|---|
+| ha-ops-mcp (addon) | **0.40.0** (tag `v0.40.0`, `cf6070d`) | `haops_system_info` / `git describe --tags` |
+| Home Assistant Core | **2026.6.1** | `haops_self_check` → `rest_api.ha_version` |
+| HA DB backend | **MariaDB 11.4.10-MariaDB**, schema **53** | `haops_system_info` → `database` |
+| Claude Code CLI | **2.1.166** | `claude --version` |
+| Terminal host | **iTerm2 3.6.11** | iTerm → About / `$TERM_PROGRAM_VERSION` |
+| macOS | **26.5.1** (build 25F80, Darwin 25.5.0) | `sw_vers` |
+| Bun (CC runtime) | **1.3.14** | `bun --version` |
+| Node (local) | **v26.0.0** | `node --version` |
+| MCP transport | streamable-http, OAuth on | `claude mcp list` |
+| MCP URL | `http://homeassistant.local:8901/mcp` | must stay mDNS — OAuth resource is pinned to this host |
+| HA host LAN IP | `10.0.0.150` (stable) | `dscacheutil -q host -a name homeassistant.local` |
+
+**Notes for this baseline:**
+- v0.40.0 relocated the OAuth store from `/data` → `/backup/ha-ops-mcp/auth/` (survives addon
+  uninstall/slug-change). Migration verified live: 6 clients / 3 tokens carried over, **no re-auth**;
+  legacy `/data/oauth.json` left in place. Audit log already lived under `/backup` (intact, 501 ops).
+- HA OS update landed this session: Core **2026.6.0 → 2026.6.1**. `haops_self_check` `overall: ok`
+  (all backends) after the update + addon update.
+- Captured as the clean reference point immediately before the Debian base-swap / Playwright work
+  (branch `feat/debian-playwright-ui-suite`).
+
 ### `v0.38.0` — verified 2026-06-05 (Singapore HA)
 
 | Component | Version | How to check |
