@@ -6,6 +6,41 @@ import time
 from pathlib import Path
 
 from ha_ops_mcp.auth.store import OAuthStore
+from ha_ops_mcp.server import _migrate_legacy_oauth
+
+
+def test_migrate_legacy_oauth_copies_when_target_absent(tmp_path: Path):
+    legacy = tmp_path / "data" / "oauth.json"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text('{"clients": {"c1": {}}}')
+    new_dir = tmp_path / "backup" / "auth"
+
+    _migrate_legacy_oauth(new_dir, legacy=legacy)
+
+    target = new_dir / "oauth.json"
+    assert target.exists()
+    assert target.read_text() == '{"clients": {"c1": {}}}'
+
+
+def test_migrate_legacy_oauth_noop_when_target_exists(tmp_path: Path):
+    legacy = tmp_path / "data" / "oauth.json"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text('{"legacy": true}')
+    new_dir = tmp_path / "backup" / "auth"
+    new_dir.mkdir(parents=True)
+    target = new_dir / "oauth.json"
+    target.write_text('{"current": true}')
+
+    _migrate_legacy_oauth(new_dir, legacy=legacy)
+
+    # Existing store must NOT be overwritten by the legacy one.
+    assert target.read_text() == '{"current": true}'
+
+
+def test_migrate_legacy_oauth_noop_when_no_legacy(tmp_path: Path):
+    new_dir = tmp_path / "backup" / "auth"
+    _migrate_legacy_oauth(new_dir, legacy=tmp_path / "data" / "oauth.json")
+    assert not (new_dir / "oauth.json").exists()
 
 
 def test_store_creates_empty(tmp_path: Path):

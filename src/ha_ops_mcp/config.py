@@ -78,7 +78,11 @@ class AuditConfig:
 @dataclass
 class AuthConfig:
     enabled: bool = True
-    data_dir: str = "/data"  # addon persistent storage
+    # Empty = derive <backup.dir>/auth in server.py. That lives on a mapped
+    # volume (HA /backup) that survives addon uninstall / slug-change, unlike
+    # the old /data default which was wiped on uninstall. A legacy
+    # /data/oauth.json is migrated into the new home once, on startup.
+    data_dir: str = ""
     access_token_ttl: int = 2592000  # 30d; sliding TTL extends on use (provider.py)
     refresh_token_ttl: int = 2592000  # 30 days
     issuer_url: str = ""  # client-facing URL; defaults to http://{host}:{port}

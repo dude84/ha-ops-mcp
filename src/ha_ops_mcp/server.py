@@ -215,6 +215,34 @@ def create_context(config: HaOpsConfig) -> HaOpsContext:
     )
 
 
+def _migrate_legacy_oauth(
+    new_dir: Path, legacy: Path = Path("/data/oauth.json")
+) -> None:
+    """Copy a pre-v0.40.0 /data/oauth.json into the survival data dir once.
+
+    The OAuth store used to live in /data, which the Supervisor wipes when the
+    addon is uninstalled (or installed under a new slug). It now defaults under
+    backup_dir — a mapped /backup volume that survives. If the new location has
+    no store yet but the legacy one exists, migrate it so MCP clients keep
+    their registrations/tokens across the move (no re-auth).
+    """
+    import logging as _logging
+
+    target = new_dir / "oauth.json"
+    if target.exists() or not legacy.is_file():
+        return
+    try:
+        new_dir.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(legacy.read_bytes())
+        _logging.getLogger(__name__).info(
+            "Migrated legacy OAuth store %s -> %s", legacy, target
+        )
+    except OSError as e:
+        _logging.getLogger(__name__).warning(
+            "Could not migrate legacy OAuth store from %s: %s", legacy, e
+        )
+
+
 def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContext]:
     """Create the MCP server and context.
 
@@ -262,8 +290,16 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
 
         from ha_ops_mcp.auth.provider import HaOpsOAuthProvider
 
+        # OAuth store dir. Empty (the default) derives <backup_dir>/auth — a
+        # mapped /backup volume that survives addon uninstall/slug-change,
+        # unlike the old /data default. Migrate a legacy /data/oauth.json into
+        # the new home once so updates stay seamless.
+        auth_data_dir = Path(
+            config.auth.data_dir or str(Path(config.backup.dir) / "auth")
+        ).resolve()
+        _migrate_legacy_oauth(auth_data_dir)
         auth_provider = HaOpsOAuthProvider(
-            data_dir=Path(config.auth.data_dir),
+            data_dir=auth_data_dir,
             access_token_ttl=config.auth.access_token_ttl,
             refresh_token_ttl=config.auth.refresh_token_ttl,
         )

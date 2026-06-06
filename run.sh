@@ -116,15 +116,19 @@ fi
 # normal one. If the Supervisor write fails, the wipe still happened — log
 # tells the user to toggle the flag off manually so they don't lose tokens
 # on every restart.
-mkdir -p /data
+# OAuth store now lives under <backup_dir>/auth (a mapped /backup volume that
+# survives addon uninstall/slug-change), not /data. Keep this derive in sync
+# with config.py / server.py (auth.data_dir empty -> backup_dir/auth).
+oauth_store="${backup_dir}/auth/oauth.json"
+mkdir -p "${backup_dir}/auth"
 clear_oauth=$(bashio::config 'clear_oauth_on_next_boot')
 if bashio::var.true "${clear_oauth}"; then
     bashio::log.warning "clear_oauth_on_next_boot=true — wiping OAuth store"
-    if [ -f /data/oauth.json ]; then
-        rm -f /data/oauth.json
-        bashio::log.info "  Removed /data/oauth.json"
+    if [ -f "${oauth_store}" ]; then
+        rm -f "${oauth_store}"
+        bashio::log.info "  Removed ${oauth_store}"
     else
-        bashio::log.info "  /data/oauth.json was not present"
+        bashio::log.info "  ${oauth_store} was not present"
     fi
 
     # Flip the flag back to false. Supervisor's POST /addons/self/options

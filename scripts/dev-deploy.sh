@@ -21,6 +21,8 @@ REMOTE_ADDON_DIR="/addons/ha-ops-mcp"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ADDON_SLUG="local_ha_ops_mcp"
 REBUILD=0
+DEV_MODE=0
+REF=""
 
 # ── Parse args ──
 while [[ $# -gt 0 ]]; do
@@ -28,9 +30,10 @@ while [[ $# -gt 0 ]]; do
         --host)    HA_HOST="$2"; shift 2 ;;
         --user)    HA_USER="$2"; shift 2 ;;
         --port)    HA_SSH_PORT="$2"; shift 2 ;;
+        --ref)     REF="$2"; DEV_MODE=1; shift 2 ;;
         --rebuild) REBUILD=1; shift ;;
         --help)
-            echo "Usage: $0 [--host HOST] [--user USER] [--port PORT] [--rebuild]"
+            echo "Usage: $0 [--host HOST] [--user USER] [--port PORT] [--ref REF] [--rebuild]"
             echo ""
             echo "Syncs the ha-ops-mcp source to /addons/ha-ops-mcp/ on the HA host."
             echo "The Supervisor discovers it as a local addon and builds the Docker"
@@ -40,6 +43,10 @@ while [[ $# -gt 0 ]]; do
             echo "  --host     homeassistant.local  (or HA_HOST env var)"
             echo "  --user     root                 (or HA_USER env var)"
             echo "  --port     22                   (or HA_SSH_PORT env var)"
+            echo "  --ref      dev mode: deploy the working tree against branch/tag/sha REF."
+            echo "             Skips the strict tag guard and stamps a UNIQUE dev version"
+            echo "             (<base>-dev.<sha>.<time>) so Supervisor always rebuilds."
+            echo "             For branch testing without cutting a public release."
             echo "  --rebuild  if set, runs 'ha apps rebuild' after sync"
             echo ""
             echo "After deploying:"
@@ -72,6 +79,9 @@ echo ""
 #   2. HEAD is behind the latest tag → rare, but equally wrong.
 # Require HEAD to sit exactly on the latest tag's commit. Either tag
 # HEAD, or check out the tag you want to deploy.
+if [[ "${DEV_MODE}" == "1" ]]; then
+    echo "▶ Dev mode (--ref ${REF}) — skipping strict tag guard"
+else
 echo "▶ Checking that HEAD matches the latest tag..."
 LATEST_TAG=$(git -C "${REPO_ROOT}" describe --tags --abbrev=0 2>/dev/null || echo "")
 if [[ -z "${LATEST_TAG}" ]]; then
@@ -103,11 +113,24 @@ EOF
     exit 1
 fi
 echo "  ✓ HEAD is at ${LATEST_TAG}"
+fi
 echo ""
 
-# ── Step 1: Sync version from git tag ──
-echo "▶ Syncing version from git tag..."
-"${REPO_ROOT}/scripts/sync-version.sh"
+# ── Step 1: Sync version ──
+if [[ "${DEV_MODE}" == "1" ]]; then
+    # Stamp a unique dev version so Supervisor always rebuilds. Base off the
+    # latest tag; append the ref's short sha (traceability) + time (uniqueness
+    # even when redeploying the same commit with uncommitted tweaks).
+    DEV_BASE=$(git -C "${REPO_ROOT}" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+    DEV_SHA=$(git -C "${REPO_ROOT}" rev-parse --short "${REF}" 2>/dev/null \
+        || git -C "${REPO_ROOT}" rev-parse --short HEAD)
+    DEV_VERSION="${DEV_BASE}-dev.${DEV_SHA}.$(date +%H%M%S)"
+    echo "▶ Stamping dev version ${DEV_VERSION}..."
+    "${REPO_ROOT}/scripts/sync-version.sh" "${DEV_VERSION}"
+else
+    echo "▶ Syncing version from git tag..."
+    "${REPO_ROOT}/scripts/sync-version.sh"
+fi
 echo ""
 
 # ── Step 2: Ensure remote app directory exists ──

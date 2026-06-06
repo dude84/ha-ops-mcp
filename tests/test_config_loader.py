@@ -11,6 +11,8 @@ def test_load_default_config_missing_file():
     assert config.ha.url == "http://homeassistant.local:8123"
     assert config.safety.require_confirmation is True
     assert config.safety.max_query_rows == 10000
+    # Empty by default → server.py derives <backup.dir>/auth, a survival volume.
+    assert config.auth.data_dir == ""
 
 
 def test_load_config_from_file(tmp_path: Path):
