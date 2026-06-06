@@ -75,6 +75,22 @@ don't bother and emit `- item` flush with the parent key.
 
 Rule: 2-space sequence indent past parent.
 
+### `custom:apexcharts-card` rejects `layout_options` → "Configuration error"
+
+In a **sections** view, full-width is set with `layout_options: {grid_columns: N}`
+on the card. Core cards (history-graph, etc.) ignore unknown keys, so that's
+fine. But `custom:apexcharts-card` runs a **strict config validator** and throws
+a generic "Configuration error" on the unknown `layout_options` key — the card
+type appears to "fail to load" (easy to misread as a bundle/registry problem; a
+red herring is the noisy `focus-trap` `CustomElementRegistry` collision, which is
+harmless and unrelated). Diagnosed live: the same apex config rendered fine with
+no `layout_options`, errored the moment it was added.
+
+Fix: never put `layout_options` on an apexcharts-card. For full-width, **wrap it
+in a `vertical-stack` that carries the `layout_options`** — the apex card inside
+fills the wrapper and stays config-clean. (When replacing a bare history-graph
+that had no `layout_options`, a bare apex replacement needs no wrapper.)
+
 ---
 
 ## Database Operational Patterns
