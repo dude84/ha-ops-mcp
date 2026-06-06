@@ -188,8 +188,11 @@ if [[ "${REBUILD}" == "1" ]]; then
         # records the new version, so the addon's shown version matches the
         # running code. The monotonic dev timestamp guarantees version_latest >
         # installed, so update always fires.
-        echo "▶ Reloading + updating ${ADDON_SLUG} on ${HA_HOST}..."
-        ${SSH_CMD} "${SSH_TARGET}" "ha addons reload && ha addons update ${ADDON_SLUG}"
+        # `ha store reload` re-scans /addons so Supervisor picks up the new
+        # config.yaml version as version_latest (a plain reload/rebuild does
+        # NOT); then `ha apps update` installs it, recording the version.
+        echo "▶ Store-reload + update ${ADDON_SLUG} on ${HA_HOST}..."
+        ${SSH_CMD} "${SSH_TARGET}" "ha store reload && ha apps update ${ADDON_SLUG}"
         echo "  ✓ Updated (app auto-restarts)"
     else
         echo "▶ Rebuilding app on ${HA_HOST}..."
