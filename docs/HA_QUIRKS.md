@@ -259,6 +259,33 @@ drop, or a timeout as "initiated"; only a real HTTP-status body (`HTTP 401/403`
 restart as `success: false`). After any of these, poll `haops_self_check`
 until `rest_api` goes from 502 back to `ok`.
 
+### Confirmation tokens are NOT auto-invalidated when the target changes
+
+Two-phase tokens (`SafetyManager`) are in-memory, single-use, and have **no time
+expiry and no file-change/config-change invalidation**. Staleness is each tool's
+own concern, and the handling differs — know which you're using:
+
+- **`haops_exec_shell`** binds the token to the **exact command string**. Change
+  one character between preview and confirm → `"Command does not match the token.
+  Re-run the preview."` (It does not look at files at all.)
+- **`haops_dashboard_patch`** re-applies the JSON Patch to the **live** config on
+  every preview. If the dashboard drifted so the JSON-Pointer paths no longer
+  match, the preview errors `"Patch does not apply cleanly … dashboard has likely
+  changed"`. **Drift is caught here, at preview time** — via patch conflict, not
+  via the token.
+- **`haops_dashboard_apply` does NOT re-check the live config.** It overwrites
+  wholesale with the token's stored `new_config` (`lovelace/config/save`). So
+  **applying a stale token clobbers any edit made since the preview.** Example
+  (live 2026-06-06): a preview was built against a 5-section view; the view was
+  then cleared in the UI; reusing that token would have *resurrected* the cleared
+  sections. The fix is to **re-preview** after any possible change, never reuse an
+  old token — which recomputes `new_config` against current state.
+
+Rule of thumb: a token is a snapshot of intent, not a lock. If the target may
+have changed, re-preview. (Improvement candidate: `dashboard_apply` could
+re-fetch and compare to the token's `old_config`, refusing on drift — see
+`docs/BACKLOG.md`.)
+
 ### `MCP error -32602: Invalid request parameters` on every tool call → suspect auth expiry
 
 When *every* tool call returns `-32602`, including no-arg ones like

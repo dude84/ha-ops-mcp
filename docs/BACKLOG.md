@@ -59,3 +59,13 @@ mirror profile) from a one-time owner token, closing the chicken-egg above.
 Approved 2026-06-06 (reclassified from `_gaps/`). Related:
 [[project_ui_suite_program]].
 
+
+## dashboard_apply stale-token drift guard
+
+`haops_dashboard_apply` overwrites with the token's stored `new_config` without
+re-checking the live dashboard, so applying a stale token (target edited since
+preview) silently clobbers the intervening change. Add a guard: on apply,
+re-fetch current config and compare to the token's `old_config`; refuse (or warn
++ require re-preview) on drift. Makes tokens stale-safe, not just intent
+snapshots. See docs/HA_QUIRKS.md → "Confirmation tokens are NOT auto-invalidated".
+Approved 2026-06-07.
