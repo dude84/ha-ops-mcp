@@ -174,6 +174,20 @@ fi
 
 echo "  ✓ Source synced"
 
+# ── Step 3b: Dev-mode badge ──
+# Tag the local addon's name + sidebar panel with "(DEV)" so it's unmistakable
+# vs the public/store addon. Edits ONLY the synced remote config.yaml (the
+# committed repo stays clean). Must run before the store reload/update below so
+# Supervisor picks up the renamed metadata.
+if [[ "${DEV_MODE}" == "1" ]]; then
+    echo "▶ Tagging local addon name/panel with (DEV)..."
+    ${SSH_CMD} "${SSH_TARGET}" "sed -i \
+        -e 's/^name: .*/name: \"HA Ops MCP (DEV)\"/' \
+        -e 's/^panel_title: .*/panel_title: \"HA Ops (DEV)\"/' \
+        ${REMOTE_ADDON_DIR}/config.yaml"
+    echo "  ✓ Name → 'HA Ops MCP (DEV)', panel → 'HA Ops (DEV)'"
+fi
+
 # ── Step 4: Verify ──
 echo "▶ Verifying remote files..."
 ${SSH_CMD} "${SSH_TARGET}" "ls -la ${REMOTE_ADDON_DIR}/config.yaml ${REMOTE_ADDON_DIR}/Dockerfile ${REMOTE_ADDON_DIR}/src/"
