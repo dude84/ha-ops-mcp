@@ -22,11 +22,10 @@ which screen/control) and give every view a load-cost baseline.
   camera cards (frigate/advanced-camera), wallpanel, many-entity history-graph,
   button-card template loops — and now ApexCharts (live signal: Home is **16
   long-tasks / 1845 ms / CLS 0.19**, heavier than the old history-graphs).
-- **New tools needed (gaps):** `haops_ui_interact` (scroll/tap/click controls,
-  capture jank/long-tasks/console errors during interaction — the freeze-hunting
-  core) and `haops_ui_trace` (CDP performance-trace artifact for deep profiling).
-  Neither built; the screenshot + perf primitives (`haops_ui_screenshot`,
-  `haops_ui_perf`) shipped in v0.50.0.
+- **Capture primitives all shipped** — `haops_ui_screenshot` + `haops_ui_perf`
+  (v0.50.0), `haops_ui_interact` (scroll/tap/click + during-interaction jank
+  capture) + `haops_ui_trace` (CDP trace) (v0.51.0). The building blocks exist;
+  this task is the *harness* + analysis around them.
 - **Standing suite:** per-view load-time baselines, jank/FPS, screenshot diffs, a
   results/baseline store for regression.
 - Keep tools as eyes/hands only (raw metrics + image; scoring stays in the
@@ -115,30 +114,6 @@ UI tools via their `access_token` param (add `ui.access_token` defaulting to
 `ha.token`) — clean attribution without the profile-mirror tax. Not naive #2.
 Approved-but-parked. Related: [[project_ui_suite_program]].
 
-### Native user account management (UAM)
-
-First-class **create / update / delete / disable** HA-user tools via the admin
-**WebSocket API** (no `.storage/auth` edits, no restart): `config/auth/*`
-(`update.is_active` = disable/enable), `config/auth_provider/homeassistant/*` for
-credentials. Reachable today via `haops_ws_command`; promote to audited,
-two-phase tools:
-
-- `haops_user_list` (read)
-- `haops_user_create` (mutate, two-phase) — name, admin, local_only, optional password
-- `haops_user_update` (mutate, two-phase) — rename / group / active (disable)
-- `haops_user_delete` (mutate, two-phase) — back up the auth entry first (irreversible)
-
-Bonus: lets the addon bootstrap `ha-ops-user` (create + password + mirror
-profile) from a one-time owner token, closing the chicken-egg above.
-Approved 2026-06-06.
-
-## Safety / tooling
-
-### `dashboard_apply` stale-token drift guard
-
-`haops_dashboard_apply` overwrites with the token's stored `new_config` without
-re-checking the live dashboard, so a stale token (target edited since preview)
-silently clobbers the intervening change. Guard: on apply, re-fetch current
-config and compare to the token's `old_config`; refuse (or warn + require
-re-preview) on drift. See docs/HA_QUIRKS.md → "Confirmation tokens are NOT
-auto-invalidated". Approved 2026-06-07.
+_(Native user-account-management — `haops_user_*` — **shipped v0.51.0**. The
+`ha-ops-user` bootstrap it enabled is now mechanically possible; revisit only if
+that account is ever pursued.)_
