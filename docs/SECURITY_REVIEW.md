@@ -1,5 +1,14 @@
 # Security & Architecture Review (2026-04-17)
 
+> ⚠️ **HISTORICAL SNAPSHOT — dated 2026-04-17. Not the current state.**
+> A one-off pre-release review; tool counts and findings reflect that day.
+> Several items have since shipped — notably **MCP transport auth (OAuth,
+> v0.27.0+)**, resolving the "CRITICAL: no authentication" finding below. The
+> codebase has also grown (**71 tools** as of v0.50.0, incl. the Debian +
+> Playwright UI surface). **For the live security model, supported versions, and
+> vulnerability reporting, see [`SECURITY.md`](../SECURITY.md).** Kept for the
+> architectural reasoning, not as a current audit.
+
 Pre-release review of ha-ops-mcp from security, code quality, and
 enterprise architecture perspectives. Findings are categorized by
 priority; items promoted to the backlog are marked with a link.
