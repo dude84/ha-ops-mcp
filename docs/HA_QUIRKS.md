@@ -75,6 +75,22 @@ don't bother and emit `- item` flush with the parent key.
 
 Rule: 2-space sequence indent past parent.
 
+### `custom:apexcharts-card` rejects `layout_options` → "Configuration error"
+
+In a **sections** view, full-width is set with `layout_options: {grid_columns: N}`
+on the card. Core cards (history-graph, etc.) ignore unknown keys, so that's
+fine. But `custom:apexcharts-card` runs a **strict config validator** and throws
+a generic "Configuration error" on the unknown `layout_options` key — the card
+type appears to "fail to load" (easy to misread as a bundle/registry problem; a
+red herring is the noisy `focus-trap` `CustomElementRegistry` collision, which is
+harmless and unrelated). Diagnosed live: the same apex config rendered fine with
+no `layout_options`, errored the moment it was added.
+
+Fix: never put `layout_options` on an apexcharts-card. For full-width, **wrap it
+in a `vertical-stack` that carries the `layout_options`** — the apex card inside
+fills the wrapper and stays config-clean. (When replacing a bare history-graph
+that had no `layout_options`, a bare apex replacement needs no wrapper.)
+
 ---
 
 ## Database Operational Patterns
@@ -258,6 +274,33 @@ drop, or a timeout as "initiated"; only a real HTTP-status body (`HTTP 401/403`
 `_core_post_outcome` (fixed in v0.39.3 — it previously reported a working
 restart as `success: false`). After any of these, poll `haops_self_check`
 until `rest_api` goes from 502 back to `ok`.
+
+### Confirmation tokens are NOT auto-invalidated when the target changes
+
+Two-phase tokens (`SafetyManager`) are in-memory, single-use, and have **no time
+expiry and no file-change/config-change invalidation**. Staleness is each tool's
+own concern, and the handling differs — know which you're using:
+
+- **`haops_exec_shell`** binds the token to the **exact command string**. Change
+  one character between preview and confirm → `"Command does not match the token.
+  Re-run the preview."` (It does not look at files at all.)
+- **`haops_dashboard_patch`** re-applies the JSON Patch to the **live** config on
+  every preview. If the dashboard drifted so the JSON-Pointer paths no longer
+  match, the preview errors `"Patch does not apply cleanly … dashboard has likely
+  changed"`. **Drift is caught here, at preview time** — via patch conflict, not
+  via the token.
+- **`haops_dashboard_apply` does NOT re-check the live config.** It overwrites
+  wholesale with the token's stored `new_config` (`lovelace/config/save`). So
+  **applying a stale token clobbers any edit made since the preview.** Example
+  (live 2026-06-06): a preview was built against a 5-section view; the view was
+  then cleared in the UI; reusing that token would have *resurrected* the cleared
+  sections. The fix is to **re-preview** after any possible change, never reuse an
+  old token — which recomputes `new_config` against current state.
+
+Rule of thumb: a token is a snapshot of intent, not a lock. If the target may
+have changed, re-preview. (Improvement candidate: `dashboard_apply` could
+re-fetch and compare to the token's `old_config`, refusing on drift — see
+`docs/BACKLOG.md`.)
 
 ### `MCP error -32602: Invalid request parameters` on every tool call → suspect auth expiry
 
