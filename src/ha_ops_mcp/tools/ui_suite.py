@@ -152,7 +152,7 @@ async def haops_ui_screenshot(
         view=r.get("url", path),
         ext="png",
         nav_ms=r.get("nav_ms"),
-        console_errors=len(r.get("console_errors", [])),
+        errors=[str(c.get("text", "")) for c in r.get("console_errors", [])][:20],
         note=note,
         transaction_id=transaction_id,
         viewport=r.get("viewport", {}),

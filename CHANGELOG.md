@@ -1,3 +1,7 @@
+## 0.52.3
+
+**Captures show the actual console errors, not just a count.** "1 err" told you nothing actionable. Captures now store the real console-error **messages** (`CaptureEntry.errors`, capped 20), and the Captures-tab "N err" badge is a toggle that expands the message list inline. The count (`console_errors`) is still kept as the quick badge. Captures taken before this version show a "count only — predates message capture" note when expanded.
+
 ## 0.52.2
 
 **Sourcemap-noise fix, take 2.** v0.52.1 aborted the source-map / `/node_modules/` requests to kill the 404 — but an *aborted* request itself logs `net::ERR_FAILED` to the console, so the capture error-count still read "1 err", just for a different phantom. The driver now **fulfills those requests with an empty 204** instead of aborting, so nothing is logged and the console-error count reflects real errors only.

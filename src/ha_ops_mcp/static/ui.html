@@ -832,10 +832,24 @@
               </div>
               <div class="text-text-faint flex gap-2">
                 <span x-show="c.nav_ms != null" x-text="'nav ' + Math.round(c.nav_ms) + 'ms'"></span>
-                <span x-show="c.console_errors > 0" class="text-op-dstr-solid"
-                      x-text="c.console_errors + ' err'"></span>
+                <button x-show="c.console_errors > 0" type="button"
+                        class="text-op-dstr-solid hover:underline cursor-pointer"
+                        @click="c._showErrs = !c._showErrs"
+                        :title="(c._showErrs ? 'Hide' : 'Show') + ' console errors'"
+                        x-text="c.console_errors + ' err ' + (c._showErrs ? '▾' : '▸')"></button>
                 <span x-show="c.transaction_id" title="linked to a change">🔗</span>
               </div>
+              <!-- expandable console-error messages -->
+              <template x-if="c._showErrs">
+                <div class="text-[11px] font-mono bg-banner-fail-bg text-banner-fail-fg rounded p-1.5 space-y-0.5 break-words">
+                  <template x-if="!(c.errors && c.errors.length)">
+                    <div class="italic">count only — this capture predates message capture (v0.52.3+)</div>
+                  </template>
+                  <template x-for="(msg, mi) in (c.errors || [])" :key="mi">
+                    <div x-text="msg"></div>
+                  </template>
+                </div>
+              </template>
               <!-- note -->
               <template x-if="captureNoteEditId !== c.id">
                 <div class="flex items-start gap-1 mt-auto pt-1">

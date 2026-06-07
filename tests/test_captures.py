@@ -30,6 +30,27 @@ def test_save_writes_artifact_and_manifest(tmp_path):
     assert json.loads(lines[0])["id"] == e.id
 
 
+def test_save_stores_error_messages_and_derives_count(tmp_path):
+    s = _store(tmp_path)
+    e = s.save(
+        content=b"x", kind="screenshot", view="v", ext="png",
+        errors=["net::ERR_FAILED on foo", "404 on bar"],
+    )
+    assert e.console_errors == 2  # count derived from the list
+    assert e.errors == ["net::ERR_FAILED on foo", "404 on bar"]
+    # persisted + round-trips
+    got = s.get(e.id)
+    assert got.errors == ["net::ERR_FAILED on foo", "404 on bar"]
+    assert got.console_errors == 2
+
+
+def test_save_no_errors_defaults_empty(tmp_path):
+    s = _store(tmp_path)
+    e = s.save(content=b"x", kind="screenshot", view="v", ext="png")
+    assert e.console_errors == 0
+    assert e.errors == []
+
+
 def test_ext_leading_dot_stripped(tmp_path):
     s = _store(tmp_path)
     e = s.save(content=b"x", kind="trace", view="v", ext=".zip")

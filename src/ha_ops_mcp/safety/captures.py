@@ -34,7 +34,8 @@ class CaptureEntry:
     filename: str  # basename under <dir>/files/
     size_bytes: int
     nav_ms: float | None = None
-    console_errors: int = 0
+    console_errors: int = 0  # count (kept for back-compat / quick badge)
+    errors: list[str] = field(default_factory=list)  # the actual messages
     note: str = ""
     transaction_id: str = ""  # links the capture to a change/audit entry
     viewport: dict[str, int] = field(default_factory=dict)
@@ -80,7 +81,7 @@ class CaptureStore:
         view: str,
         ext: str,
         nav_ms: float | None = None,
-        console_errors: int = 0,
+        errors: list[str] | None = None,
         note: str = "",
         transaction_id: str = "",
         viewport: dict[str, int] | None = None,
@@ -89,6 +90,7 @@ class CaptureStore:
         cid = uuid.uuid4().hex[:12]
         filename = f"{cid}.{ext.lstrip('.')}"
         (self._files / filename).write_bytes(content)
+        errs = errors or []
         entry = CaptureEntry(
             id=cid,
             timestamp=datetime.now(UTC).isoformat(),
@@ -97,7 +99,8 @@ class CaptureStore:
             filename=filename,
             size_bytes=len(content),
             nav_ms=nav_ms,
-            console_errors=console_errors,
+            console_errors=len(errs),
+            errors=errs,
             note=note,
             transaction_id=transaction_id,
             viewport=viewport or {},
