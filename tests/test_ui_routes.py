@@ -1235,3 +1235,125 @@ async def test_timeline_backup_prune_clear_all_summary(client, ctx):
     assert "clear_all" in summary
     assert "type=dashboard" in summary
     assert "Pruned 12 backup(s)" in summary
+
+
+# ── /api/ui/captures gallery ──────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_captures_endpoint_empty(client, ctx):
+    data = client.get("/api/ui/captures").json()
+    assert data["captures"] == []
+    assert data["stats"]["count"] == 0
+    assert data["stats"]["retention"]["max_count"] == ctx.captures.max_count
+
+
+@pytest.mark.asyncio
+async def test_captures_endpoint_lists_newest_first(client, ctx):
+    ctx.captures.save(content=b"\x89PNG1", kind="screenshot", view="lovelace", ext="png")
+    ctx.captures.save(content=b"\x89PNG22", kind="screenshot", view="home", ext="png")
+    data = client.get("/api/ui/captures").json()
+    assert data["stats"]["count"] == 2
+    assert {c["view"] for c in data["captures"]} == {"lovelace", "home"}
+    assert data["stats"]["total_bytes"] == 5 + 6
+
+
+@pytest.mark.asyncio
+async def test_capture_file_served_with_media_type(client, ctx):
+    e = ctx.captures.save(content=b"\x89PNGdata", kind="screenshot", view="v", ext="png")
+    res = client.get(f"/api/ui/captures/{e.id}")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "image/png"
+    assert res.content == b"\x89PNGdata"
+    assert "attachment" not in res.headers.get("content-disposition", "")
+
+
+@pytest.mark.asyncio
+async def test_capture_file_download_disposition(client, ctx):
+    e = ctx.captures.save(content=b"zipbytes", kind="trace", view="v", ext="zip")
+    res = client.get(f"/api/ui/captures/{e.id}?download=1")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/zip"
+    assert "attachment" in res.headers["content-disposition"]
+    assert e.id in res.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
+async def test_capture_file_404(client, ctx):
+    assert client.get("/api/ui/captures/nope").status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_captures_delete_and_audit(client, ctx):
+    a = ctx.captures.save(content=b"aa", kind="screenshot", view="v", ext="png")
+    b = ctx.captures.save(content=b"bbb", kind="screenshot", view="v", ext="png")
+    res = client.post("/api/ui/captures_delete", json={"ids": [a.id]})
+    assert res.status_code == 200
+    assert res.json()["deleted"] == 1
+    assert ctx.captures.get(a.id) is None
+    assert ctx.captures.get(b.id) is not None
+    # audit row written with source=sidebar
+    audit = [e for e in ctx.audit.read_recent(limit=20) if e["tool"] == "captures_delete"]
+    assert audit and audit[0]["details"]["source"] == "sidebar"
+
+
+@pytest.mark.asyncio
+async def test_captures_delete_bad_body(client, ctx):
+    assert client.post("/api/ui/captures_delete", json={"ids": "x"}).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_captures_annotate(client, ctx):
+    e = ctx.captures.save(content=b"x", kind="screenshot", view="v", ext="png")
+    res = client.post(
+        "/api/ui/captures_annotate",
+        json={"id": e.id, "note": "home before", "transaction_id": "tx7"},
+    )
+    assert res.status_code == 200
+    assert res.json()["note"] == "home before"
+    assert ctx.captures.get(e.id).transaction_id == "tx7"
+
+
+@pytest.mark.asyncio
+async def test_captures_annotate_404(client, ctx):
+    res = client.post("/api/ui/captures_annotate", json={"id": "nope", "note": "x"})
+    assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_captures_prune_two_phase(client, ctx):
+    ctx.captures.save(content=b"a", kind="screenshot", view="v", ext="png")
+    ctx.captures.save(content=b"b", kind="screenshot", view="v", ext="png")
+    # preview
+    prev = client.post("/api/ui/captures_prune", json={"clear_all": True, "execute": False}).json()
+    assert prev["would_delete"] is True
+    assert prev["count"] == 2
+    assert ctx.captures.stats()["count"] == 2  # nothing deleted yet
+    # execute
+    done = client.post("/api/ui/captures_prune", json={"clear_all": True, "execute": True}).json()
+    assert done["deleted"] is True
+    assert done["count"] == 2
+    assert ctx.captures.stats()["count"] == 0
+    audit = [e for e in ctx.audit.read_recent(limit=20) if e["tool"] == "captures_prune"]
+    assert audit and audit[0]["details"]["source"] == "sidebar"
+
+
+@pytest.mark.asyncio
+async def test_timeline_attaches_linked_capture(client, ctx):
+    cap = ctx.captures.save(
+        content=b"\x89PNG", kind="screenshot", view="lovelace", ext="png",
+        transaction_id="txABC",
+    )
+    src = ctx.path_guard.config_root / "automations.yaml"
+    src.write_text("foo\n")
+    await _log_audit_entry(
+        ctx,
+        tool="config_apply",
+        details={"path": str(src), "transaction_id": "txABC"},
+    )
+    entries = [
+        e for e in client.get("/api/ui/timeline").json()["entries"]
+        if e.get("capture")
+    ]
+    assert entries
+    assert entries[0]["capture"]["id"] == cap.id
+    assert entries[0]["capture"]["kind"] == "screenshot"

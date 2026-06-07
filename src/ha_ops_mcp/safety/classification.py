@@ -94,12 +94,16 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "exec_shell": ("mutate", "shell"),
     "user_create": ("mutate", "user"),
     "user_update": ("mutate", "user"),
+    # sidebar-only capture-gallery mutations (no MCP tool; audit source=sidebar)
+    "captures_annotate": ("mutate", "captures"),
     # --- destructive (irreversible / data loss) ---
     "entity_remove": ("destructive", "entity"),
     "helper_delete": ("destructive", "helper"),
     "db_purge": ("destructive", "database"),
     "backup_prune": ("destructive", "backup"),
     "user_delete": ("destructive", "user"),
+    "captures_delete": ("destructive", "captures"),
+    "captures_prune": ("destructive", "captures"),
 }
 
 _READ_VERBS = frozenset({"select", "pragma", "explain", "with", "show"})
@@ -143,6 +147,8 @@ _TYPE_LABELS: dict[str, str] = {
     "helper_create": "new helper", "helper_update": "edit helper",
     "helper_delete": "delete helper",
     "backup_revert": "revert", "backup_prune": "prune", "rollback": "rollback",
+    "captures_delete": "delete capture", "captures_prune": "prune captures",
+    "captures_annotate": "annotate capture",
     "exec_shell": "shell", "batch_apply": "batch", "batch_preview": "preview",
     "db_purge": "db purge", "db_query": "db read", "db_health": "db health",
     "db_statistics": "db stats",

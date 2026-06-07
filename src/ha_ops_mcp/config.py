@@ -66,6 +66,16 @@ class BackupConfig:
 
 
 @dataclass
+class CaptureConfig:
+    # UI capture artifacts (haops_ui_screenshot/trace). Empty dir = derive
+    # <backup.dir>/captures in server.py (a mapped /backup volume). Retention
+    # mirrors backups: newest max_count kept, older than max_age_days pruned.
+    dir: str = ""
+    max_count: int = 200
+    max_age_days: int = 30
+
+
+@dataclass
 class AuditConfig:
     # Empty string means "derive from backup.dir" for back-compat with deploys
     # that predate this option. server.py resolves and canonicalises the path.
@@ -96,6 +106,7 @@ class HaOpsConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
     backup: BackupConfig = field(default_factory=BackupConfig)
+    captures: CaptureConfig = field(default_factory=CaptureConfig)
     audit: AuditConfig = field(default_factory=AuditConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
 
@@ -118,6 +129,9 @@ _ENV_MAP: dict[str, tuple[str, str]] = {
     "BACKUP_DIR": ("backup", "dir"),
     "BACKUP_MAX_AGE_DAYS": ("backup", "max_age_days"),
     "BACKUP_MAX_PER_TYPE": ("backup", "max_per_type"),
+    "CAPTURES_DIR": ("captures", "dir"),
+    "CAPTURES_MAX_COUNT": ("captures", "max_count"),
+    "CAPTURES_MAX_AGE_DAYS": ("captures", "max_age_days"),
     "AUDIT_DIR": ("audit", "dir"),
     "AUDIT_LOG_READS": ("audit", "log_reads"),
     "AUTH_ENABLED": ("auth", "enabled"),
@@ -214,6 +228,7 @@ def load_config(config_path: Path | None = None) -> HaOpsConfig:
         server=_build_dataclass(ServerConfig, data.get("server")),
         safety=_build_dataclass(SafetyConfig, data.get("safety")),
         backup=_build_dataclass(BackupConfig, data.get("backup")),
+        captures=_build_dataclass(CaptureConfig, data.get("captures")),
         audit=_build_dataclass(AuditConfig, data.get("audit")),
         auth=_build_dataclass(AuthConfig, data.get("auth")),
     )

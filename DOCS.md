@@ -6,9 +6,10 @@ Built for the maintenance and observability work that comes during and after set
 
 ## Sidebar panel
 
-The addon adds an **HA Ops** panel to your HA sidebar (via ingress). Three tabs:
+The addon adds an **HA Ops** panel to your HA sidebar (via ingress). Four tabs:
 
-- **Timeline** — chronological feed of every mutation with expandable inline diffs (unified for config, structured for dashboards). The most recent apply carries a one-click **Revert** button while the session is active. Rollback and apply entries are visually linked. Paginated 50 per page; auto-refreshes every 5 seconds on page 1 (paused on deeper pages so the offset window doesn't shift under you).
+- **Timeline** — chronological feed of every mutation with expandable inline diffs (unified for config, structured for dashboards). The most recent apply carries a one-click **Revert** button while the session is active. Rollback and apply entries are visually linked, and a change with a linked UI capture shows its thumbnail inline. Paginated 50 per page; auto-refreshes every 5 seconds on page 1 (paused on deeper pages so the offset window doesn't shift under you).
+- **Captures** — gallery of screenshots and traces from `haops_ui_screenshot` / `haops_ui_trace`: thumbnail grid, click-to-zoom, download, editable notes, multi-select delete, and prune/clear. These are the addon's own artifacts (not HA state), so they're managed here rather than via MCP tools.
 - **Backups** — per-type backup counts, retention settings, prune and clear actions.
 - **Health** — `self_check` (connectivity) and `tools_check` (functional) results, per-group with per-test breakdown and actionable diagnostics (URLs, error details, hints).
 

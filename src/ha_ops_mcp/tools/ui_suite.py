@@ -18,7 +18,8 @@ caller.
 from __future__ import annotations
 
 import base64
-import time
+import os
+import tempfile
 from typing import TYPE_CHECKING, Any
 
 from ha_ops_mcp.server import registry
@@ -97,6 +98,8 @@ async def haops_ui_screenshot(
     settle_ms: int = 2500,
     base_url: str = "",
     access_token: str = "",
+    note: str = "",
+    transaction_id: str = "",
 ) -> dict[str, Any]:
     if not browser_available():
         return _unavailable()
@@ -119,15 +122,24 @@ async def haops_ui_screenshot(
         return {"error": f"screenshot capture failed: {type(e).__name__}: {e}"[:400]}
 
     png = r.pop("png_bytes")
-    safe = path.strip("/").replace("/", "_") or "root"
-    fpath = ctx.audit.tool_results_dir() / f"ui-{safe}-{int(time.time())}.png"
-    fpath.write_bytes(png)
-    r["saved_path"] = str(fpath)
+    entry = ctx.captures.save(
+        content=png,
+        kind="screenshot",
+        view=r.get("url", path),
+        ext="png",
+        nav_ms=r.get("nav_ms"),
+        console_errors=len(r.get("console_errors", [])),
+        note=note,
+        transaction_id=transaction_id,
+        viewport=r.get("viewport", {}),
+    )
+    r["capture_id"] = entry.id
+    r["saved_path"] = str(ctx.captures.artifact_path(entry))
     if len(png) <= _INLINE_MAX_BYTES:
         r["image_b64"] = base64.b64encode(png).decode()
     else:
         r["image_b64"] = None
-        r["note"] = "image >2MB; not inlined — read saved_path"
+        r["inline_note"] = "image >2MB; not inlined — read saved_path / Captures tab"
     return r
 
 
@@ -274,9 +286,25 @@ async def haops_ui_trace(
         viewport_height=viewport_height,
         settle_ms=settle_ms,
     )
-    safe = path.strip("/").replace("/", "_") or "root"
-    out_path = ctx.audit.tool_results_dir() / f"ui-trace-{safe}-{int(time.time())}.zip"
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".zip")
+    os.close(tmp_fd)
     try:
-        return await trace(req, str(out_path))
+        r = await trace(req, tmp_path)
+        with open(tmp_path, "rb") as fh:
+            data = fh.read()
     except Exception as e:  # noqa: BLE001
         return {"error": f"trace capture failed: {type(e).__name__}: {e}"[:400]}
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+    entry = ctx.captures.save(
+        content=data, kind="trace", view=r.get("url", path), ext="zip",
+        nav_ms=r.get("nav_ms"),
+    )
+    return {
+        "url": r.get("url"),
+        "capture_id": entry.id,
+        "saved_path": str(ctx.captures.artifact_path(entry)),
+        "size_bytes": entry.size_bytes,
+        "nav_ms": r.get("nav_ms"),
+    }

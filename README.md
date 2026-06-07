@@ -113,9 +113,10 @@ When reporting a bug, include: HA version, install method (addon/pip), transport
 
 ## Sidebar UI
 
-The addon registers an **HA Ops** panel in the HA sidebar via ingress. Three tabs:
+The addon registers an **HA Ops** panel in the HA sidebar via ingress. Four tabs:
 
-- **Timeline** — chronological feed of mutations with expandable inline diffs (unified for config, structured for dashboards). Apply rows carry a **Revert** button for the most recent change while the session is active. Rollback and apply entries are visually linked. Paginated 50 per page; auto-refreshes every 5 seconds on page 1 (paused on deeper pages so the offset window doesn't shift under you).
+- **Timeline** — chronological feed of mutations with expandable inline diffs (unified for config, structured for dashboards). Apply rows carry a **Revert** button for the most recent change while the session is active. Rollback and apply entries are visually linked, and a change with a linked UI capture shows its thumbnail inline. Paginated 50 per page; auto-refreshes every 5 seconds on page 1 (paused on deeper pages so the offset window doesn't shift under you).
+- **Captures** — gallery of screenshots/traces from the UI tools: thumbnail grid, click-to-zoom, download, notes, multi-select delete, prune/clear. Addon-owned artifacts, managed here rather than via MCP.
 - **Backups** — per-type counts, retention settings, prune/clear actions.
 - **Health** — `self_check` + `tools_check` results, rendered per-group with per-test breakdown and actionable diagnostics.
 

@@ -20,6 +20,7 @@ from ha_ops_mcp.connections.rest import RestClient
 from ha_ops_mcp.connections.websocket import WebSocketClient
 from ha_ops_mcp.safety.audit import AuditLog
 from ha_ops_mcp.safety.backup import BackupManager
+from ha_ops_mcp.safety.captures import CaptureStore
 from ha_ops_mcp.safety.classification import classify
 from ha_ops_mcp.safety.confirmation import SafetyManager
 from ha_ops_mcp.safety.path_guard import PathGuard
@@ -80,6 +81,7 @@ class HaOpsContext:
     safety: SafetyManager
     rollback: RollbackManager
     backup: BackupManager
+    captures: CaptureStore
     audit: AuditLog
     path_guard: PathGuard
     auth_provider: Any | None = None  # HaOpsOAuthProvider when auth enabled
@@ -181,6 +183,16 @@ def create_context(config: HaOpsConfig) -> HaOpsContext:
     audit_dir_str = config.audit.dir or str(Path(config.backup.dir) / "audit")
     audit = AuditLog(Path(audit_dir_str).resolve())
 
+    # Capture artifacts (UI screenshots/traces) — default <backup_dir>/captures
+    # (a sibling of audit/, on the survival /backup volume). Retention mirrors
+    # backups (newest max_count kept, older than max_age_days pruned on init).
+    captures_dir_str = config.captures.dir or str(Path(config.backup.dir) / "captures")
+    captures = CaptureStore(
+        Path(captures_dir_str).resolve(),
+        max_count=config.captures.max_count,
+        max_age_days=config.captures.max_age_days,
+    )
+
     # Legacy detection: the pre-v0.22.0 fallback placed the audit log at
     # <backup_dir>/../audit (a sibling, not inside backup_dir). Warn if
     # that stray directory still has data so the admin knows to move it.
@@ -210,6 +222,7 @@ def create_context(config: HaOpsConfig) -> HaOpsContext:
         safety=safety,
         rollback=rollback,
         backup=backup,
+        captures=captures,
         audit=audit,
         path_guard=path_guard,
     )

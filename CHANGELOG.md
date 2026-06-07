@@ -1,3 +1,13 @@
+## 0.52.0
+
+**Capture gallery in the sidebar.** The screenshots and traces produced by `haops_ui_screenshot` / `haops_ui_trace` now have a home: a new **Captures** tab in the HA Ops ingress UI to view, download, annotate, select/delete, and prune them. No new MCP tools — capture artifacts are ha-ops-admin storage (the addon's own files), not Home Assistant state, so management lives in the ingress UI, not behind MCP.
+
+- **`CaptureStore`** (`safety/captures.py`) — manifest+files store mirroring `BackupManager`'s append-only-jsonl + atomic-rewrite + retention pattern. Lives under `<backup.dir>/captures` by default (override `captures.dir` / `HA_OPS_CAPTURES_DIR`); retention is newest-`max_count` (200) + `max_age_days` (30), enforced on init and after every save. Adds the gallery operations backups don't have: read-bytes (download), delete-by-id, annotate (note / change-link), lookup-by-transaction.
+- **Captures tab** — thumbnail grid (screenshots inline, traces as download cards) with per-item metadata (view, timestamp, size, nav ms, console-error count, change-link), editable notes, click-to-zoom lightbox, multi-select + bulk delete, and two-phase **Prune / Clear all** mirroring the Backups tab. New ingress endpoints: `GET /api/ui/captures`, `GET /api/ui/captures/{id}` (inline/download), `POST /api/ui/captures_delete|captures_annotate|captures_prune`. Mutations are audit-logged with `source: "sidebar"`.
+- **Timeline ↔ capture link.** `haops_ui_screenshot` / `haops_ui_trace` gained `note` + `transaction_id` params; pass a change's transaction_id and the capture is tied to it. The Timeline then renders a thumbnail (or trace-download link) on the matching change row — visual before/after right in the audit feed.
+
+No new MCP tools (still 77). Full suite green (added `tests/test_captures.py` + capture-route tests in `tests/test_ui_routes.py`); UI verified headless (Captures tab + lightbox, light/dark, zero console errors).
+
 ## 0.51.0
 
 **Drift guard + headless interaction/trace + native user management.** Three independent additions (71 → 77 tools).

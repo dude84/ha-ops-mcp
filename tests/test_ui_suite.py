@@ -4,19 +4,22 @@ in-image via scripts/smoke.sh + the capture CLI)."""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import ha_ops_mcp.tools.ui_suite as ui
 from ha_ops_mcp.config import HaConfig, HaOpsConfig
+from ha_ops_mcp.safety.captures import CaptureStore
 from ha_ops_mcp.ui.capture import CaptureRequest, hass_tokens
 
 
 def _ctx(tmp_path, token="LLAT-xyz", url="http://homeassistant:8123"):
     cfg = HaOpsConfig(ha=HaConfig(url=url, token=token))
     audit = SimpleNamespace(tool_results_dir=lambda: tmp_path)
-    return SimpleNamespace(config=cfg, audit=audit)
+    captures = CaptureStore(tmp_path / "captures")
+    return SimpleNamespace(config=cfg, audit=audit, captures=captures)
 
 
 def test_hass_tokens_shape():
@@ -64,7 +67,8 @@ async def test_screenshot_success_saves_and_inlines(tmp_path, monkeypatch):
 
     assert "png_bytes" not in out  # raw bytes never returned inline
     assert out["saved_path"].endswith(".png")
-    assert (tmp_path / out["saved_path"].split("/")[-1]).read_bytes().startswith(b"\x89PNG")
+    assert out["capture_id"]
+    assert Path(out["saved_path"]).read_bytes().startswith(b"\x89PNG")
     assert out["image_b64"]  # small image inlined
 
 
@@ -83,7 +87,8 @@ async def test_screenshot_large_not_inlined(tmp_path, monkeypatch):
     monkeypatch.setattr(ui, "screenshot", fake_screenshot)
     out = await ui.haops_ui_screenshot(_ctx(tmp_path))
     assert out["image_b64"] is None
-    assert "note" in out
+    assert "inline_note" in out
+    assert out["capture_id"]
 
 
 @pytest.mark.asyncio
@@ -193,7 +198,8 @@ async def test_trace_success_shape(tmp_path, monkeypatch):
     async def fake_trace(req: CaptureRequest, out_path: str):
         assert req.access_token == "LLAT-xyz"
         assert out_path.endswith(".zip")
-        # trace fn is responsible for writing the file in the real impl
+        # trace fn writes the file in the real impl; the handler reads it back.
+        Path(out_path).write_bytes(b"0" * 4096)
         return {
             "url": "http://homeassistant:8123/lovelace",
             "saved_path": out_path,
@@ -204,7 +210,7 @@ async def test_trace_success_shape(tmp_path, monkeypatch):
     monkeypatch.setattr(ui, "trace", fake_trace)
     out = await ui.haops_ui_trace(_ctx(tmp_path))
     assert out["saved_path"].endswith(".zip")
-    assert "ui-trace-" in out["saved_path"]
+    assert out["capture_id"]
     assert out["size_bytes"] == 4096
     assert out["nav_ms"] == 700.0
 

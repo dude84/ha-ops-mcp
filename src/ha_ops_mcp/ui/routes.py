@@ -231,6 +231,22 @@ def register_ui_routes(mcp: FastMCP, ctx: HaOpsContext) -> None:
         # straddle a page boundary lose their cross-link, which is an
         # acceptable trade for keeping the index references local.
         _annotate_rollback_pairs(page, entries)
+        # Attach a linked UI capture (screenshot/trace) to any row whose
+        # change carries a transaction_id with a capture tied to it. Read
+        # off the raw details, NOT the rendered `transaction_id` field —
+        # that one is stripped from all but the newest revertable row, but
+        # the thumbnail should appear on every row that has a capture.
+        for raw, rendered in zip(page, entries, strict=False):
+            txn_id = (raw.get("details") or {}).get("transaction_id")
+            if not isinstance(txn_id, str) or not txn_id:
+                continue
+            cap = ctx.captures.by_transaction(txn_id)
+            if cap is not None:
+                rendered["capture"] = {
+                    "id": cap.id,
+                    "kind": cap.kind,
+                    "view": cap.view,
+                }
         return JSONResponse({
             "count": len(entries),
             "offset": offset,
@@ -593,6 +609,171 @@ def register_ui_routes(mcp: FastMCP, ctx: HaOpsContext) -> None:
             "cleared": count,
             "message": f"Audit log cleared ({count} entries removed).",
         })
+
+    # ── Captures gallery ───────────────────────────────────────────────
+    #
+    # UI capture artifacts (screenshots / Playwright traces) produced by
+    # the haops_ui_* tools. These are ha-ops-admin storage (the addon's
+    # own files), NOT Home Assistant state — so management lives here in
+    # the ingress UI, not behind MCP tools. Mutations are audit-logged
+    # with source="sidebar" for Timeline traceability.
+
+    @mcp.custom_route("/api/ui/captures", methods=["GET"])  # type: ignore[untyped-decorator]
+    async def api_captures(request: Request) -> Response:
+        """List capture artifacts (newest-first) + store stats. Read-only."""
+        if not _is_authorized(request):
+            return _unauthorized()
+        limit_raw = request.query_params.get("limit", "200")
+        try:
+            limit = max(int(limit_raw), 1)
+        except ValueError:
+            limit = 200
+        entries = [e.to_dict() for e in ctx.captures.list_entries(limit=limit)]
+        return JSONResponse({
+            "captures": entries,
+            "stats": ctx.captures.stats(),
+        })
+
+    @mcp.custom_route("/api/ui/captures/{cid}", methods=["GET"])  # type: ignore[untyped-decorator]
+    async def api_capture_file(request: Request) -> Response:
+        """Serve a single capture artifact (inline view or download).
+
+        Query: download=1 → Content-Disposition attachment. Media type is
+        derived from the stored filename suffix (png → image/png, zip →
+        application/zip).
+        """
+        if not _is_authorized(request):
+            return _unauthorized()
+        cid = request.path_params.get("cid", "")
+        got = ctx.captures.read_bytes(cid)
+        if got is None:
+            return JSONResponse(
+                {"error": f"Capture {cid!r} not found"}, status_code=404
+            )
+        entry, data = got
+        suffix = entry.filename.rsplit(".", 1)[-1].lower()
+        media = {"png": "image/png", "zip": "application/zip"}.get(
+            suffix, "application/octet-stream"
+        )
+        headers: dict[str, str] = {"Cache-Control": "private, max-age=86400"}
+        if request.query_params.get("download"):
+            name = f"{entry.kind}-{entry.id}.{suffix}"
+            headers["Content-Disposition"] = f'attachment; filename="{name}"'
+        return Response(content=data, media_type=media, headers=headers)
+
+    @mcp.custom_route("/api/ui/captures_delete", methods=["POST"])  # type: ignore[untyped-decorator]
+    async def api_captures_delete(request: Request) -> Response:
+        """Delete captures by id. Body: {ids: [str, ...]}."""
+        if not _is_authorized(request):
+            return _unauthorized()
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "JSON body required"}, status_code=400)
+        ids = body.get("ids")
+        if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+            return JSONResponse(
+                {"error": "ids must be a list of strings"}, status_code=400
+            )
+        if not ids:
+            return JSONResponse({"deleted": 0, "bytes_freed": 0})
+        result = ctx.captures.delete(ids)
+        await ctx.audit.log(
+            tool="captures_delete",
+            details={
+                "ids": ids,
+                "deleted_count": result["deleted"],
+                "bytes_freed": result["bytes_freed"],
+                "source": "sidebar",
+            },
+        )
+        return JSONResponse(result)
+
+    @mcp.custom_route("/api/ui/captures_annotate", methods=["POST"])  # type: ignore[untyped-decorator]
+    async def api_captures_annotate(request: Request) -> Response:
+        """Set note / change-link on a capture. Body: {id, note?, transaction_id?}."""
+        if not _is_authorized(request):
+            return _unauthorized()
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "JSON body required"}, status_code=400)
+        cid = body.get("id")
+        if not isinstance(cid, str) or not cid:
+            return JSONResponse(
+                {"error": "id (non-empty string) required"}, status_code=400
+            )
+        note = body.get("note")
+        transaction_id = body.get("transaction_id")
+        if note is not None and not isinstance(note, str):
+            return JSONResponse({"error": "note must be a string"}, status_code=400)
+        if transaction_id is not None and not isinstance(transaction_id, str):
+            return JSONResponse(
+                {"error": "transaction_id must be a string"}, status_code=400
+            )
+        entry = ctx.captures.annotate(
+            cid, note=note, transaction_id=transaction_id
+        )
+        if entry is None:
+            return JSONResponse(
+                {"error": f"Capture {cid!r} not found"}, status_code=404
+            )
+        await ctx.audit.log(
+            tool="captures_annotate",
+            details={
+                "id": cid,
+                "note": note,
+                "transaction_id": transaction_id,
+                "source": "sidebar",
+            },
+        )
+        return JSONResponse(entry.to_dict())
+
+    @mcp.custom_route("/api/ui/captures_prune", methods=["POST"])  # type: ignore[untyped-decorator]
+    async def api_captures_prune(request: Request) -> Response:
+        """Prune captures (retention sweep). Two-phase like backup_prune.
+
+        Body: {execute: bool, older_than_days: int|null, clear_all: bool}.
+        Preview (execute=false): {would_delete, count, bytes_freed}.
+        Execute (execute=true): {deleted, count, bytes_freed} + audit row.
+        """
+        if not _is_authorized(request):
+            return _unauthorized()
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "JSON body required"}, status_code=400)
+        execute = bool(body.get("execute", False))
+        older_than_days = body.get("older_than_days")
+        if older_than_days is not None and not isinstance(older_than_days, int):
+            return JSONResponse(
+                {"error": "older_than_days must be an integer or null"},
+                status_code=400,
+            )
+        clear_all = bool(body.get("clear_all", False))
+        result = ctx.captures.purge(
+            older_than_days=older_than_days,
+            clear_all=clear_all,
+            dry_run=not execute,
+        )
+        if execute:
+            await ctx.audit.log(
+                tool="captures_prune",
+                details={
+                    "older_than_days": older_than_days,
+                    "clear_all": clear_all,
+                    "deleted_count": result["count"],
+                    "bytes_freed": result["bytes_freed"],
+                    "source": "sidebar",
+                },
+            )
+        return JSONResponse(result)
 
 
 # ── Serialization helpers ─────────────────────────────────────────────

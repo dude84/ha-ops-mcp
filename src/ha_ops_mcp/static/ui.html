@@ -518,6 +518,22 @@
               <span class="font-mono text-gray-700 dark:text-gray-300" x-text="e.token_id"></span>
             </div>
           </template>
+          <!-- Linked UI capture (screenshot/trace tied to this change's transaction) -->
+          <template x-if="e.capture">
+            <div class="mt-3 text-xs">
+              <div class="text-text-muted mb-1">Capture</div>
+              <template x-if="e.capture.kind === 'screenshot'">
+                <img :src="captureUrl(e.capture.id)" loading="lazy"
+                     @click="openCapture(e.capture)"
+                     class="max-h-40 rounded border border-border-subtle cursor-pointer object-cover object-top"
+                     :alt="e.capture.view">
+              </template>
+              <template x-if="e.capture.kind === 'trace'">
+                <a :href="captureUrl(e.capture.id, true)"
+                   class="text-blue-600 hover:text-blue-800 dark:text-blue-400">⎙ download trace zip</a>
+              </template>
+            </div>
+          </template>
           <template x-if="e.transaction_id">
             <div class="mt-3 flex items-center gap-3">
               <button
@@ -702,6 +718,179 @@
   </template>
 </section>
 
+<!-- Captures -->
+<section x-show="active === 'captures'">
+  <h2 class="text-xl font-semibold mb-1">Captures</h2>
+  <p class="text-sm text-text-muted mb-4">
+    Headless-browser artifacts from the UI tools
+    (<code class="font-mono">haops_ui_screenshot</code> /
+    <code class="font-mono">haops_ui_trace</code>). View, download, annotate,
+    and delete. Retention mirrors backups — newest kept, older pruned.
+  </p>
+
+  <template x-if="!captures">
+    <p class="text-text-muted">Loading…</p>
+  </template>
+
+  <template x-if="captures">
+    <div class="space-y-4">
+      <!-- Stats + actions -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-surface-raised rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-text-muted">Captures</div>
+          <div class="text-2xl font-semibold mt-1" x-text="captures?.stats?.count ?? 0"></div>
+        </div>
+        <div class="bg-surface-raised rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-text-muted">Disk usage</div>
+          <div class="text-2xl font-semibold mt-1" x-text="formatBytes(captures?.stats?.total_bytes ?? 0)"></div>
+        </div>
+        <div class="bg-surface-raised rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-text-muted">Max kept</div>
+          <div class="text-2xl font-semibold mt-1" x-text="captures?.stats?.retention?.max_count"></div>
+        </div>
+        <div class="bg-surface-raised rounded-lg shadow-sm p-4">
+          <div class="text-xs uppercase text-text-muted">Max age (days)</div>
+          <div class="text-2xl font-semibold mt-1" x-text="captures?.stats?.retention?.max_age_days"></div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          @click="toggleCaptureSelectAll()"
+          :disabled="!captureList.length"
+          class="px-3 py-1.5 rounded bg-surface-hover hover:bg-surface-raised text-sm disabled:opacity-50">
+          <span x-text="captureAllSelected ? 'Deselect all' : 'Select all'"></span>
+        </button>
+        <button
+          @click="deleteSelectedCaptures()"
+          :disabled="captureActionInFlight || !captureSelectedIds.length"
+          class="px-3 py-1.5 rounded bg-op-dstr-solid hover:bg-op-dstr-solid-h disabled:opacity-50 text-text-on-accent text-sm font-medium">
+          <span x-show="captureActionLabel !== 'delete' || !captureActionInFlight"
+                x-text="'Delete selected (' + captureSelectedIds.length + ')'"></span>
+          <span x-show="captureActionLabel === 'delete' && captureActionInFlight">Deleting…</span>
+        </button>
+        <div class="flex-1"></div>
+        <button
+          @click="pruneCaptures(false)"
+          :disabled="captureActionInFlight"
+          class="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium">
+          <span x-show="captureActionLabel !== 'prune' || !captureActionInFlight">Prune (retention)</span>
+          <span x-show="captureActionLabel === 'prune' && captureActionInFlight">Pruning…</span>
+        </button>
+        <button
+          @click="pruneCaptures(true)"
+          :disabled="captureActionInFlight"
+          class="px-3 py-1.5 rounded bg-op-dstr-solid hover:bg-op-dstr-solid-h disabled:opacity-50 text-text-on-accent text-sm font-medium">
+          <span x-show="captureActionLabel !== 'clear_all' || !captureActionInFlight">Clear all</span>
+          <span x-show="captureActionLabel === 'clear_all' && captureActionInFlight">Clearing…</span>
+        </button>
+      </div>
+
+      <template x-if="captureActionError">
+        <div class="text-sm text-banner-fail-fg bg-banner-fail-bg p-2 rounded font-mono" x-text="captureActionError"></div>
+      </template>
+      <template x-if="captureActionResult">
+        <div class="text-sm text-banner-ok-fg bg-banner-ok-bg p-2 rounded" x-text="captureActionResult"></div>
+      </template>
+
+      <!-- Empty state -->
+      <template x-if="!captureList.length">
+        <div class="bg-surface-raised rounded-lg shadow-sm p-8 text-center text-text-muted text-sm">
+          No captures yet. Run <code class="font-mono">haops_ui_screenshot</code> to create one.
+        </div>
+      </template>
+
+      <!-- Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        <template x-for="c in captureList" :key="c.id">
+          <div class="bg-surface-raised rounded-lg shadow-sm overflow-hidden flex flex-col">
+            <!-- Thumbnail / trace placeholder -->
+            <div class="relative aspect-video bg-surface-hover cursor-pointer overflow-hidden"
+                 @click="openCapture(c)">
+              <template x-if="c.kind === 'screenshot'">
+                <img :src="captureUrl(c.id)" loading="lazy"
+                     class="w-full h-full object-cover object-top" :alt="c.view">
+              </template>
+              <template x-if="c.kind === 'trace'">
+                <div class="w-full h-full flex items-center justify-center text-text-muted text-xs">
+                  <span>⎙ trace zip — click to download</span>
+                </div>
+              </template>
+              <!-- select checkbox -->
+              <label class="absolute top-1.5 left-1.5 bg-surface/80 rounded p-0.5" @click.stop>
+                <input type="checkbox" x-model="captureSelected[c.id]" class="align-middle">
+              </label>
+              <span class="absolute top-1.5 right-1.5 text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded bg-surface/80"
+                    x-text="c.kind"></span>
+            </div>
+            <!-- meta -->
+            <div class="p-2 text-xs space-y-1 flex-1 flex flex-col">
+              <div class="font-mono truncate text-text" :title="c.view" x-text="c.view"></div>
+              <div class="text-text-muted flex justify-between">
+                <span x-text="formatTimestamp(c.timestamp)"></span>
+                <span x-text="formatBytes(c.size_bytes)"></span>
+              </div>
+              <div class="text-text-faint flex gap-2">
+                <span x-show="c.nav_ms != null" x-text="'nav ' + Math.round(c.nav_ms) + 'ms'"></span>
+                <span x-show="c.console_errors > 0" class="text-op-dstr-solid"
+                      x-text="c.console_errors + ' err'"></span>
+                <span x-show="c.transaction_id" title="linked to a change">🔗</span>
+              </div>
+              <!-- note -->
+              <template x-if="captureNoteEditId !== c.id">
+                <div class="flex items-start gap-1 mt-auto pt-1">
+                  <span class="flex-1 italic text-text-muted break-words"
+                        x-text="c.note || 'no note'"></span>
+                  <button class="text-text-faint hover:text-text" @click="startNoteEdit(c)" title="Edit note">✎</button>
+                </div>
+              </template>
+              <template x-if="captureNoteEditId === c.id">
+                <div class="mt-auto pt-1 space-y-1">
+                  <input type="text" x-model="captureNoteDraft"
+                         class="w-full px-1.5 py-1 rounded bg-surface border border-border-subtle text-xs"
+                         placeholder="note…" @keydown.enter="saveNote(c)" @keydown.escape="cancelNoteEdit()">
+                  <div class="flex gap-1">
+                    <button class="text-emerald-600 hover:text-emerald-800" @click="saveNote(c)">save</button>
+                    <button class="text-text-faint hover:text-text" @click="cancelNoteEdit()">cancel</button>
+                  </div>
+                </div>
+              </template>
+              <!-- per-item actions -->
+              <div class="flex gap-2 pt-1 border-t border-border-subtle mt-1">
+                <a :href="captureUrl(c.id, true)" class="text-blue-600 hover:text-blue-800 dark:text-blue-400">Download</a>
+                <div class="flex-1"></div>
+                <button class="text-red-600 hover:text-red-800 dark:text-red-400" @click="deleteOneCapture(c)">Delete</button>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Storage location -->
+      <div class="text-xs text-text-muted">
+        Capture directory: <span class="font-mono" x-text="captures?.stats?.dir"></span>
+      </div>
+    </div>
+  </template>
+
+  <!-- Lightbox -->
+  <div x-show="captureViewing" x-cloak
+       class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+       @click="closeCapture()" @keydown.escape.window="closeCapture()">
+    <div class="max-w-6xl max-h-full overflow-auto bg-surface rounded-lg shadow-xl" @click.stop>
+      <div class="flex items-center gap-3 px-4 py-2 border-b border-border-subtle">
+        <span class="font-mono text-sm truncate flex-1" x-text="captureViewing?.view"></span>
+        <a :href="captureViewing ? captureUrl(captureViewing.id, true) : '#'"
+           class="text-blue-600 hover:text-blue-800 dark:text-blue-400 text-sm">Download</a>
+        <button class="text-text-muted hover:text-text text-xl leading-none" @click="closeCapture()">×</button>
+      </div>
+      <template x-if="captureViewing">
+        <img :src="captureUrl(captureViewing.id)" class="max-w-full" :alt="captureViewing.view">
+      </template>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <script>
@@ -710,10 +899,20 @@ function app() {
     active: 'timeline',
     tabs: [
       {id:'timeline', label:'Timeline'},
+      {id:'captures', label:'Captures'},
       {id:'backups',  label:'Backups'},
       {id:'health',   label:'Health'},
     ],
     timeline: null,
+    captures: null,
+    captureSelected: {},        // id -> bool
+    captureViewing: null,       // entry currently in the lightbox
+    captureActionInFlight: false,
+    captureActionLabel: '',
+    captureActionError: '',
+    captureActionResult: '',
+    captureNoteEditId: '',
+    captureNoteDraft: '',
     backups: null,
     backupActionInFlight: false,
     backupActionLabel: '',
@@ -881,6 +1080,7 @@ function app() {
           );
         }
         else if (id === 'backups')  this.backups  = await this.fetchJson('/backups');
+        else if (id === 'captures') this.captures = await this.fetchJson('/captures');
         this.lastRefresh = new Date().toLocaleTimeString();
       } catch (e) {
         console.error('load', id, e);
@@ -1131,6 +1331,136 @@ function app() {
       } finally {
         this.backupActionInFlight = false;
         this.backupActionLabel = '';
+      }
+    },
+
+    // ── Captures gallery ───────────────────────────────────────────────
+
+    captureUrl(id, download) {
+      // Full URL to a capture artifact (ingress-path aware). download=true
+      // appends ?download=1 so the server sends Content-Disposition.
+      return this.apiBase() + '/captures/' + encodeURIComponent(id)
+        + (download ? '?download=1' : '');
+    },
+
+    get captureList() {
+      return (this.captures && this.captures.captures) || [];
+    },
+
+    get captureSelectedIds() {
+      var sel = this.captureSelected;
+      return Object.keys(sel).filter(function(k) { return sel[k]; });
+    },
+
+    get captureAllSelected() {
+      var list = this.captureList;
+      if (!list.length) return false;
+      var self = this;
+      return list.every(function(c) { return self.captureSelected[c.id]; });
+    },
+
+    toggleCaptureSelectAll() {
+      var target = !this.captureAllSelected;
+      var next = {};
+      this.captureList.forEach(function(c) { next[c.id] = target; });
+      this.captureSelected = next;
+    },
+
+    openCapture(entry) {
+      // Lightbox only makes sense for images; traces are download-only.
+      if (entry.kind === 'trace') { window.open(this.captureUrl(entry.id, true), '_blank'); return; }
+      this.captureViewing = entry;
+    },
+
+    closeCapture() { this.captureViewing = null; },
+
+    startNoteEdit(entry) {
+      this.captureNoteEditId = entry.id;
+      this.captureNoteDraft = entry.note || '';
+    },
+
+    cancelNoteEdit() {
+      this.captureNoteEditId = '';
+      this.captureNoteDraft = '';
+    },
+
+    async saveNote(entry) {
+      try {
+        var updated = await this._postJson('/captures_annotate', {
+          id: entry.id, note: this.captureNoteDraft,
+        });
+        entry.note = updated.note;
+      } catch (e) {
+        this.captureActionError = String(e.message || e);
+      } finally {
+        this.cancelNoteEdit();
+      }
+    },
+
+    async deleteSelectedCaptures() {
+      var ids = this.captureSelectedIds;
+      if (!ids.length) return;
+      if (!window.confirm('Delete ' + ids.length + ' capture(s)? This is irreversible.')) return;
+      this.captureActionError = '';
+      this.captureActionResult = '';
+      this.captureActionLabel = 'delete';
+      this.captureActionInFlight = true;
+      try {
+        var r = await this._postJson('/captures_delete', {ids: ids});
+        this.captureActionResult = 'Deleted ' + r.deleted + ' capture(s), freed '
+          + this.formatBytes(r.bytes_freed) + '.';
+        this.captureSelected = {};
+        this.captures = await this.fetchJson('/captures');
+      } catch (e) {
+        this.captureActionError = String(e.message || e);
+      } finally {
+        this.captureActionInFlight = false;
+        this.captureActionLabel = '';
+      }
+    },
+
+    async deleteOneCapture(entry) {
+      if (!window.confirm('Delete this capture? This is irreversible.')) return;
+      try {
+        await this._postJson('/captures_delete', {ids: [entry.id]});
+        if (this.captureViewing && this.captureViewing.id === entry.id) this.captureViewing = null;
+        delete this.captureSelected[entry.id];
+        this.captures = await this.fetchJson('/captures');
+      } catch (e) {
+        this.captureActionError = String(e.message || e);
+      }
+    },
+
+    async pruneCaptures(clearAll) {
+      this.captureActionError = '';
+      this.captureActionResult = '';
+      this.captureActionLabel = clearAll ? 'clear_all' : 'prune';
+      this.captureActionInFlight = true;
+      try {
+        var body = {clear_all: !!clearAll};
+        var preview = await this._postJson('/captures_prune', Object.assign({}, body, {execute: false}));
+        if (preview.count === 0) {
+          this.captureActionResult = clearAll ? 'No captures to clear.'
+            : 'Nothing matches the retention policy — already clean.';
+          return;
+        }
+        var msg = clearAll
+          ? ('CLEAR ALL ' + preview.count + ' capture(s) (' + this.formatBytes(preview.bytes_freed) + ')?\n\nIrreversible.')
+          : ('Prune ' + preview.count + ' capture(s) older than retention, freeing ' + this.formatBytes(preview.bytes_freed) + '?');
+        if (!window.confirm(msg)) {
+          this.captureActionResult = 'Cancelled — nothing changed.';
+          return;
+        }
+        var applied = await this._postJson('/captures_prune', Object.assign({}, body, {execute: true}));
+        this.captureActionResult = 'Removed ' + applied.count + ' capture(s), freed '
+          + this.formatBytes(applied.bytes_freed) + '.';
+        this.captureSelected = {};
+        this.captures = await this.fetchJson('/captures');
+      } catch (e) {
+        this.captureActionError = String(e.message || e);
+      } finally {
+        this.captureActionInFlight = false;
+        this.captureActionLabel = '';
       }
     },
 

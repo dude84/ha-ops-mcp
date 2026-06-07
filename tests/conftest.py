@@ -23,6 +23,7 @@ from ha_ops_mcp.config import (
 from ha_ops_mcp.connections.database import SqliteBackend
 from ha_ops_mcp.safety.audit import AuditLog
 from ha_ops_mcp.safety.backup import BackupManager
+from ha_ops_mcp.safety.captures import CaptureStore
 from ha_ops_mcp.safety.confirmation import SafetyManager
 from ha_ops_mcp.safety.path_guard import PathGuard
 from ha_ops_mcp.safety.rollback import RollbackManager
@@ -540,6 +541,7 @@ def ctx(
         safety=SafetyManager(),
         rollback=RollbackManager(),
         backup=BackupManager(backup_dir),
+        captures=CaptureStore(backup_dir / "captures"),
         audit=AuditLog(backup_dir / "audit"),
         path_guard=PathGuard(config_dir),
     )
