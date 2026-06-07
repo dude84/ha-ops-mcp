@@ -1,3 +1,19 @@
+## 0.51.0
+
+**Drift guard + headless interaction/trace + native user management.** Three independent additions (71 → 77 tools).
+
+- **`haops_dashboard_apply` stale-token drift guard.** Apply now re-fetches the live dashboard and compares it to the token's `old_config`; if it changed since the preview, the apply **refuses** (doesn't save, doesn't consume the token) instead of silently clobbering the newer edit — re-preview to proceed. (Proceeds if the re-fetch returns nothing, so a transient read doesn't block a legit apply.) See HA_QUIRKS → "Confirmation tokens are NOT auto-invalidated".
+- **`haops_ui_interact`** — drive a Lovelace view through scroll / click / tap actions (default: a full-page scroll sweep) and capture the main-thread long-tasks + console errors that occur *during* interaction. The core of the UI freeze-hunting work. Read-only/diagnostic.
+- **`haops_ui_trace`** — record a Playwright CDP performance-trace (zip) of a view load, saved under the tool-results dir, for deep profiling. Read-only.
+- **Native user management** via the HA admin WebSocket API (`config/auth/*`) — no `.storage/auth` editing, no restart:
+  - `haops_user_list` (read)
+  - `haops_user_create` (two-phase) — name, admin, local_only, optional password
+  - `haops_user_update` (two-phase) — rename / group / `is_active` (disable–enable)
+  - `haops_user_delete` (two-phase, destructive) — refuses owners; backs up the auth entry first
+  New `user` op-area; `haops_tools_check` gains a `user` group.
+
+Built in parallel by subagents, integrated + committed per-feature. Full suite 655 green; Debian image smoke green.
+
 ## 0.50.0
 
 **Debian base + server-side Playwright UI suite.** Major shift: the addon image moves off Alpine to Debian so it can run Playwright + Chromium (Alpine/musl is unsupported by Playwright), unlocking server-side dashboard screenshots and load-performance capture. The version jump to 0.50.0 marks the base-image change.

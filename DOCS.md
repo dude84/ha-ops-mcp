@@ -1,6 +1,6 @@
 # ha-ops-mcp
 
-An MCP server addon that gives AI assistants (and you) operational access to your Home Assistant instance. 71 tools covering database management, YAML config editing (with comment preservation), Lovelace dashboard CRUD via JSON Patch, entity registry hygiene, collection-helper CRUD (input_boolean / input_number / counter / timer / schedule / etc.), cross-surface reference graph, automation debugging, system health monitoring, add-on management, Zigbee/ZHA introspection, shell access, and a **headless UI/UX surface** — server-side dashboard screenshots + load-performance capture via Playwright/Chromium (v0.50.0+, Debian-based image) — all with two-phase confirmation, automatic backups, in-session rollback, and a full audit trail.
+An MCP server addon that gives AI assistants (and you) operational access to your Home Assistant instance. 77 tools covering database management, YAML config editing (with comment preservation), Lovelace dashboard CRUD via JSON Patch, entity registry hygiene, collection-helper CRUD (input_boolean / input_number / counter / timer / schedule / etc.), cross-surface reference graph, automation debugging, system health monitoring, add-on management, Zigbee/ZHA introspection, shell access, native user management, and a **headless UI/UX surface** — server-side dashboard screenshots + load-performance capture via Playwright/Chromium (v0.50.0+, Debian-based image) — all with two-phase confirmation, automatic backups, in-session rollback, and a full audit trail.
 
 Built for the maintenance and observability work that comes during and after setup. **Device control** (lights, switches, scenes) is a **secondary objective** — handled by the generic `haops_service_call` escape hatch, not bespoke per-device tools.
 
@@ -63,7 +63,7 @@ This is a deliberate capability expansion: combined with shell access, the addon
 claude mcp add --transport sse ha-ops http://<your-ha-address>:8901/sse
 ```
 
-Then start Claude Code — the 58 `haops_*` tools will be available.
+Then start Claude Code — the `haops_*` tools will be available.
 
 ## Tools
 
