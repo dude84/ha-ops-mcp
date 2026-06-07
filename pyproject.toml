@@ -82,3 +82,10 @@ strict = true
 [[tool.mypy.overrides]]
 module = ["jsonpatch"]
 ignore_missing_imports = true
+
+# Playwright is NOT a pip dependency — it's installed into the image separately
+# (Debian build only) and imported lazily, guarded by browser_available(). It
+# won't be present in CI/dev, so treat it as Any rather than failing --strict.
+[[tool.mypy.overrides]]
+module = ["playwright.*"]
+ignore_missing_imports = true

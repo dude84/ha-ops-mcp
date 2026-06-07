@@ -141,7 +141,9 @@ class CaptureRequest:
     nav_timeout_ms: int = 30000
 
 
-async def _open_page(p: Any, req: CaptureRequest):  # noqa: ANN001
+async def _open_page(
+    p: Any, req: CaptureRequest
+) -> tuple[Any, Any, Any, list[dict[str, str]], float, str]:
     """Launch a context, inject auth + perf observers, navigate, settle."""
     browser = await p.chromium.launch(args=_LAUNCH_ARGS)
     context = await browser.new_context(
