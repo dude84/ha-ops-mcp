@@ -1,3 +1,7 @@
+## 0.53.2
+
+**`haops_capture_show` payload trimmed further.** The MCP client renders the returned image *and* echoes its bytes as a text block; at JPEG q82 / 900px even that echo could exceed the client's text-output cap. Lowered the defaults to **768px / quality 70** — still legible for layout/value checks, with a meaningfully smaller payload. `max_px` remains overridable for more detail.
+
 ## 0.53.1
 
 **`haops_capture_show` now returns JPEG, not PNG.** The MCP client echoes the returned image bytes as text as well as rendering them; a full-page dashboard PNG (multi-hundred-KB) blew that text budget. `capture_show` now downscales to **JPEG (q82, default long-edge 900px)** — a fraction of the size, still perfectly legible for visual review. Raise `max_px` for more detail.

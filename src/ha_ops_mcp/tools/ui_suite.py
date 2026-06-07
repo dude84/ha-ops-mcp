@@ -360,7 +360,7 @@ async def haops_ui_trace(
     }
 
 
-def _downscale_jpeg(data: bytes, max_px: int, quality: int = 82) -> bytes:
+def _downscale_jpeg(data: bytes, max_px: int, quality: int = 70) -> bytes:
     """Downscale an image to a JPEG whose long edge is <= max_px (no upscaling).
 
     JPEG (not PNG) on purpose: a full-page dashboard PNG is multi-hundred-KB,
@@ -393,7 +393,7 @@ def _downscale_jpeg(data: bytes, max_px: int, quality: int = 82) -> bytes:
         "overflows the token cap) and without shelling into the host. READ-ONLY.\n\n"
         "Parameters: capture_id (string, required — the id returned by "
         "haops_ui_screenshot, or shown in the Captures tab), max_px (int, default "
-        "900 — long-edge cap for the downscaled image; raise for more detail, "
+        "768 — long-edge cap for the downscaled image; raise for more detail, "
         "lower for a smaller payload).\n\n"
         "Returns a native image content block (JPEG). Errors (as a dict) if the id "
         "is unknown or the capture is a trace zip (not an image) — open a trace "
@@ -404,7 +404,7 @@ def _downscale_jpeg(data: bytes, max_px: int, quality: int = 82) -> bytes:
 async def haops_capture_show(
     ctx: HaOpsContext,
     capture_id: str,
-    max_px: int = 900,
+    max_px: int = 768,
 ) -> Any:
     got = ctx.captures.read_bytes(capture_id)
     if got is None:
