@@ -1,3 +1,16 @@
+## 0.50.0
+
+**Debian base + server-side Playwright UI suite.** Major shift: the addon image moves off Alpine to Debian so it can run Playwright + Chromium (Alpine/musl is unsupported by Playwright), unlocking server-side dashboard screenshots and load-performance capture. The version jump to 0.50.0 marks the base-image change.
+
+- **Debian base swap.** `Dockerfile` → `ghcr.io/home-assistant/{arch}-base-debian:trixie` (Python 3.13 via apt), `build.yaml` updated. Wheels-only install (`--only-binary=:all:`, no compiler toolchain); **Chromium-headless-shell** (not full Chromium) via `playwright install --with-deps`. The browser layer is installed *before* the project source so code changes don't re-download Chromium. Image ≈ 1.5 GB. ⚠️ The Supervisor rebuilds this **on the HA host** — first build pulls the base + browser (several minutes; slower on low-power hosts).
+- **`haops_ui_screenshot`** — render a Lovelace view headless and return a PNG (saved path + base64) + capture metadata. For visual checks / before-after comparisons.
+- **`haops_ui_perf`** — load-performance metrics for a view (nav timing, FCP/LCP, CLS, long-tasks, JS heap, shadow-DOM-aware DOM/card counts), raw and unscored. Both are read-only and require a Home Assistant **long-lived access token** in `ha_token` (the frontend session; Supervisor tokens aren't accepted by the frontend). Auth is injected via `localStorage['hassTokens']`.
+- **`scripts/smoke.sh`** — in-image runtime/contract test (every tool module imports, DB drivers import, real Chromium launch). Catches base-image-swap breakage the mock-based pytest can't. Gate for the swap.
+- **`dev-deploy.sh --ref <branch|tag|sha>`** — deploy a feature branch's working tree as the local addon without cutting a public release: PEP 440-valid dev version (`<base>.dev<YYYYMMDDHHMMSS>`), `ha store reload && ha apps update` so the shown version tracks the deployed code.
+- **Docs.** HA_QUIRKS: confirmation-token staleness semantics; `custom:apexcharts-card` rejects `layout_options` ("Configuration error" — wrap in a stack for full-width in sections). BACKLOG: dedicated `ha-ops-user` service account; native user-account-management feature.
+
+New tests: UI capture tools, supervisor-token regression, oauth migration. Full suite 624 green; Debian image smoke green (real Chromium launch).
+
 ## 0.40.1
 
 **Supervisor API auth fix — use `SUPERVISOR_TOKEN`, not the configured HA token.** Every `http://supervisor/*` call (`haops_addon_list/info/logs/restart`, `haops_system_core`, core-log fetch, the tools_check supervisor probe) authenticated with `ctx.config.ha.resolve_token()`. That only worked because `run.sh` aliases an **empty** `ha_token` to `SUPERVISOR_TOKEN`. The moment a real HA **long-lived access token** is set in `ha_token` (e.g. to give a tool a frontend session, or for a dedicated service user), those calls sent a *Core user token* to the Supervisor → **HTTP 403** ("supervisor_info HTTP 403", addon tools + core power dead). New `addon._supervisor_token()` prefers the `SUPERVISOR_TOKEN` env var (always present in the addon) and falls back to the configured token only for non-addon/dev runs. Applied across `addon.py`, `utils/logs.py`, and the tools_check probe. + regression test. Found on a live deploy that set a custom token; everything else (HA Core REST/WS/DB/filesystem) was unaffected.
