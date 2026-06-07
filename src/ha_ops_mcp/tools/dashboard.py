@@ -1047,6 +1047,28 @@ async def haops_dashboard_apply(
     new_config: dict[str, Any] = details["new_config"]
     old_config: dict[str, Any] = details["old_config"]
 
+    # Stale-token drift guard: re-fetch the live dashboard and compare it to the
+    # config captured at preview time. If the dashboard was edited in between,
+    # applying would silently clobber that intervening change. Refuse and leave
+    # the token unconsumed so the user can re-preview.
+    #
+    # Edge case: if the re-fetch returns None (transient read failure, or
+    # dashboard not yet persisted), proceed conservatively. A failed read
+    # should not block a legitimate apply — the same way _get_dashboard_config
+    # callers elsewhere tolerate a missing config rather than hard-failing.
+    current_config = await _get_dashboard_config(ctx, dashboard_id)
+    if current_config is not None and current_config != old_config:
+        return {
+            "error": (
+                "Dashboard changed since preview — not applying "
+                "(would clobber the newer edit)"
+            ),
+            "hint": (
+                "Re-read with haops_dashboard_get and re-run the preview "
+                "to get a fresh token."
+            ),
+        }
+
     # Rollback savepoint
     txn = ctx.rollback.begin("dashboard_apply")
     txn.savepoint(

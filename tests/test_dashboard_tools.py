@@ -86,6 +86,56 @@ async def test_dashboard_apply(ctx, dashboard_storage):
     assert apply_result.get("backup_path") is not None
 
 
+@pytest.mark.asyncio
+async def test_dashboard_apply_refuses_on_drift(ctx, dashboard_storage):
+    """Stale-token drift guard: if the live dashboard changed between preview
+    and apply, refuse to clobber it and leave the token unconsumed."""
+    new_config = {"title": "Updated", "views": []}
+    diff_result = await haops_dashboard_diff(
+        ctx, dashboard_id="lovelace", new_config=new_config
+    )
+    token = diff_result["token"]
+
+    # Simulate an intervening edit to the live dashboard after the preview.
+    storage_file = dashboard_storage / "lovelace"
+    drifted = json.loads(storage_file.read_text())
+    drifted["data"]["config"]["title"] = "Edited Elsewhere"
+    storage_file.write_text(json.dumps(drifted))
+
+    ctx.ws.send_command = AsyncMock(
+        side_effect=AssertionError("save must not be called on drift")
+    )
+    apply_result = await haops_dashboard_apply(ctx, token=token)
+
+    assert "error" in apply_result
+    assert "changed since preview" in apply_result["error"]
+    assert "hint" in apply_result
+    # Token NOT consumed — still valid so the user can re-preview.
+    assert ctx.safety.validate_token(token) is not None
+
+
+@pytest.mark.asyncio
+async def test_dashboard_apply_succeeds_without_drift(ctx, dashboard_storage):
+    """When the live dashboard matches the token's old_config, apply proceeds
+    and consumes the token exactly as before."""
+    new_config = {"title": "Updated", "views": []}
+    diff_result = await haops_dashboard_diff(
+        ctx, dashboard_id="lovelace", new_config=new_config
+    )
+    token = diff_result["token"]
+
+    ctx.ws.send_command = AsyncMock(return_value={})
+    apply_result = await haops_dashboard_apply(ctx, token=token)
+
+    assert apply_result["success"] is True
+    ctx.ws.send_command.assert_awaited_once()
+    # Token consumed — re-validation raises.
+    from ha_ops_mcp.safety.confirmation import TokenConsumedError
+
+    with pytest.raises(TokenConsumedError):
+        ctx.safety.validate_token(token)
+
+
 # ── Gap 10: summary mode + view-by-path/title ──
 
 
