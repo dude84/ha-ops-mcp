@@ -22,7 +22,14 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from ha_ops_mcp.server import registry
-from ha_ops_mcp.ui.capture import CaptureRequest, browser_available, perf, screenshot
+from ha_ops_mcp.ui.capture import (
+    CaptureRequest,
+    browser_available,
+    interact,
+    perf,
+    screenshot,
+    trace,
+)
 
 if TYPE_CHECKING:
     from ha_ops_mcp.server import HaOpsContext
@@ -170,3 +177,106 @@ async def haops_ui_perf(
         return await perf(req)
     except Exception as e:  # noqa: BLE001
         return {"error": f"perf capture failed: {type(e).__name__}: {e}"[:400]}
+
+
+@registry.tool(
+    name="haops_ui_interact",
+    description=(
+        "Drive a Home Assistant Lovelace view through a sequence of interactions "
+        "in headless Chromium and report the main-thread long-tasks + console "
+        "errors that occur DURING the interaction. Use to hunt UI jank/freezes "
+        "triggered by user action (scrolling a heavy dashboard, opening a "
+        "more-info dialog, switching tabs) rather than just initial load. "
+        "READ-ONLY in the ops sense (it only observes the rendered frontend; it "
+        "does not mutate HA config/state).\n\n"
+        "Parameters: path (Lovelace url_path; default 'lovelace'), actions (list "
+        "of action dicts; if empty, defaults to a full-page scroll sweep). "
+        "Supported actions: {'type':'scroll','dy':800,'dx':0}, "
+        "{'type':'click','selector':'<css>'}, {'type':'tap','x':..,'y':..}, "
+        "{'type':'wait','ms':500}. Each action accepts an optional 'settle_ms' to "
+        "pause after it. Invalid/missing selectors are recorded and skipped — the "
+        "run continues. Other params: settle_ms (wait after load before "
+        "interacting; default 2500), viewport_width/viewport_height (px; default "
+        "1280x2400), base_url + access_token (override; default from config).\n\n"
+        "Returns raw, UNSCORED: {url, nav_ms, actions_run:[{type, ok, ms, ...}], "
+        "long_tasks:{count,total_ms,max_ms} (delta attributable to the "
+        "interaction), console_errors}. Requires the Debian addon build + an LLAT."
+    ),
+)
+async def haops_ui_interact(
+    ctx: HaOpsContext,
+    path: str = "lovelace",
+    actions: list[dict[str, Any]] | None = None,
+    settle_ms: int = 2500,
+    viewport_width: int = 1280,
+    viewport_height: int = 2400,
+    base_url: str = "",
+    access_token: str = "",
+) -> dict[str, Any]:
+    if not browser_available():
+        return _unavailable()
+    resolved = _resolve_target(ctx, base_url, access_token)
+    if isinstance(resolved, dict):
+        return resolved
+    base, token = resolved
+    req = CaptureRequest(
+        base_url=base,
+        path=path,
+        access_token=token,
+        viewport_width=viewport_width,
+        viewport_height=viewport_height,
+        settle_ms=settle_ms,
+    )
+    try:
+        return await interact(req, actions or [])
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"interact capture failed: {type(e).__name__}: {e}"[:400]}
+
+
+@registry.tool(
+    name="haops_ui_trace",
+    description=(
+        "Record a Playwright trace (zip) of a Home Assistant Lovelace view load "
+        "in headless Chromium — screenshots, DOM snapshots, network + console — "
+        "and save it to disk for offline inspection in the Playwright trace "
+        "viewer (`npx playwright show-trace <file>`). Use for deep diagnosis of a "
+        "slow/janky dashboard when the summary numbers from haops_ui_perf aren't "
+        "enough. READ-ONLY (loads the page, captures a trace).\n\n"
+        "Parameters: path (Lovelace url_path; default 'lovelace'), settle_ms "
+        "(wait after load before stopping the trace; default 2500), "
+        "viewport_width/viewport_height (px; default 1280x2400), base_url + "
+        "access_token (override; default from config).\n\n"
+        "Returns: {url, saved_path, size_bytes, nav_ms}. The trace zip is written "
+        "under the tool-results dir; read/transfer saved_path to open it. "
+        "Requires the Debian addon build + an LLAT."
+    ),
+)
+async def haops_ui_trace(
+    ctx: HaOpsContext,
+    path: str = "lovelace",
+    settle_ms: int = 2500,
+    viewport_width: int = 1280,
+    viewport_height: int = 2400,
+    base_url: str = "",
+    access_token: str = "",
+) -> dict[str, Any]:
+    if not browser_available():
+        return _unavailable()
+    resolved = _resolve_target(ctx, base_url, access_token)
+    if isinstance(resolved, dict):
+        return resolved
+    base, token = resolved
+    req = CaptureRequest(
+        base_url=base,
+        path=path,
+        access_token=token,
+        viewport_width=viewport_width,
+        viewport_height=viewport_height,
+        settle_ms=settle_ms,
+    )
+    safe = path.strip("/").replace("/", "_") or "root"
+    out_path = ctx.audit.tool_results_dir() / f"ui-trace-{safe}-{int(time.time())}.zip"
+    try:
+        return await trace(req, str(out_path))
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"trace capture failed: {type(e).__name__}: {e}"[:400]}

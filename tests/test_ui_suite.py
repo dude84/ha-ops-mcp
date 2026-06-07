@@ -113,6 +113,115 @@ async def test_perf_capture_error_is_structured(tmp_path, monkeypatch):
     assert "RuntimeError" in out["error"]
 
 
+# --- haops_ui_interact ------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_interact_browser_unavailable(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: False)
+    out = await ui.haops_ui_interact(_ctx(tmp_path))
+    assert out["browser_available"] is False
+    assert "Debian addon build" in out["error"]
+
+
+@pytest.mark.asyncio
+async def test_interact_requires_token(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: True)
+    out = await ui.haops_ui_interact(_ctx(tmp_path, token=""))
+    assert "access token" in out["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_interact_success_shape(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: True)
+
+    async def fake_interact(req: CaptureRequest, actions):
+        assert req.access_token == "LLAT-xyz"
+        assert actions == [{"type": "scroll", "dy": 400}]
+        return {
+            "url": "http://homeassistant:8123/lovelace",
+            "nav_ms": 600.0,
+            "actions_run": [{"type": "scroll", "ok": True, "ms": 5.0}],
+            "long_tasks": {"count": 2, "total_ms": 120.0, "max_ms": 80.0},
+            "console_errors": [],
+        }
+
+    monkeypatch.setattr(ui, "interact", fake_interact)
+    out = await ui.haops_ui_interact(
+        _ctx(tmp_path), actions=[{"type": "scroll", "dy": 400}]
+    )
+    assert out["long_tasks"]["count"] == 2
+    assert out["actions_run"][0]["type"] == "scroll"
+    assert out["nav_ms"] == 600.0
+
+
+@pytest.mark.asyncio
+async def test_interact_capture_error_is_structured(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: True)
+
+    async def boom(req: CaptureRequest, actions):
+        raise RuntimeError("nav timeout")
+
+    monkeypatch.setattr(ui, "interact", boom)
+    out = await ui.haops_ui_interact(_ctx(tmp_path))
+    assert "nav timeout" in out["error"]
+    assert "RuntimeError" in out["error"]
+
+
+# --- haops_ui_trace ---------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_trace_browser_unavailable(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: False)
+    out = await ui.haops_ui_trace(_ctx(tmp_path))
+    assert out["browser_available"] is False
+    assert "Debian addon build" in out["error"]
+
+
+@pytest.mark.asyncio
+async def test_trace_requires_token(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: True)
+    out = await ui.haops_ui_trace(_ctx(tmp_path, token=""))
+    assert "access token" in out["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_trace_success_shape(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: True)
+
+    async def fake_trace(req: CaptureRequest, out_path: str):
+        assert req.access_token == "LLAT-xyz"
+        assert out_path.endswith(".zip")
+        # trace fn is responsible for writing the file in the real impl
+        return {
+            "url": "http://homeassistant:8123/lovelace",
+            "saved_path": out_path,
+            "size_bytes": 4096,
+            "nav_ms": 700.0,
+        }
+
+    monkeypatch.setattr(ui, "trace", fake_trace)
+    out = await ui.haops_ui_trace(_ctx(tmp_path))
+    assert out["saved_path"].endswith(".zip")
+    assert "ui-trace-" in out["saved_path"]
+    assert out["size_bytes"] == 4096
+    assert out["nav_ms"] == 700.0
+
+
+@pytest.mark.asyncio
+async def test_trace_capture_error_is_structured(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: True)
+
+    async def boom(req: CaptureRequest, out_path: str):
+        raise RuntimeError("trace failed")
+
+    monkeypatch.setattr(ui, "trace", boom)
+    out = await ui.haops_ui_trace(_ctx(tmp_path))
+    assert "trace failed" in out["error"]
+    assert "RuntimeError" in out["error"]
+
+
 def test_tools_registered():
     import ha_ops_mcp.tools.ui_suite  # noqa: F401
     from ha_ops_mcp.server import registry
@@ -120,3 +229,5 @@ def test_tools_registered():
     names = {n for n, _, _ in registry.all_tools()}
     assert "haops_ui_screenshot" in names
     assert "haops_ui_perf" in names
+    assert "haops_ui_interact" in names
+    assert "haops_ui_trace" in names
