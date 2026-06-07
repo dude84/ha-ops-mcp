@@ -93,6 +93,24 @@ that had no `layout_options`, a bare apex replacement needs no wrapper.)
 
 ---
 
+### `custom:apexcharts-card` header `show_states` shows the last *grouped* point, not the live value
+
+With `header.show_states: true` the colourised number in the card header is the
+**last plotted data point** of the series. If the series uses `group_by`
+(e.g. the de-jag recipe `all_series_config.group_by: {func: avg, duration: 30min}`),
+that header value is the **average of the current bucket** — smoothed and lagging
+up to the bucket duration. It will NOT match a `gauge`/`tile` on the same entity,
+which shows the raw current state. Diagnosed live: CO2 gauge 711 ppm vs apex
+header 677.1 ppm on the same sensor.
+
+Fix: add **`show: {in_header: raw}`** to the series (or to `all_series_config` so
+it applies to every series). `in_header: raw` makes the header pull the entity's
+**actual current state**, bypassing `group_by`, while the plotted line stays
+averaged/smooth. Applied across all per-room CO2 cards 2026-06-07; the redundant
+gauges were then removed since the header now carries the live value.
+
+---
+
 ## Database Operational Patterns
 
 ### The `states` table self-referential FK
