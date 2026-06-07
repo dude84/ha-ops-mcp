@@ -1,3 +1,13 @@
+## 0.53.3
+
+**Captures are human-viewed by default; model-vision is opt-in.** Pushing image bytes into the model's context costs tokens (vision tokens + the client's base64 text-echo). Routine "show me this view" shouldn't pay that — the ingress gallery already serves the image in your browser for free.
+
+- **Captures-tab deep-link.** `…/ui#capture=<id>` opens the Captures tab and auto-opens that capture in the lightbox. The newest capture is always card #1, so "just took it" needs no link at all; the deep-link is for pointing at a specific older capture.
+- **`haops_ui_screenshot` view_hint reworded** to lead with the browser path (0 model tokens), with `haops_capture_show` flagged as the token-costing fallback.
+- **`haops_capture_show` description reframed** as "only when the model must analyze the pixels" (visual-regression / chart-jaggedness checks), not the default viewer.
+
+No behavior change to capture/render; this is about *who looks* and the token cost of each path.
+
 ## 0.53.2
 
 **`haops_capture_show` payload trimmed further.** The MCP client renders the returned image *and* echoes its bytes as a text block; at JPEG q82 / 900px even that echo could exceed the client's text-output cap. Lowered the defaults to **768px / quality 70** — still legible for layout/value checks, with a meaningfully smaller payload. `max_px` remains overridable for more detail.

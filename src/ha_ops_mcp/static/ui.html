@@ -961,6 +961,20 @@ function app() {
       // user opens. Without this, version only populated when Health
       // was visited, which felt flaky.
       this._loadSelfCheck();
+      // Deep-link: #capture=<id> (or #captures) opens the Captures tab, and
+      // when an id is given, auto-opens that capture in the lightbox. Lets a
+      // chat assistant point you straight at a specific capture without
+      // pushing the image bytes through the model's context.
+      var m = (window.location.hash || '').match(/^#capture(?:=(\w+))?$/);
+      if (m) {
+        await this.switchTab('captures');
+        if (m[1]) {
+          var hit = this.captureList.find(function(c) { return c.id === m[1]; });
+          if (hit) this.openCapture(hit);
+        }
+        this._startTimelinePolling();
+        return;
+      }
       await this.load('timeline');
       this._startTimelinePolling();
     },

@@ -174,9 +174,14 @@ async def haops_ui_screenshot(
         r["image_b64"] = base64.b64encode(png).decode()
     else:
         r["image_b64"] = None
+        # Human-first viewing: point at the sidebar gallery (0 model tokens).
+        # capture_show pushes pixels into the model context and is only worth
+        # it when the model itself must analyze the image.
         r["view_hint"] = (
-            f"call haops_capture_show(capture_id='{entry.id}') to view, "
-            "or open the Captures tab"
+            "View in the HA Ops sidebar → Captures tab (newest capture is "
+            f"first; deep-link '#capture={entry.id}'). For the model to "
+            f"analyze the image, call haops_capture_show(capture_id='{entry.id}') "
+            "— note that ingests the image and costs tokens."
         )
     return r
 
@@ -387,10 +392,15 @@ def _downscale_jpeg(data: bytes, max_px: int, quality: int = 70) -> bytes:
 @registry.tool(
     name="haops_capture_show",
     description=(
-        "View a stored UI capture (screenshot) as an inline image, downscaled to "
-        "fit the response budget. This is the read-only way to *see* a capture "
-        "produced by haops_ui_screenshot without inlining a full-res base64 (which "
-        "overflows the token cap) and without shelling into the host. READ-ONLY.\n\n"
+        "Pull a stored screenshot into the MODEL's context as a downscaled "
+        "inline image, for when the assistant itself must visually analyze the "
+        "capture (e.g. 'is this chart jagged?', layout/visual-regression checks). "
+        "READ-ONLY.\n\n"
+        "PREFER NOT TO CALL THIS for routine 'show the user' requests: ingesting "
+        "the image costs tokens. For a human to view a capture, point them at the "
+        "HA Ops sidebar → Captures tab (deep-link '#capture=<id>') — that serves "
+        "the image in the browser at zero model-token cost. Use this tool only "
+        "when YOU need to see the pixels.\n\n"
         "Parameters: capture_id (string, required — the id returned by "
         "haops_ui_screenshot, or shown in the Captures tab), max_px (int, default "
         "768 — long-edge cap for the downscaled image; raise for more detail, "
