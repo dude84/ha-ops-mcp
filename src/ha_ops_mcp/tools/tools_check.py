@@ -469,6 +469,37 @@ async def _check_ui(ctx: HaOpsContext) -> dict[str, Any]:
     return {"status": "pass", "tools_affected": tools, "tests": checks}
 
 
+async def _check_user(ctx: HaOpsContext) -> dict[str, Any]:
+    """Check the user-management tools (haops_user_*) are reachable.
+
+    Read-only: lists users via the WS admin API (`config/auth/list`). Mutating
+    user ops (create/update/delete) are two-phase + exercised on real use, not
+    here. Skips gracefully if the WS call isn't available (non-admin token / not
+    reachable) rather than failing the whole check.
+    """
+    tools = [
+        "haops_user_list", "haops_user_create",
+        "haops_user_update", "haops_user_delete",
+    ]
+    try:
+        res = await ctx.ws.send_command("config/auth/list")
+        users = res if isinstance(res, list) else res.get("result", res)
+        n = len(users) if isinstance(users, list) else None
+        return {
+            "status": "pass",
+            "tools_affected": tools,
+            "tests": {"auth_list": {"ok": True, "user_count": n}},
+        }
+    except Exception as e:
+        return {
+            "status": "skipped",
+            "reason": "config/auth/list unavailable (needs an admin token / "
+            f"live HA): {str(e)[:140]}",
+            "tools_affected": tools,
+            "tests": {"auth_list": {"ok": False}},
+        }
+
+
 async def _check_shell(ctx: HaOpsContext) -> dict[str, Any]:
     """Exercise shell subprocess execution."""
     import asyncio
@@ -668,6 +699,7 @@ async def haops_tools_check(ctx: HaOpsContext) -> dict[str, Any]:
     results["helpers"] = await _check_helpers(ctx)
     results["zigbee"] = await _check_zigbee(ctx)
     results["ui"] = await _check_ui(ctx)
+    results["user"] = await _check_user(ctx)
 
     # Summary
     statuses = [r.get("status") for r in results.values()]

@@ -64,6 +64,7 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "ui_perf": ("read", "system"),
     "ui_interact": ("read", "system"),
     "ui_trace": ("read", "system"),
+    "user_list": ("read", "user"),
     # --- mutate ---
     "config_apply": ("mutate", "config"),  # sub-area refined from path
     "config_patch": ("mutate", "config"),
@@ -91,11 +92,14 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "backup_revert": ("mutate", "backup"),
     "rollback": ("mutate", "config"),
     "exec_shell": ("mutate", "shell"),
+    "user_create": ("mutate", "user"),
+    "user_update": ("mutate", "user"),
     # --- destructive (irreversible / data loss) ---
     "entity_remove": ("destructive", "entity"),
     "helper_delete": ("destructive", "helper"),
     "db_purge": ("destructive", "database"),
     "backup_prune": ("destructive", "backup"),
+    "user_delete": ("destructive", "user"),
 }
 
 _READ_VERBS = frozenset({"select", "pragma", "explain", "with", "show"})
