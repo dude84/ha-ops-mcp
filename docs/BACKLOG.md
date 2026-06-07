@@ -56,7 +56,17 @@ from the owner); one-switch revoke; no owner-profile clutter.
   `.storage/frontend.user_data.<user_id>` + theme, or add a per-call theme
   override on the UI tools. Resolve before relying on it for visual work.
 
-Approved 2026-06-06. Related: [[project_ui_suite_program]].
+**Priority: LOW — deprioritized 2026-06-07.** Discussed: it's a modest
+convenience, not important. The only solid win is HA-logbook attribution, which
+is partly redundant with the addon's own `operations.jsonl` audit; "security /
+least-privilege" is illusory (addon is already root-on-HA via exec_shell +
+config:rw, regardless of which HA user the token names); and naive adoption
+**degrades UI capture** (screenshots render as this user → must mirror the
+owner's theme/locale/default-dashboard forever). If ever revisited, do the
+**split**: `ha_token` = `ha-ops-user` for actions, pass the **owner** LLAT to the
+UI tools via their `access_token` param (add `ui.access_token` defaulting to
+`ha.token`) — clean attribution without the profile-mirror tax. Not naive #2.
+Approved-but-parked. Related: [[project_ui_suite_program]].
 
 ### Native user account management (UAM)
 
