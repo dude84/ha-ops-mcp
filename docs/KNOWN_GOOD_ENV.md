@@ -15,6 +15,33 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.52.3` — verified 2026-06-07 (Singapore HA)
+
+| Component | Version | How to check |
+|---|---|---|
+| ha-ops-mcp (addon) | **0.52.3** (tag `v0.52.3`, `b1aa377`) | `haops_system_info` / `git describe --tags` |
+| Home Assistant Core | **2026.6.1** | `haops_self_check` → `rest_api.ha_version` |
+| HA DB backend | **MariaDB 11.4.10-MariaDB**, schema **53** | `haops_system_info` → `database` |
+| Claude Code CLI | **2.1.166** | `claude --version` |
+| Terminal host | **iTerm2 3.6.11** | iTerm → About / `$TERM_PROGRAM_VERSION` |
+| macOS | **26.5.1** (Darwin 25.5.0) | `sw_vers` |
+| Bun (CC runtime) | **1.3.14** | `bun --version` |
+| Node (local) | **v26.0.0** | `node --version` |
+| Addon base image | **Debian trixie** + Playwright chromium-headless-shell (~1.5 GB) | `haops_exec_shell "chromium --version"` |
+| MCP transport | streamable-http, OAuth on | `claude mcp list` |
+| MCP URL | `http://homeassistant.local:8901/mcp` | must stay mDNS — OAuth resource is pinned to this host |
+| HA host LAN IP | `10.0.0.150` (stable) | `dscacheutil -q host -a name homeassistant.local` |
+
+**Notes for this baseline:**
+- First baseline on the **Debian + Playwright** stack (the v0.50.0 base-swap line) with the full UI
+  suite live: `haops_ui_screenshot`/`perf`/`interact`/`trace` + the Captures sidebar gallery (v0.52.0).
+- UI capture defaults settled here: viewport **1280×800** (16:10, `full_page` grows to content),
+  `device="mobile"` preset = iPhone-17-Pro-class **402×874 @3× touch**. Source-map/`/node_modules/`
+  requests are stubbed with an empty 204 so headless renders log **0 console errors** (verified live:
+  walkin desktop `console_errors: []`).
+- `haops_self_check` `overall: ok` (all backends) on 0.52.3. Stack otherwise unchanged from v0.40.0
+  (HA 2026.6.1, MariaDB 11.4.10 schema 53, same client host).
+
 ### `v0.40.0` — verified 2026-06-06 (Singapore HA)
 
 | Component | Version | How to check |
