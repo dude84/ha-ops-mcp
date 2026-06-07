@@ -8,9 +8,9 @@ Mutating operations create backups and log to an audit trail. Rollback is built 
 
 An [MCP server](https://modelcontextprotocol.io/) that gives AI assistants (and you) operational access to Home Assistant. Database queries, YAML config editing, Lovelace dashboard management, entity hygiene, system health, add-on control, and a cross-surface reference graph — the maintenance surface that HA's own UI doesn't expose well and that no other MCP server covers.
 
-Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.io/integrations/mcp_server/), [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), [hass-mcp](https://github.com/voska/hass-mcp)) focus on device control — "turn on the lights", query states, trigger automations via natural language. ha-ops-mcp is for the work that comes *dduring and after* setup: cleaning up 200 orphaned entities, reorganising dashboards across views, purging a bloated recorder database, editing YAML without losing comments, understanding what references `sensor.energy_grid` before renaming it, and doing all of that with diffs you can review and rollback if something goes wrong (most of the time...).
+Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.io/integrations/mcp_server/), [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), [hass-mcp](https://github.com/voska/hass-mcp)) focus on device control — "turn on the lights", query states, trigger automations via natural language. ha-ops-mcp is for the work that comes *during and after* setup: cleaning up 200 orphaned entities, reorganising dashboards across views, purging a bloated recorder database, editing YAML without losing comments, understanding what references `sensor.energy_grid` before renaming it, **seeing your dashboards** (server-side headless screenshots + load-performance capture), and doing all of that with diffs you can review and rollback if something goes wrong (most of the time...). Device control here is a *secondary* objective — the generic `haops_service_call` covers it; there are no bespoke per-device tools.
 
-**63 tools. 531 tests. Mypy strict.**
+**71 tools. 624 tests. Mypy strict. Debian image with Playwright/Chromium (v0.50.0+).**
 
 ## Installation
 
@@ -106,7 +106,7 @@ When reporting a bug, include: HA version, install method (addon/pip), transport
 
 ## Tools & Capabilities
 
-**63 tools** across database, config, dashboard, entity, registry, system, service, backup, rollback, batch, reference graph, debugger, helper (input_boolean / input_number / counter / timer / schedule etc.), ergonomic wrappers, and superuser categories. All prefixed `haops_`.
+**71 tools** across database, config, dashboard, entity, registry, system, service, backup, rollback, batch, reference graph, debugger, helper (input_boolean / input_number / counter / timer / schedule etc.), Zigbee/ZHA, the headless UI/UX surface (`haops_ui_screenshot`, `haops_ui_perf`), ergonomic wrappers, and superuser categories. All prefixed `haops_`.
 
 - **[Tool reference](https://github.com/dude84/ha-ops-mcp/blob/main/docs/TOOLS.md)** — full list with descriptions and types
 - **[Capability matrix](https://github.com/dude84/ha-ops-mcp/blob/main/docs/HA_API_CAPABILITIES.md)** — per-tool backend dependencies (REST, WS, DB, FS, Supervisor) and token requirements

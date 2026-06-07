@@ -22,8 +22,11 @@ which screen/control) and give every view a load-cost baseline.
   camera cards (frigate/advanced-camera), wallpanel, many-entity history-graph,
   button-card template loops — and now ApexCharts (live signal: Home is **16
   long-tasks / 1845 ms / CLS 0.19**, heavier than the old history-graphs).
-- **Needs `haops_ui_interact`** (scroll/tap, capture jank/long-tasks/console
-  errors) — not yet built; the screenshot + perf primitives exist.
+- **New tools needed (gaps):** `haops_ui_interact` (scroll/tap/click controls,
+  capture jank/long-tasks/console errors during interaction — the freeze-hunting
+  core) and `haops_ui_trace` (CDP performance-trace artifact for deep profiling).
+  Neither built; the screenshot + perf primitives (`haops_ui_screenshot`,
+  `haops_ui_perf`) shipped in v0.50.0.
 - **Standing suite:** per-view load-time baselines, jank/FPS, screenshot diffs, a
   results/baseline store for regression.
 - Keep tools as eyes/hands only (raw metrics + image; scoring stays in the

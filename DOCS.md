@@ -1,8 +1,8 @@
 # ha-ops-mcp
 
-An MCP server addon that gives AI assistants operational access to your Home Assistant instance. 63 tools covering database management, YAML config editing (with comment preservation), Lovelace dashboard CRUD via JSON Patch, entity registry hygiene, collection-helper CRUD (input_boolean / input_number / counter / timer / schedule / etc.), cross-surface reference graph, automation debugging, system health monitoring, add-on management, and shell access — with two-phase confirmation, automatic backups, in-session rollback, and a full audit trail.
+An MCP server addon that gives AI assistants (and you) operational access to your Home Assistant instance. 71 tools covering database management, YAML config editing (with comment preservation), Lovelace dashboard CRUD via JSON Patch, entity registry hygiene, collection-helper CRUD (input_boolean / input_number / counter / timer / schedule / etc.), cross-surface reference graph, automation debugging, system health monitoring, add-on management, Zigbee/ZHA introspection, shell access, and a **headless UI/UX surface** — server-side dashboard screenshots + load-performance capture via Playwright/Chromium (v0.50.0+, Debian-based image) — all with two-phase confirmation, automatic backups, in-session rollback, and a full audit trail.
 
-Not for device control. For the maintenance work that comes after setup.
+Built for the maintenance and observability work that comes during and after setup. **Device control** (lights, switches, scenes) is a **secondary objective** — handled by the generic `haops_service_call` escape hatch, not bespoke per-device tools.
 
 ## Sidebar panel
 
