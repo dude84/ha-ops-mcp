@@ -15,11 +15,11 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
-### `v0.52.3` — verified 2026-06-07 (Singapore HA)
+### `v0.53.3` — verified 2026-06-07 (Singapore HA)
 
 | Component | Version | How to check |
 |---|---|---|
-| ha-ops-mcp (addon) | **0.52.3** (tag `v0.52.3`, `b1aa377`) | `haops_system_info` / `git describe --tags` |
+| ha-ops-mcp (addon) | **0.53.3** (tag `v0.53.3`, `d33c0fd`) | `haops_system_info` / `git describe --tags` |
 | Home Assistant Core | **2026.6.1** | `haops_self_check` → `rest_api.ha_version` |
 | HA DB backend | **MariaDB 11.4.10-MariaDB**, schema **53** | `haops_system_info` → `database` |
 | Claude Code CLI | **2.1.166** | `claude --version` |
@@ -34,11 +34,16 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 **Notes for this baseline:**
 - First baseline on the **Debian + Playwright** stack (the v0.50.0 base-swap line) with the full UI
-  suite live: `haops_ui_screenshot`/`perf`/`interact`/`trace` + the Captures sidebar gallery (v0.52.0).
+  suite live: `haops_ui_screenshot`/`perf`/`interact`/`trace` + `haops_capture_show` + the Captures
+  sidebar gallery (v0.52.0–v0.53.3). 78 tools.
 - UI capture defaults settled here: viewport **1280×800** (16:10, `full_page` grows to content),
   `device="mobile"` preset = iPhone-17-Pro-class **402×874 @3× touch**. Source-map/`/node_modules/`
   requests are stubbed with an empty 204 so headless renders log **0 console errors** (verified live:
   walkin desktop `console_errors: []`).
+- **Capture view model** (v0.53.3): screenshots are human-viewed in-browser by default (Captures tab /
+  `…/ui#capture=<id>` deep-link, 0 model tokens); `haops_ui_screenshot` no longer inlines base64.
+  `haops_capture_show` (pixels→model, JPEG 768px/q70) is opt-in for model-side visual analysis only.
+  See [[feedback_capture_view_model]]. Verified live: screenshot returns tiny JSON + view_hint, no inline image.
 - `haops_self_check` `overall: ok` (all backends) on 0.52.3. Stack otherwise unchanged from v0.40.0
   (HA 2026.6.1, MariaDB 11.4.10 schema 53, same client host).
 
