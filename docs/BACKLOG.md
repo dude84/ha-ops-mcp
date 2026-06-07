@@ -41,6 +41,43 @@ Kitchen #AB47BC, Roof #42A5F5, Open #FFA726) as design tokens. The task-2
 screenshot-diff + perf baselines become the **visual-regression gate** for the
 rebuild — build task 2 component-aware with this in mind.
 
+### Capture gallery in the HA Ops sidebar
+
+A **Captures** tab in the ingress UI to view / download / manage the PNGs that
+`haops_ui_screenshot` produces — instead of the current round-trip (HA-host file
+→ base64 overflow → manual decode → Downloads). Also the natural home for the
+Task-2 perf-suite screenshots + regression baselines.
+
+**Storage (refactor):** move captures out of `audit/tool-results/` into a managed
+`<backup_dir>/captures/` with an append-only manifest (`captures.jsonl`) — mirror
+the `BackupManager` pattern. Per-entry metadata: id, path, view/url, timestamp,
+size, viewport, `nav_ms`, console-error count, optional **note**, and optional
+**`transaction_id` / token** linking the shot to the change it documents (so a
+before/after pair cross-links to the dashboard edit + audit entry).
+
+**Tools (UI mutations must mirror a tool's code path — see
+[[feedback_sidebar_read_mostly]]):**
+- `haops_capture_list` (read) — manifest + metadata
+- `haops_capture_delete` (mutate, two-phase) — by id(s)
+- `haops_capture_purge` (destructive) — retention sweep (max-age / max-count),
+  same shape as `haops_backup_prune`
+- `haops_capture_annotate` (mutate) — set/clear a note or change-link on an entry
+
+**Ingress UI (Captures tab in `static/ui.html`):** thumbnail grid; click → full
+view; **direct download** link (Content-Disposition); **select / select-all +
+delete selected**; per-item note (editable) + link to the referenced change;
+"Purge" action. Read endpoints serve thumbs/full; mutating endpoints call the
+tool code paths above. Headless-verify via Playwright before release
+([[reference_local_ui_screenshot]]); mind the Tailwind-CDN config order
+([[reference_tailwind_cdn_config_order]]).
+
+**Purge / retention:** configurable `captures_max_age_days` / `captures_max`,
+auto-pruned on write (like backups) + manual purge — so it can't grow unbounded
+on the survival volume. Wire into `haops_tools_check` ([[feedback_tools_check_sync]]).
+
+Priority: medium — strong UX win, and it makes Task 2's output reviewable.
+Approved 2026-06-07. Related: [[project_ui_suite_program]].
+
 ## Auth & users
 
 ### Dedicated `ha-ops-user` service account for addon auth
