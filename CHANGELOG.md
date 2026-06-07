@@ -1,3 +1,7 @@
+## 0.52.2
+
+**Sourcemap-noise fix, take 2.** v0.52.1 aborted the source-map / `/node_modules/` requests to kill the 404 — but an *aborted* request itself logs `net::ERR_FAILED` to the console, so the capture error-count still read "1 err", just for a different phantom. The driver now **fulfills those requests with an empty 204** instead of aborting, so nothing is logged and the console-error count reflects real errors only.
+
 ## 0.52.1
 
 **Screenshot defaults + console-noise fix.** Tuning after the v0.52.0 shakedown.

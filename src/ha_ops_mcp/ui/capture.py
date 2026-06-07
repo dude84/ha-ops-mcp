@@ -108,15 +108,18 @@ async def _block_sourcemaps(target: Any) -> None:
     some HACS card bundles (e.g. `@webcomponents/scoped-custom-element-registry`
     points at a `.ts` under `/node_modules/`). Those sources aren't published →
     a 404 on every load that pollutes the console-error count. A real browser
-    only fetches them with devtools open. Aborting keeps the error count
-    meaningful (real errors only) without affecting any served card JS, which
-    lives under /frontend_latest/ and /hacsfiles/, never /node_modules/.
+    only fetches them with devtools open. Fulfilling with an empty 204 keeps
+    the console-error count meaningful (real errors only) — note `route.abort()`
+    is NOT used here, because an aborted request itself logs a
+    `net::ERR_FAILED` console error, just trading one phantom error for another.
+    Served card JS lives under /frontend_latest/ and /hacsfiles/, never
+    /node_modules/, so this never blocks a real resource.
     """
-    async def _abort(route: Any) -> None:
-        await route.abort()
+    async def _stub(route: Any) -> None:
+        await route.fulfill(status=204, body="")
 
-    await target.route("**/node_modules/**", _abort)
-    await target.route("**/*.map", _abort)
+    await target.route("**/node_modules/**", _stub)
+    await target.route("**/*.map", _stub)
 
 
 def browser_available() -> bool:
