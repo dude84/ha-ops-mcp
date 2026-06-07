@@ -299,7 +299,7 @@ async def test_capture_show_returns_image(tmp_path):
     out = await ui.haops_capture_show(ctx, capture_id=e.id, max_px=500)
     assert isinstance(out, ImageContent)
     assert out.type == "image"
-    assert out.mimeType == "image/png"
+    assert out.mimeType == "image/jpeg"
     # downscaled: decode + check long edge capped
     import base64 as _b64
     import io as _io

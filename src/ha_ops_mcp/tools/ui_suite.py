@@ -360,14 +360,19 @@ async def haops_ui_trace(
     }
 
 
-def _downscale_png(data: bytes, max_px: int) -> bytes:
-    """Downscale a PNG so its long edge is <= max_px (no upscaling)."""
+def _downscale_jpeg(data: bytes, max_px: int, quality: int = 82) -> bytes:
+    """Downscale an image to a JPEG whose long edge is <= max_px (no upscaling).
+
+    JPEG (not PNG) on purpose: a full-page dashboard PNG is multi-hundred-KB,
+    and the MCP client echoes the image bytes as text — JPEG keeps the payload
+    a fraction of the size while staying perfectly legible for visual review.
+    """
     import io
 
     from PIL import Image
 
     with Image.open(io.BytesIO(data)) as src:
-        im = src.copy() if src.mode in ("RGB", "RGBA") else src.convert("RGB")
+        im = src.convert("RGB")  # JPEG has no alpha channel
     long_edge = max(im.width, im.height)
     if long_edge > max_px:
         scale = max_px / long_edge
@@ -375,7 +380,7 @@ def _downscale_png(data: bytes, max_px: int) -> bytes:
             (max(1, round(im.width * scale)), max(1, round(im.height * scale)))
         )
     out = io.BytesIO()
-    im.save(out, format="PNG", optimize=True)
+    im.save(out, format="JPEG", quality=quality, optimize=True)
     return out.getvalue()
 
 
@@ -388,9 +393,9 @@ def _downscale_png(data: bytes, max_px: int) -> bytes:
         "overflows the token cap) and without shelling into the host. READ-ONLY.\n\n"
         "Parameters: capture_id (string, required — the id returned by "
         "haops_ui_screenshot, or shown in the Captures tab), max_px (int, default "
-        "1100 — long-edge cap for the downscaled image; raise for more detail, "
+        "900 — long-edge cap for the downscaled image; raise for more detail, "
         "lower for a smaller payload).\n\n"
-        "Returns a native image content block (PNG). Errors (as a dict) if the id "
+        "Returns a native image content block (JPEG). Errors (as a dict) if the id "
         "is unknown or the capture is a trace zip (not an image) — open a trace "
         "with the Playwright trace viewer instead. Pairs with haops_ui_screenshot "
         "(capture) and the Captures sidebar tab (browse/manage)."
@@ -399,7 +404,7 @@ def _downscale_png(data: bytes, max_px: int) -> bytes:
 async def haops_capture_show(
     ctx: HaOpsContext,
     capture_id: str,
-    max_px: int = 1100,
+    max_px: int = 900,
 ) -> Any:
     got = ctx.captures.read_bytes(capture_id)
     if got is None:
@@ -413,11 +418,11 @@ async def haops_capture_show(
             )
         }
     try:
-        small = _downscale_png(data, max(64, max_px))
+        small = _downscale_jpeg(data, max(64, max_px))
     except Exception as e:  # noqa: BLE001 — surface as structured error, never raise
         return {"error": f"image decode/resize failed: {type(e).__name__}: {e}"[:300]}
     return ImageContent(
         type="image",
         data=base64.b64encode(small).decode(),
-        mimeType="image/png",
+        mimeType="image/jpeg",
     )

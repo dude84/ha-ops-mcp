@@ -1,3 +1,7 @@
+## 0.53.1
+
+**`haops_capture_show` now returns JPEG, not PNG.** The MCP client echoes the returned image bytes as text as well as rendering them; a full-page dashboard PNG (multi-hundred-KB) blew that text budget. `capture_show` now downscales to **JPEG (q82, default long-edge 900px)** — a fraction of the size, still perfectly legible for visual review. Raise `max_px` for more detail.
+
 ## 0.53.0
 
 **See captures without the base64/shell dance.** Viewing a screenshot used to mean either an inline base64 that blew the response token cap, or shelling into the host with `haops_exec_shell` (which also littered the audit Timeline with shell mutations). Both gone.
