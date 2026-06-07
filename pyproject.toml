@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ha-ops-mcp"
-version = "0.52.3"
+version = "0.53.0"
 description = "MCP server for Home Assistant operations — database, config, dashboards, entities, and system health"
 readme = "README.md"
 license = "Apache-2.0"
@@ -37,6 +37,7 @@ dependencies = [
     "deepdiff>=7.0",
     "rapidfuzz>=3.6",
     "jsonpatch>=1.33",
+    "pillow>=10.0",  # downscale stored captures for haops_capture_show
 ]
 
 [project.optional-dependencies]

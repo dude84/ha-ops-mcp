@@ -64,6 +64,7 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "ui_perf": ("read", "system"),
     "ui_interact": ("read", "system"),
     "ui_trace": ("read", "system"),
+    "capture_show": ("read", "captures"),
     "user_list": ("read", "user"),
     # --- mutate ---
     "config_apply": ("mutate", "config"),  # sub-area refined from path

@@ -1,3 +1,13 @@
+## 0.53.0
+
+**See captures without the base64/shell dance.** Viewing a screenshot used to mean either an inline base64 that blew the response token cap, or shelling into the host with `haops_exec_shell` (which also littered the audit Timeline with shell mutations). Both gone.
+
+- **New `haops_capture_show(capture_id, max_px=1100)`** — returns a stored screenshot as a **native MCP image** content block, downscaled server-side (Pillow) to fit the budget. The read-only, one-call way for the assistant to *see* a capture. Errors cleanly on an unknown id or a trace zip (open those in the Playwright trace viewer). Classified `read/captures`; added to the `haops_tools_check` ui group (with a `pillow_available` probe).
+- **`haops_ui_screenshot` no longer inlines base64 by default.** It returns `capture_id` + `saved_path` + metadata (tiny) and a `view_hint` pointing at `haops_capture_show`. Pass `inline=true` to force the old inline behavior (still capped — over-cap images point you at `capture_show` regardless).
+- New dep: **Pillow** (manylinux/Debian wheel) for the downscaler.
+
+Tool count 77 → **78**. 694 tests green, ruff + mypy --strict clean.
+
 ## 0.52.3
 
 **Captures show the actual console errors, not just a count.** "1 err" told you nothing actionable. Captures now store the real console-error **messages** (`CaptureEntry.errors`, capped 20), and the Captures-tab "N err" badge is a toggle that expands the message list inline. The count (`console_errors`) is still kept as the quick badge. Captures taken before this version show a "count only — predates message capture" note when expanded.

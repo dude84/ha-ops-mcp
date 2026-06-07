@@ -22,6 +22,8 @@ import os
 import tempfile
 from typing import TYPE_CHECKING, Any
 
+from mcp.types import ImageContent
+
 from ha_ops_mcp.server import registry
 from ha_ops_mcp.ui.capture import (
     CaptureRequest,
@@ -102,11 +104,16 @@ def _apply_device(req: CaptureRequest, device: str) -> dict[str, Any] | None:
         "viewport_width/viewport_height (px; default 1280x800), device (preset "
         "that overrides the viewport — 'mobile' = iPhone-17-Pro-class 402x874 @3x "
         "touch, for the HA mobile column layout; default '' = desktop), settle_ms "
-        "(wait after load for cards to render; default 2500), base_url + "
-        "access_token (override the HA URL/token; default from config).\n\n"
-        "Returns: {url, saved_path, size_bytes, viewport, nav_ms, "
-        "console_errors, image_b64}. image_b64 is null for images over ~2MB — "
-        "read saved_path instead. Requires the Debian addon build + an LLAT."
+        "(wait after load for cards to render; default 2500), inline (bool, "
+        "default false — base64 the image into the response; off by default "
+        "because a full-res PNG blows the response token cap), note + "
+        "transaction_id (annotate / link the capture), base_url + access_token "
+        "(override the HA URL/token; default from config).\n\n"
+        "Returns: {url, capture_id, saved_path, size_bytes, viewport, nav_ms, "
+        "console_errors}. To SEE the image, call haops_capture_show("
+        "capture_id=...) (returns a downscaled native image) or open the "
+        "Captures tab — don't set inline=true just to view. Requires the Debian "
+        "addon build + an LLAT."
     ),
 )
 async def haops_ui_screenshot(
@@ -121,6 +128,7 @@ async def haops_ui_screenshot(
     access_token: str = "",
     note: str = "",
     transaction_id: str = "",
+    inline: bool = False,
 ) -> dict[str, Any]:
     if not browser_available():
         return _unavailable()
@@ -159,11 +167,17 @@ async def haops_ui_screenshot(
     )
     r["capture_id"] = entry.id
     r["saved_path"] = str(ctx.captures.artifact_path(entry))
-    if len(png) <= _INLINE_MAX_BYTES:
+    # By default we do NOT inline the base64 — a full-res PNG blows the MCP
+    # token cap as a JSON text field. Call haops_capture_show(capture_id) to
+    # view it as a (downscaled) native image, or open the Captures tab.
+    if inline and len(png) <= _INLINE_MAX_BYTES:
         r["image_b64"] = base64.b64encode(png).decode()
     else:
         r["image_b64"] = None
-        r["inline_note"] = "image >2MB; not inlined — read saved_path / Captures tab"
+        r["view_hint"] = (
+            f"call haops_capture_show(capture_id='{entry.id}') to view, "
+            "or open the Captures tab"
+        )
     return r
 
 
@@ -344,3 +358,66 @@ async def haops_ui_trace(
         "size_bytes": entry.size_bytes,
         "nav_ms": r.get("nav_ms"),
     }
+
+
+def _downscale_png(data: bytes, max_px: int) -> bytes:
+    """Downscale a PNG so its long edge is <= max_px (no upscaling)."""
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(data)) as src:
+        im = src.copy() if src.mode in ("RGB", "RGBA") else src.convert("RGB")
+    long_edge = max(im.width, im.height)
+    if long_edge > max_px:
+        scale = max_px / long_edge
+        im = im.resize(
+            (max(1, round(im.width * scale)), max(1, round(im.height * scale)))
+        )
+    out = io.BytesIO()
+    im.save(out, format="PNG", optimize=True)
+    return out.getvalue()
+
+
+@registry.tool(
+    name="haops_capture_show",
+    description=(
+        "View a stored UI capture (screenshot) as an inline image, downscaled to "
+        "fit the response budget. This is the read-only way to *see* a capture "
+        "produced by haops_ui_screenshot without inlining a full-res base64 (which "
+        "overflows the token cap) and without shelling into the host. READ-ONLY.\n\n"
+        "Parameters: capture_id (string, required — the id returned by "
+        "haops_ui_screenshot, or shown in the Captures tab), max_px (int, default "
+        "1100 — long-edge cap for the downscaled image; raise for more detail, "
+        "lower for a smaller payload).\n\n"
+        "Returns a native image content block (PNG). Errors (as a dict) if the id "
+        "is unknown or the capture is a trace zip (not an image) — open a trace "
+        "with the Playwright trace viewer instead. Pairs with haops_ui_screenshot "
+        "(capture) and the Captures sidebar tab (browse/manage)."
+    ),
+)
+async def haops_capture_show(
+    ctx: HaOpsContext,
+    capture_id: str,
+    max_px: int = 1100,
+) -> Any:
+    got = ctx.captures.read_bytes(capture_id)
+    if got is None:
+        return {"error": f"Capture {capture_id!r} not found."}
+    entry, data = got
+    if entry.kind != "screenshot" or not entry.filename.endswith(".png"):
+        return {
+            "error": (
+                f"Capture {capture_id!r} is a {entry.kind} ({entry.filename}), not "
+                "a viewable image. Open trace zips in the Playwright trace viewer."
+            )
+        }
+    try:
+        small = _downscale_png(data, max(64, max_px))
+    except Exception as e:  # noqa: BLE001 — surface as structured error, never raise
+        return {"error": f"image decode/resize failed: {type(e).__name__}: {e}"[:300]}
+    return ImageContent(
+        type="image",
+        data=base64.b64encode(small).decode(),
+        mimeType="image/png",
+    )

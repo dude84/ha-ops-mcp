@@ -444,7 +444,10 @@ async def _check_ui(ctx: HaOpsContext) -> dict[str, Any]:
     """
     from ha_ops_mcp.ui.capture import browser_available
 
-    tools = ["haops_ui_screenshot", "haops_ui_perf", "haops_ui_interact", "haops_ui_trace"]
+    tools = [
+        "haops_ui_screenshot", "haops_ui_perf", "haops_ui_interact",
+        "haops_ui_trace", "haops_capture_show",
+    ]
     if not browser_available():
         return {
             "status": "skipped",
@@ -454,9 +457,16 @@ async def _check_ui(ctx: HaOpsContext) -> dict[str, Any]:
             "tests": {"browser_available": {"ok": False}},
         }
     has_token = bool(ctx.config.ha.resolve_token())
+    try:
+        import PIL  # noqa: F401
+
+        pillow_ok = True
+    except ImportError:
+        pillow_ok = False
     checks = {
         "browser_available": {"ok": True},
         "access_token_present": {"ok": has_token},
+        "pillow_available": {"ok": pillow_ok},  # haops_capture_show downscaler
     }
     if not has_token:
         return {
