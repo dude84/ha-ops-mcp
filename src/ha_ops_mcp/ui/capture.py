@@ -215,6 +215,139 @@ async def perf(req: CaptureRequest) -> dict[str, Any]:
     }
 
 
+# Read just the long-task tally (the _PERF_READ_SCRIPT above does the full
+# metric sweep; for interaction we only want the long-task summary so we can
+# diff before/after each action without re-walking the whole DOM).
+_LONGTASK_READ_SCRIPT = """
+(() => {
+  const p = window.__haops_perf || { longtasks: [] };
+  const lt = p.longtasks || [];
+  return {
+    count: lt.length,
+    total_ms: Number(lt.reduce((a, t) => a + t.dur, 0).toFixed(1)),
+    max_ms: lt.length ? Number(Math.max(...lt.map((t) => t.dur)).toFixed(1)) : 0,
+  };
+})();
+"""
+
+
+def _default_actions() -> list[dict[str, Any]]:
+    """A sensible full-page scroll sweep when no actions are supplied."""
+    return [{"type": "scroll", "dy": 800} for _ in range(6)]
+
+
+async def _run_action(page: Any, action: dict[str, Any]) -> dict[str, Any]:
+    """Drive one interaction. Records + continues on failure (never raises)."""
+    kind = str(action.get("type", "")).lower()
+    t0 = time.monotonic()
+    result: dict[str, Any] = {"type": kind, "ok": True}
+    try:
+        if kind == "scroll":
+            dy = int(action.get("dy", 800))
+            dx = int(action.get("dx", 0))
+            await page.mouse.wheel(dx, dy)
+        elif kind == "click":
+            selector = str(action.get("selector", ""))
+            if not selector:
+                raise ValueError("click action requires 'selector'")
+            result["selector"] = selector
+            await page.click(selector, timeout=int(action.get("timeout", 3000)))
+        elif kind == "tap":
+            x = float(action.get("x", 0))
+            y = float(action.get("y", 0))
+            result["x"], result["y"] = x, y
+            await page.mouse.click(x, y)
+        elif kind == "wait":
+            await page.wait_for_timeout(int(action.get("ms", 500)))
+        else:
+            raise ValueError(f"unknown action type {kind!r}")
+    except Exception as e:  # noqa: BLE001 — record + continue, don't abort run
+        result["ok"] = False
+        result["error"] = f"{type(e).__name__}: {e}"[:300]
+    settle = int(action.get("settle_ms", 0))
+    if settle:
+        await page.wait_for_timeout(settle)
+    result["ms"] = round((time.monotonic() - t0) * 1000, 1)
+    return result
+
+
+async def interact(
+    req: CaptureRequest, actions: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Drive a dashboard view through `actions`, capturing long-tasks + console
+    errors that occur DURING interaction (raw, unscored)."""
+    from playwright.async_api import async_playwright
+
+    seq = actions if actions else _default_actions()
+    async with async_playwright() as p:
+        browser, context, page, console, nav_ms, url = await _open_page(p, req)
+        try:
+            # Baseline: long-tasks accrued during load, so we can attribute the
+            # delta to the interaction sweep rather than the initial render.
+            before = await page.evaluate(_LONGTASK_READ_SCRIPT)
+            console_before = len(console)
+            runs: list[dict[str, Any]] = []
+            for action in seq:
+                runs.append(await _run_action(page, action))
+            after = await page.evaluate(_LONGTASK_READ_SCRIPT)
+        finally:
+            await context.close()
+            await browser.close()
+    long_tasks = {
+        "count": after["count"] - before["count"],
+        "total_ms": round(after["total_ms"] - before["total_ms"], 1),
+        "max_ms": after["max_ms"],
+    }
+    # Console errors emitted during interaction (after the load baseline).
+    errors = [c for c in console[console_before:] if c["type"] == "error"]
+    return {
+        "url": url,
+        "nav_ms": nav_ms,
+        "actions_run": runs,
+        "long_tasks": long_tasks,
+        "console_errors": errors[:20],
+    }
+
+
+async def trace(req: CaptureRequest, out_path: str) -> dict[str, Any]:
+    """Record a Playwright trace zip of a dashboard view load to `out_path`."""
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(args=_LAUNCH_ARGS)
+        context = await browser.new_context(
+            viewport={"width": req.viewport_width, "height": req.viewport_height},
+            ignore_https_errors=True,
+        )
+        if req.access_token:
+            raw = hass_tokens(req.base_url, req.access_token)
+            tokens = raw.replace("\\", "\\\\").replace("'", "\\'")
+            await context.add_init_script(
+                f"window.localStorage.setItem('hassTokens', '{tokens}');"
+            )
+        await context.add_init_script(_PERF_INIT_SCRIPT)
+        await context.tracing.start(screenshots=True, snapshots=True, sources=True)
+        page = await context.new_page()
+        url = req.base_url.rstrip("/") + "/" + req.path.lstrip("/")
+        t0 = time.monotonic()
+        try:
+            await page.goto(url, wait_until="load", timeout=req.nav_timeout_ms)
+            await page.wait_for_timeout(req.settle_ms)
+            nav_ms = round((time.monotonic() - t0) * 1000, 1)
+        finally:
+            await context.tracing.stop(path=out_path)
+            await context.close()
+            await browser.close()
+    import os
+
+    return {
+        "url": url,
+        "saved_path": out_path,
+        "size_bytes": os.path.getsize(out_path),
+        "nav_ms": nav_ms,
+    }
+
+
 # --- CLI for in-image functional testing (no HA required: any URL works) -----
 if __name__ == "__main__":  # pragma: no cover
     import asyncio

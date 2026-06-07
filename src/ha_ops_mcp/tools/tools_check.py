@@ -444,7 +444,7 @@ async def _check_ui(ctx: HaOpsContext) -> dict[str, Any]:
     """
     from ha_ops_mcp.ui.capture import browser_available
 
-    tools = ["haops_ui_screenshot", "haops_ui_perf"]
+    tools = ["haops_ui_screenshot", "haops_ui_perf", "haops_ui_interact", "haops_ui_trace"]
     if not browser_available():
         return {
             "status": "skipped",

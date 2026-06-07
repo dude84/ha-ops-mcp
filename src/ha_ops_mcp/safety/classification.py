@@ -62,6 +62,8 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "monitor_entity": ("read", "entity"),
     "ui_screenshot": ("read", "system"),
     "ui_perf": ("read", "system"),
+    "ui_interact": ("read", "system"),
+    "ui_trace": ("read", "system"),
     # --- mutate ---
     "config_apply": ("mutate", "config"),  # sub-area refined from path
     "config_patch": ("mutate", "config"),
