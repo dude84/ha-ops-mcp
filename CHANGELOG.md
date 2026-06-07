@@ -1,3 +1,11 @@
+## 0.52.1
+
+**Screenshot defaults + console-noise fix.** Tuning after the v0.52.0 shakedown.
+
+- **Default viewport is now 16:10 desktop (1280×800)** instead of 1280×2400. The old tall default padded short views with a big black band under `full_page`; `full_page` still grows the capture to the real content height, so nothing is cut — short views just stop at their content instead of a fixed 2400 px. Applies to all `haops_ui_*` tools; override per-call with `viewport_width`/`viewport_height`.
+- **Mobile preset.** All `haops_ui_*` tools gained a `device` param. `device="mobile"` (aliases `iphone`/`phone`) renders at iPhone-17-Pro-class **402×874 @3× DPR with touch**, so captures match the single-column mobile layout the HA companion app shows. Default `""` = desktop. A preset overrides the viewport for that call.
+- **Source-map 404s muted.** Headless Chromium resolved `//# sourceMappingURL` references shipped in some HACS card bundles (e.g. `@webcomponents/scoped-custom-element-registry` → a `.ts` under `/node_modules/`); those sources aren't published, so every capture logged one harmless 404 and the console-error count read "1 err" on every shot. The capture driver now aborts `**/node_modules/**` and `**/*.map` requests (served card JS lives under `/frontend_latest/` and `/hacsfiles/`, never `/node_modules/`), so the error count reflects real errors only.
+
 ## 0.52.0
 
 **Capture gallery in the sidebar.** The screenshots and traces produced by `haops_ui_screenshot` / `haops_ui_trace` now have a home: a new **Captures** tab in the HA Ops ingress UI to view, download, annotate, select/delete, and prune them. No new MCP tools — capture artifacts are ha-ops-admin storage (the addon's own files), not Home Assistant state, so management lives in the ingress UI, not behind MCP.

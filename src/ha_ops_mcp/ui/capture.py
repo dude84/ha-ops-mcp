@@ -101,6 +101,24 @@ _PERF_READ_SCRIPT = """
 """
 
 
+async def _block_sourcemaps(target: Any) -> None:
+    """Abort source-map + bundled-source fetches on a context.
+
+    Headless Chromium resolves `//# sourceMappingURL` references that ship in
+    some HACS card bundles (e.g. `@webcomponents/scoped-custom-element-registry`
+    points at a `.ts` under `/node_modules/`). Those sources aren't published →
+    a 404 on every load that pollutes the console-error count. A real browser
+    only fetches them with devtools open. Aborting keeps the error count
+    meaningful (real errors only) without affecting any served card JS, which
+    lives under /frontend_latest/ and /hacsfiles/, never /node_modules/.
+    """
+    async def _abort(route: Any) -> None:
+        await route.abort()
+
+    await target.route("**/node_modules/**", _abort)
+    await target.route("**/*.map", _abort)
+
+
 def browser_available() -> bool:
     """True if the Playwright Chromium stack can be imported + launched here."""
     try:
@@ -134,11 +152,36 @@ class CaptureRequest:
     path: str = "lovelace"
     access_token: str = ""
     viewport_width: int = 1280
-    viewport_height: int = 2400
+    viewport_height: int = 800  # 16:10 base; full_page grows to content height
     full_page: bool = True
+    device_scale_factor: float = 1.0
+    is_mobile: bool = False
+    has_touch: bool = False
     theme: str = "dark"  # informational; HA theme follows the user profile
     settle_ms: int = 2500  # wait after load for cards to render/settle
     nav_timeout_ms: int = 30000
+
+
+# Named device presets for the `device` tool param. "mobile" ≈ iPhone 17 Pro
+# (402×874 CSS px, 3× DPR, touch) so the capture matches the HA mobile column
+# layout the phone app renders.
+_DEVICE_PRESETS: dict[str, dict[str, Any]] = {
+    "mobile": {
+        "viewport_width": 402,
+        "viewport_height": 874,
+        "device_scale_factor": 3.0,
+        "is_mobile": True,
+        "has_touch": True,
+    },
+}
+_DEVICE_ALIASES = {"iphone": "mobile", "phone": "mobile"}
+
+
+def device_preset(name: str) -> dict[str, Any] | None:
+    """Resolve a device name (or alias) to CaptureRequest field overrides."""
+    key = name.strip().lower()
+    key = _DEVICE_ALIASES.get(key, key)
+    return _DEVICE_PRESETS.get(key)
 
 
 async def _open_page(
@@ -148,6 +191,9 @@ async def _open_page(
     browser = await p.chromium.launch(args=_LAUNCH_ARGS)
     context = await browser.new_context(
         viewport={"width": req.viewport_width, "height": req.viewport_height},
+        device_scale_factor=req.device_scale_factor,
+        is_mobile=req.is_mobile,
+        has_touch=req.has_touch,
         ignore_https_errors=True,
     )
     if req.access_token:
@@ -157,6 +203,7 @@ async def _open_page(
             f"window.localStorage.setItem('hassTokens', '{tokens}');"
         )
     await context.add_init_script(_PERF_INIT_SCRIPT)
+    await _block_sourcemaps(context)
     page = await context.new_page()
     console: list[dict[str, str]] = []
     page.on(
@@ -317,6 +364,9 @@ async def trace(req: CaptureRequest, out_path: str) -> dict[str, Any]:
         browser = await p.chromium.launch(args=_LAUNCH_ARGS)
         context = await browser.new_context(
             viewport={"width": req.viewport_width, "height": req.viewport_height},
+            device_scale_factor=req.device_scale_factor,
+            is_mobile=req.is_mobile,
+            has_touch=req.has_touch,
             ignore_https_errors=True,
         )
         if req.access_token:
@@ -326,6 +376,7 @@ async def trace(req: CaptureRequest, out_path: str) -> dict[str, Any]:
                 f"window.localStorage.setItem('hassTokens', '{tokens}');"
             )
         await context.add_init_script(_PERF_INIT_SCRIPT)
+        await _block_sourcemaps(context)
         await context.tracing.start(screenshots=True, snapshots=True, sources=True)
         page = await context.new_page()
         url = req.base_url.rstrip("/") + "/" + req.path.lstrip("/")

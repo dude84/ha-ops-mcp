@@ -73,6 +73,52 @@ async def test_screenshot_success_saves_and_inlines(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_screenshot_device_mobile_preset(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: True)
+    seen = {}
+
+    async def fake_screenshot(req: CaptureRequest):
+        seen["w"] = req.viewport_width
+        seen["h"] = req.viewport_height
+        seen["dsf"] = req.device_scale_factor
+        seen["mobile"] = req.is_mobile
+        seen["touch"] = req.has_touch
+        return {
+            "url": "u", "png_bytes": b"\x89PNG", "size_bytes": 4,
+            "viewport": {"w": req.viewport_width, "h": req.viewport_height},
+            "full_page": True, "nav_ms": 1.0, "console_errors": [],
+        }
+
+    monkeypatch.setattr(ui, "screenshot", fake_screenshot)
+    out = await ui.haops_ui_screenshot(_ctx(tmp_path), device="mobile")
+    assert "error" not in out
+    assert seen == {"w": 402, "h": 874, "dsf": 3.0, "mobile": True, "touch": True}
+
+
+@pytest.mark.asyncio
+async def test_screenshot_device_alias_iphone(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: True)
+
+    async def fake_screenshot(req: CaptureRequest):
+        assert req.viewport_width == 402 and req.is_mobile
+        return {
+            "url": "u", "png_bytes": b"\x89PNG", "size_bytes": 4,
+            "viewport": {}, "full_page": True, "nav_ms": 1.0, "console_errors": [],
+        }
+
+    monkeypatch.setattr(ui, "screenshot", fake_screenshot)
+    out = await ui.haops_ui_screenshot(_ctx(tmp_path), device="iPhone")
+    assert "error" not in out
+
+
+@pytest.mark.asyncio
+async def test_screenshot_device_unknown_errors(tmp_path, monkeypatch):
+    monkeypatch.setattr(ui, "browser_available", lambda: True)
+    out = await ui.haops_ui_screenshot(_ctx(tmp_path), device="nokia3310")
+    assert "Unknown device" in out["error"]
+
+
+@pytest.mark.asyncio
 async def test_screenshot_large_not_inlined(tmp_path, monkeypatch):
     monkeypatch.setattr(ui, "browser_available", lambda: True)
     big = b"\x89PNG" + b"0" * (ui._INLINE_MAX_BYTES + 1)

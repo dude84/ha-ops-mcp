@@ -26,6 +26,7 @@ from ha_ops_mcp.server import registry
 from ha_ops_mcp.ui.capture import (
     CaptureRequest,
     browser_available,
+    device_preset,
     interact,
     perf,
     screenshot,
@@ -70,6 +71,23 @@ def _unavailable() -> dict[str, Any]:
     }
 
 
+def _apply_device(req: CaptureRequest, device: str) -> dict[str, Any] | None:
+    """Apply a named device preset (e.g. 'mobile') to a request in place.
+
+    Returns an error dict for an unknown device name, else None. A preset
+    overrides viewport + touch/scale fields, so it takes precedence over the
+    default viewport for that call.
+    """
+    if not device:
+        return None
+    preset = device_preset(device)
+    if preset is None:
+        return {"error": f"Unknown device {device!r}. Known: mobile (iphone/phone)."}
+    for k, v in preset.items():
+        setattr(req, k, v)
+    return None
+
+
 @registry.tool(
     name="haops_ui_screenshot",
     description=(
@@ -81,9 +99,11 @@ def _unavailable() -> dict[str, Any]:
         "Parameters: path (Lovelace url_path, e.g. 'lovelace', 'new-dashboard', "
         "or 'dashboard/subview'; default 'lovelace'), full_page (bool, capture "
         "the whole scroll height vs just the viewport; default true), "
-        "viewport_width/viewport_height (px; default 1280x2400), settle_ms (wait "
-        "after load for cards to render; default 2500), base_url + access_token "
-        "(override the HA URL/token; default from config).\n\n"
+        "viewport_width/viewport_height (px; default 1280x800), device (preset "
+        "that overrides the viewport — 'mobile' = iPhone-17-Pro-class 402x874 @3x "
+        "touch, for the HA mobile column layout; default '' = desktop), settle_ms "
+        "(wait after load for cards to render; default 2500), base_url + "
+        "access_token (override the HA URL/token; default from config).\n\n"
         "Returns: {url, saved_path, size_bytes, viewport, nav_ms, "
         "console_errors, image_b64}. image_b64 is null for images over ~2MB — "
         "read saved_path instead. Requires the Debian addon build + an LLAT."
@@ -94,7 +114,8 @@ async def haops_ui_screenshot(
     path: str = "lovelace",
     full_page: bool = True,
     viewport_width: int = 1280,
-    viewport_height: int = 2400,
+    viewport_height: int = 800,
+    device: str = "",
     settle_ms: int = 2500,
     base_url: str = "",
     access_token: str = "",
@@ -116,6 +137,9 @@ async def haops_ui_screenshot(
         viewport_height=viewport_height,
         settle_ms=settle_ms,
     )
+    err = _apply_device(req, device)
+    if err is not None:
+        return err
     try:
         r = await screenshot(req)
     except Exception as e:  # noqa: BLE001 — surface as structured error, never raise
@@ -151,7 +175,7 @@ async def haops_ui_screenshot(
         "freeze-hunting suite) and to baseline load cost. READ-ONLY.\n\n"
         "Parameters: path (Lovelace url_path; default 'lovelace'), settle_ms "
         "(wait after load before reading metrics; default 2500), "
-        "viewport_width/viewport_height (px; default 1280x2400), base_url + "
+        "viewport_width/viewport_height (px; default 1280x800), base_url + "
         "access_token (override; default from config).\n\n"
         "Returns raw, UNSCORED metrics: {url, nav_ms, metrics:{nav timing, "
         "first/largest_contentful_paint, cumulative_layout_shift, "
@@ -167,7 +191,8 @@ async def haops_ui_perf(
     path: str = "lovelace",
     settle_ms: int = 2500,
     viewport_width: int = 1280,
-    viewport_height: int = 2400,
+    viewport_height: int = 800,
+    device: str = "",
     base_url: str = "",
     access_token: str = "",
 ) -> dict[str, Any]:
@@ -185,6 +210,9 @@ async def haops_ui_perf(
         viewport_height=viewport_height,
         settle_ms=settle_ms,
     )
+    err = _apply_device(req, device)
+    if err is not None:
+        return err
     try:
         return await perf(req)
     except Exception as e:  # noqa: BLE001
@@ -209,7 +237,7 @@ async def haops_ui_perf(
         "pause after it. Invalid/missing selectors are recorded and skipped — the "
         "run continues. Other params: settle_ms (wait after load before "
         "interacting; default 2500), viewport_width/viewport_height (px; default "
-        "1280x2400), base_url + access_token (override; default from config).\n\n"
+        "1280x800), base_url + access_token (override; default from config).\n\n"
         "Returns raw, UNSCORED: {url, nav_ms, actions_run:[{type, ok, ms, ...}], "
         "long_tasks:{count,total_ms,max_ms} (delta attributable to the "
         "interaction), console_errors}. Requires the Debian addon build + an LLAT."
@@ -221,7 +249,8 @@ async def haops_ui_interact(
     actions: list[dict[str, Any]] | None = None,
     settle_ms: int = 2500,
     viewport_width: int = 1280,
-    viewport_height: int = 2400,
+    viewport_height: int = 800,
+    device: str = "",
     base_url: str = "",
     access_token: str = "",
 ) -> dict[str, Any]:
@@ -239,6 +268,9 @@ async def haops_ui_interact(
         viewport_height=viewport_height,
         settle_ms=settle_ms,
     )
+    err = _apply_device(req, device)
+    if err is not None:
+        return err
     try:
         return await interact(req, actions or [])
     except Exception as e:  # noqa: BLE001
@@ -256,7 +288,7 @@ async def haops_ui_interact(
         "enough. READ-ONLY (loads the page, captures a trace).\n\n"
         "Parameters: path (Lovelace url_path; default 'lovelace'), settle_ms "
         "(wait after load before stopping the trace; default 2500), "
-        "viewport_width/viewport_height (px; default 1280x2400), base_url + "
+        "viewport_width/viewport_height (px; default 1280x800), base_url + "
         "access_token (override; default from config).\n\n"
         "Returns: {url, saved_path, size_bytes, nav_ms}. The trace zip is written "
         "under the tool-results dir; read/transfer saved_path to open it. "
@@ -268,7 +300,8 @@ async def haops_ui_trace(
     path: str = "lovelace",
     settle_ms: int = 2500,
     viewport_width: int = 1280,
-    viewport_height: int = 2400,
+    viewport_height: int = 800,
+    device: str = "",
     base_url: str = "",
     access_token: str = "",
 ) -> dict[str, Any]:
@@ -286,6 +319,9 @@ async def haops_ui_trace(
         viewport_height=viewport_height,
         settle_ms=settle_ms,
     )
+    err = _apply_device(req, device)
+    if err is not None:
+        return err
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".zip")
     os.close(tmp_fd)
     try:
