@@ -40,6 +40,35 @@ Kitchen #AB47BC, Roof #42A5F5, Open #FFA726) as design tokens. The task-2
 screenshot-diff + perf baselines become the **visual-regression gate** for the
 rebuild — build task 2 component-aware with this in mind.
 
+**This is a maintainability/consistency project, NOT a perf one** (the row
+controls are not a measured bottleneck — see `docs/UI_PERF_BASELINE.md`; the perf
+lever is the ApexCharts, separate work).
+
+**Investigation 2026-06-08 — `new-dashboard` already ~30% a proto-DS:**
+- Component layer = decluttering templates: `ac_room_row` (×11), `ac_mini_card`
+  (×4) **+ forked `ac_mini_card_livingroom` variant** (×1), `plug_control` (×4).
+  Informal but real reusable components.
+- Card vocabulary: 7 custom types — button-card (~50), decluttering (~25),
+  apexcharts (11), advanced-camera (11), mini-climate (2), scheduler, weather-radar
+  — mixed visual languages.
+- De-facto tokens copy-pasted, not centralized: room colour map hardcoded in all
+  11 ApexCharts series; chart recipe duplicated across all 11; spacing/typography
+  inline via button-card `styles` + `grid-template-*`.
+
+**What the rebuild does:** (1) centralize tokens (colours/spacing/type/chart
+recipe) — today a colour change = editing 11 charts; (2) de-dupe forked
+components (parameterize, don't fork); (3) unify card chrome; (4) kill JS-in-JSON
+button-card templates; (5) add the visual-regression gate.
+
+**Open decisions:** substrate — formalize decluttering+button-card with
+token-via-variables (cheapest) vs **native card library** (cleanest; the room row
++ chart wrapper as Lit components — note: no off-the-shelf HACS card cleanly does
+the multi-entity + column-aligned room row, flex-table is one-entity-per-row,
+multiple-entity-row is 2yr stale; source-checked 2026-06-08) vs migrate to
+mushroom (maintained, themable). Also: tokens as HA theme CSS-vars? Scope:
+`new-dashboard` only or also the older `lovelace` overview (17 views)?
+Increment (tokenize-in-place) vs big-bang.
+
 ## Auth & users
 
 ### Dedicated `ha-ops-user` service account for addon auth
