@@ -1,6 +1,6 @@
 # ha-ops-mcp
 
-**This is a power-user tool. It can break your Home Assistant as easily as you can — possibly faster.**
+**This is a power-user tool. It can break your Home Assistant as easily as you can, and will do that much faster.**
 
 Mutating operations create backups and log to an audit trail. Rollback is built in. But HA side effects (automations triggered, history logged during an inconsistency window) cannot be reversed. Treat this like SSH access to production — because that's what it is.
 
