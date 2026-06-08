@@ -85,9 +85,12 @@ HA 2026.6.1, addon v0.53.3.
 
 - **2× 404 console errors on Bedroom + Living** — the only two views with
   `custom:advanced-camera-card`. All 5 cameras are online (`recording`), so it is
-  **not** a dead-snapshot 404. Benign console noise: the card (frigate-card
-  lineage) probes an endpoint we don't serve (go2rtc-only, no Frigate). Cameras
-  work. Exact URL not yet captured (would need a CDP network trace).
+  **not** a dead-snapshot 404. Benign console noise — cameras work. Root cause
+  **unidentified**: the card auto-detects its engine from the entity platform
+  (reolink/amcrest/generic here — none are Frigate, and there is no YAML key to
+  override engine), so it is likely a snapshot/poster fetch from the Reolink/
+  Generic engine, not a Frigate probe. Pinning the exact URL needs a CDP network
+  trace (`ui_trace`). **Decision 2026-06-08: dropped** — cosmetic, not worth it.
 
 ## Fix directions (feed Task 3 — design-system rebuild)
 
