@@ -53,6 +53,23 @@ HA 2026.6.1, addon v0.53.3.
 
 (Scheduler/Zigbee mobile skipped — 1–2 card trivial views. `ha-ops-lab` empty, skipped.)
 
+### Phase B-cam — passive camera dwell (mobile, 30 s settle)
+
+Load the live-camera view and dwell 30 s, then read metrics. Tests whether live
+streams leak memory or generate sustained main-thread jank.
+
+| View | streams | LT @load → @30s | heap @load → @30s | DOM @load → @30s |
+|---|---|---|---|---|
+| Living Room | 3 | 4 → **18 (2043 ms)** | 58 → 57 (flat) | 1685 → **9821** |
+| Bedroom | 2 | 6 → 6 (flat) | 61 → 54 (flat) | 7083 → 6973 (flat) |
+
+**Finding:** no memory leak (heap flat). Living's **3 simultaneous WebRTC streams**
+generate sustained recurring main-thread jank (~2 s blocked per 30 s, continuous)
++ progressive DOM growth; Bedroom's 2-stream view is quiet after load. Jank scales
+with simultaneous live streams (3 = problem, 2 = fine). All camera cards are
+`view.default: live`. **Lever: snapshot-default + cap simultaneous live streams
+per view** (Living most affected).
+
 ### Phase B — scroll-sweep (mobile, scroll-only)
 
 | View | scroll steps | LT during scroll (cnt/total ms) |
