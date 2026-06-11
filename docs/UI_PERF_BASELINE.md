@@ -116,8 +116,41 @@ per view** (Living most affected).
 - Reduce nested-card explosion (Upstairs 133, Office 51 rendered cards).
 - Investigate cross-view heap retention (50→82 MB) if freeze persists.
 
+## Optimization 1 — CO2 charts → statistics (2026-06-11)
+
+Converted the 5 CO2 ApexCharts (Home 4-series + Bedroom/Living/Office/Walk-in
+1-series each) from raw history (`group_by avg 30min`, `curve smooth`, y `0–2000`)
+to **`statistics: {type: max, period: 5minute}` + `curve straight` + y `400–2000`**.
+Rationale: apexcharts-card fetches raw history per series then buckets in JS;
+statistics hits the pre-aggregated table instead. `max` + `straight` + raised floor
+also restore spike visibility (the `smooth`/avg/`0–2000` combo flattened peaks);
+ceiling kept at 2000 because real 24h CO2 maxima hit ~2023 (Walk-in) → 1600 clips.
+
+**Before → after (desktop long-tasks ms / CLS):**
+
+| View | before | after | verdict |
+|---|---|---|---|
+| **Home** (3 apex charts) | **1271 / 0.82** | **347 / 0.27** | 🟢 **−73% LT, −67% CLS** (reproduced ~347 twice) |
+| Living Room | 1300 / 0.29 | 1223 / 0.40 | flat — camera/DOM-bound |
+| Office | 346 / 0.60 | 364 / 0.67 | flat — 1 chart ≠ bottleneck |
+| Walk-in | 932 | 690 | within camera jitter |
+| Bedroom | 776 | 1310 | camera jitter (↑) |
+
+**Findings:**
+- **Home was data/fetch-bound, not render-bound** — statistics conversion cut it
+  ~3.6×. This is the real, reproducible win; Home was the dashboard's worst view.
+- **Single-series room CO2 charts: no measurable client win** — those views are
+  camera/DOM-bound; the one chart was never their bottleneck. (Server-side fetch +
+  spike-UX still improved everywhere.)
+- **Camera views swing ±400 ms run-to-run** (live WebRTC stream-startup timing is
+  non-deterministic). Control: no-camera/no-CO2 views (Kitchen/AC/Weather/Admin)
+  are flat ±30 ms = stable measurement. So camera-view deltas are jitter, not signal.
+- **Recipe for reuse (Task 3):** statistics `max`/`5minute` + `straight` + tight-but-
+  unclipped y-axis. Check real maxima before setting the ceiling.
+
 ## Not yet done
 
 - **Run 2 (ACTIVE)** — tab-switch storm + open more-info dialogs to *reproduce*
   the freeze under the hypothesised trigger. Requires explicit approval (taps =
   not passive). This baseline is observation-only.
+- **Temp charts** — same statistics recipe (`mean`, no clip concern) not yet applied.
