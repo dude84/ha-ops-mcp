@@ -1,3 +1,7 @@
+## 0.54.2
+
+**Orphan store files are now reaped.** Completes the manifest↔file reconciliation started in 0.54.1. A blob written to a store's `files/` dir *before* its manifest line was appended (e.g. a crash in that window) was invisible to the gallery/Timeline and never cleaned — slow wasted disk. Both the shell-output store and the capture store now **sweep orphan files** (any blob with no manifest entry) on init and after every save, logging a `WARNING` per removed file. Save is synchronous and single-threaded, so a just-written file is always already manifested by the time the sweep runs — no in-flight artifact is removed. Together with 0.54.1, both inconsistency directions are now handled: dangling entry (file gone) → warn; orphan file (no entry) → reap + warn.
+
 ## 0.54.1
 
 **Dangling store entries warn instead of failing silently.** When a manifest entry survives but its backing file is gone (manual delete, volume hiccup), both the shell-output store and the capture-gallery store already soft-failed to `None` (the UI shows a 404 on expand/view) — but said nothing in the log. Now they emit a `WARNING` naming the id + path, so the manifest↔file inconsistency is visible instead of silent. Warn-only: no self-heal, no orphan sweep, never raises — the read path stays a soft-fail, not a crash.
