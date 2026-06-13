@@ -93,8 +93,11 @@ class ShellOutputStore:
         rid = uuid.uuid4().hex[:12]
         out, out_trunc = self._cap(stdout)
         err, err_trunc = self._cap(stderr)
+        # File is written before the manifest line; a crash between the two
+        # leaves an orphan file (bounded wasted disk, no data loss) — same
+        # accepted trade-off as CaptureStore. _prune only cleans manifested ids.
         (self._files / f"{rid}.json").write_text(
-            json.dumps({"stdout": out, "stderr": err})
+            json.dumps({"stdout": out, "stderr": err}), encoding="utf-8"
         )
         entry = ShellRunEntry(
             id=rid,
@@ -103,8 +106,8 @@ class ShellOutputStore:
             cwd=cwd,
             exit_code=exit_code,
             duration_ms=duration_ms,
-            stdout_bytes=len(out),
-            stderr_bytes=len(err),
+            stdout_bytes=len(out.encode("utf-8")),
+            stderr_bytes=len(err.encode("utf-8")),
             truncated=out_trunc or err_trunc,
         )
         with open(self._manifest, "a") as f:
@@ -118,7 +121,7 @@ class ShellOutputStore:
         if not self._manifest.exists():
             return []
         out: list[ShellRunEntry] = []
-        for line in self._manifest.read_text().splitlines():
+        for line in self._manifest.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
                 continue
@@ -149,7 +152,7 @@ class ShellOutputStore:
         if not path.is_file():
             return None
         try:
-            data = json.loads(path.read_text())
+            data = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             return None
         return {
@@ -168,7 +171,7 @@ class ShellOutputStore:
 
     def _rewrite(self, entries: list[ShellRunEntry]) -> None:
         tmp = self._manifest.with_suffix(".tmp")
-        tmp.write_text("".join(json.dumps(e.to_dict()) + "\n" for e in entries))
+        tmp.write_text("".join(json.dumps(e.to_dict()) + "\n" for e in entries), encoding="utf-8")
         os.replace(tmp, self._manifest)
 
     def _prune(self) -> None:
