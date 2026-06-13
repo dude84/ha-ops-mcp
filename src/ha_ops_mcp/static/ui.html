@@ -465,6 +465,42 @@
             <div class="mt-3 text-xs text-red-700 dark:text-red-300 font-mono bg-red-50 dark:bg-red-900/30 p-2 rounded"
                  x-text="e.error"></div>
           </template>
+          <template x-if="e._shell_loading">
+            <div class="mt-3 text-xs text-text-muted italic">Loading output…</div>
+          </template>
+          <template x-if="e._shell_error">
+            <div class="mt-3 text-xs text-banner-fail-fg bg-banner-fail-bg p-2 rounded font-mono"
+                 x-text="'Failed to load output: ' + e._shell_error"></div>
+          </template>
+          <template x-if="e._shell">
+            <div class="mt-3">
+              <div class="text-xs text-text-muted mb-1">
+                Output
+                <span class="ml-1 font-mono"
+                      x-text="'exit ' + (e._shell.exit_code === null ? '— (timeout)' : e._shell.exit_code)"></span>
+                <template x-if="e._shell.truncated">
+                  <span class="ml-2 text-orange-700 dark:text-orange-400">(truncated)</span>
+                </template>
+              </div>
+              <template x-if="e._shell.stdout">
+                <div class="mb-2">
+                  <div class="text-[10px] uppercase tracking-wide text-text-muted mb-0.5">stdout</div>
+                  <pre class="text-xs font-mono bg-surface-sunken p-3 rounded overflow-x-auto max-h-96 border border-border-subtle"
+                       x-text="e._shell.stdout"></pre>
+                </div>
+              </template>
+              <template x-if="!e._shell.stdout">
+                <div class="mb-2 text-xs text-text-muted italic">stdout: (empty)</div>
+              </template>
+              <template x-if="e._shell.stderr">
+                <div>
+                  <div class="text-[10px] uppercase tracking-wide text-text-muted mb-0.5">stderr</div>
+                  <pre class="text-xs font-mono bg-surface-sunken p-3 rounded overflow-x-auto max-h-96 border border-border-subtle text-red-700 dark:text-red-300"
+                       x-text="e._shell.stderr"></pre>
+                </div>
+              </template>
+            </div>
+          </template>
           <template x-if="e.diff_present && e.diff === undefined && !e._diff_error">
             <div class="mt-3 text-xs text-text-muted italic">
               Loading diff…
@@ -1180,6 +1216,7 @@ function app() {
       this.expandedTimeline = this.expandedTimeline === idx ? -1 : idx;
       if (this.expandedTimeline === idx) {
         this._maybeFetchDiff(idx);
+        this._maybeFetchShellOutput(idx);
       }
     },
 
@@ -1212,6 +1249,30 @@ function app() {
         e._diff_error = (err && err.message) || String(err);
       } finally {
         e._diff_loading = false;
+      }
+    },
+
+    async _maybeFetchShellOutput(idx) {
+      // Lazy-load persisted exec_shell output on row-expand. The list
+      // payload carries only output_id (in details_excerpt); pull the body
+      // once and cache it on the entry as e._shell.
+      var e = this.timeline?.entries?.[idx];
+      if (!e) return;
+      var oid = e.details_excerpt?.output_id;
+      if (!oid) return;
+      if (e._shell) return;                 // already loaded
+      if (e._shell_loading) return;         // in-flight
+      e._shell_loading = true;
+      e._shell_error = '';
+      try {
+        var data = await this.fetchJson(
+          '/timeline/shell_output?id=' + encodeURIComponent(oid)
+        );
+        e._shell = data;
+      } catch (err) {
+        e._shell_error = (err && err.message) || String(err);
+      } finally {
+        e._shell_loading = false;
       }
     },
 
