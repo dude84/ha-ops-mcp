@@ -97,8 +97,12 @@ async def test_exec_shell_timeout_persists_partial(ctx):
     # A command that outpaces the timeout: it prints, then sleeps past the cap.
     cmd = "echo partial-out; sleep 100"
     preview = await haops_exec_shell(ctx, command=cmd, timeout=1)
+    # timeout is taken from the live execute call (not the token), so it must
+    # be passed here too — else this runs at the 30s default and the drain cap
+    # makes the test ~32s instead of ~3s.
     result = await haops_exec_shell(
-        ctx, command=cmd, confirm=True, token=preview["token"], cwd="/tmp",
+        ctx, command=cmd, confirm=True, token=preview["token"],
+        cwd="/tmp", timeout=1,
     )
     # Tool returns a timeout error but still carries (capped) output.
     assert "error" in result
