@@ -1,3 +1,14 @@
+## 0.54.0
+
+**`haops_exec_shell` output is now persisted and visible in the Timeline.** Shell output used to be returned to the model and then lost — once the context rolled over, there was no record of what a command actually printed, and nothing for a human to look back at. Now every run is saved durably and surfaced inline on its existing Timeline row.
+
+- **New `ShellOutputStore`** — a managed `shell_output/` dir (manifest + per-run `files/<id>.json`), mirroring the captures store: append-only manifest, retention prune (newest `max_count`, older than `max_age_days`), 1 MB-per-stream cap. Defaults to `<backup.dir>/shell_output`; tunable via `shell_output.*` config or `HA_OPS_SHELL_OUTPUT_*` env (`max_count=500`, `max_age_days=30`).
+- **Each run persists + audits a link.** `haops_exec_shell` saves full stdout/stderr and stamps an `output_id` into its audit entry. Persistence is best-effort — a store failure never breaks the tool's return.
+- **Timeline shows it inline.** Expanding an `exec_shell` row lazy-loads the output (`GET /api/ui/timeline/shell_output?id=…`) and renders stdout / stderr boxes + an exit-code chip, mirroring the diff lazy-load. Legacy rows (no `output_id`) degrade cleanly — no box, no error.
+- **Timeout path hardened.** On timeout the run now persists partial output, records `exit_code=None`, and the best-effort output drain is **bounded** so a grandchild process holding the pipes can't re-introduce a hang.
+
+The tool's MCP response shape is unchanged (the model still gets stdout/stderr inline, capped at 50k). Output rendering uses `x-text` (no markup injection). Storage is ha-ops-admin data, not HA state, so it stays out of the MCP surface — managed in the ingress UI, audit-logged for traceability.
+
 ## 0.53.3
 
 **Captures are human-viewed by default; model-vision is opt-in.** Pushing image bytes into the model's context costs tokens (vision tokens + the client's base64 text-echo). Routine "show me this view" shouldn't pay that — the ingress gallery already serves the image in your browser for free.
