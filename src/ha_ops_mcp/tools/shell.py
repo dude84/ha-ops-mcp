@@ -109,12 +109,15 @@ async def haops_exec_shell(
         )
     except TimeoutError:
         proc.kill()
-        # communicate() is safe to re-call after kill(): SIGKILL closes the
-        # subprocess pipes, so the second drain returns promptly, never hangs.
-        # Best-effort: drain whatever the killed process buffered so the
-        # timeout case still persists partial output.
+        # Best-effort drain of buffered output, BOUNDED: a grandchild process
+        # can inherit the pipes and hold them open past kill() (e.g. a detached
+        # `sleep`), so an unbounded communicate() here would re-introduce the
+        # very hang the timeout exists to prevent. Cap it; partial output is
+        # nice-to-have, never worth blocking on.
         try:
-            stdout, stderr = await proc.communicate()
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=2
+            )
         except Exception:
             stdout, stderr = b"", b""
         timed_out = True
