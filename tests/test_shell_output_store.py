@@ -89,3 +89,26 @@ def test_read_output_missing_file_warns_and_softfails(tmp_path, caplog):
     assert "file missing" in caplog.text
     # Warn-only: the entry is NOT self-healed away, still listed.
     assert any(e.id == entry.id for e in store.list_entries(limit=10))
+
+
+def test_orphan_file_swept_on_init(tmp_path, caplog):
+    import logging
+
+    d = tmp_path / "shell_output"
+    store = ShellOutputStore(d)
+    entry = store.save(
+        command="echo a", cwd="/tmp", exit_code=0,
+        duration_ms=1.0, stdout="a", stderr="",
+    )
+    # Plant a crash-leftover blob with no manifest entry.
+    orphan = d / "files" / "deadbeef0000.json"
+    orphan.write_text('{"stdout":"x","stderr":""}', encoding="utf-8")
+    assert orphan.is_file()
+
+    with caplog.at_level(logging.WARNING):
+        ShellOutputStore(d)  # re-init → _prune → sweep
+
+    assert not orphan.is_file()  # orphan reaped
+    assert "orphan shell-output file" in caplog.text
+    # The legit, manifested file is untouched.
+    assert (d / "files" / f"{entry.id}.json").is_file()

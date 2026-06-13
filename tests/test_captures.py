@@ -258,3 +258,23 @@ def test_read_bytes_missing_file_warns_and_softfails(tmp_path, caplog):
     assert "file missing" in caplog.text
     # Warn-only: entry not self-healed, still listed.
     assert any(x.id == e.id for x in s.list_entries(limit=10))
+
+
+def test_orphan_file_swept_on_init(tmp_path, caplog):
+    import logging
+
+    d = tmp_path / "captures"
+    s = CaptureStore(d)
+    e = s.save(content=b"\x89PNG", kind="screenshot", view="v", ext="png")
+    # Plant a crash-leftover blob with no manifest entry.
+    orphan = d / "files" / "deadbeef0000.png"
+    orphan.write_bytes(b"junk")
+    assert orphan.is_file()
+
+    with caplog.at_level(logging.WARNING):
+        CaptureStore(d)  # re-init → _prune → sweep
+
+    assert not orphan.is_file()  # orphan reaped
+    assert "orphan capture file" in caplog.text
+    # The legit, manifested file is untouched.
+    assert (d / "files" / e.filename).is_file()

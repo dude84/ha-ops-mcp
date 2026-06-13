@@ -201,3 +201,24 @@ class ShellOutputStore:
                     if p.is_file():
                         p.unlink()
             self._rewrite(keep)
+        self._sweep_orphan_files(keep)
+
+    def _sweep_orphan_files(self, known: list[ShellRunEntry]) -> None:
+        """Delete files in files/ not referenced by any manifest entry.
+
+        Reaps crash leftovers: save() writes the file THEN appends the
+        manifest line, so a crash in that window leaves a blob no entry
+        points at — invisible to list_entries and never otherwise cleaned.
+        Runs on init + after every save (via _prune). Save is synchronous
+        and single-threaded, so a just-written file is always already in the
+        manifest by the time this runs — no in-flight file gets nuked.
+        """
+        known_ids = {e.id for e in known}
+        for f in self._files.iterdir():
+            if not f.is_file() or f.suffix != ".json":
+                continue
+            if f.stem not in known_ids:
+                logger.warning(
+                    "orphan shell-output file (no manifest entry), removing: %s", f
+                )
+                f.unlink()
