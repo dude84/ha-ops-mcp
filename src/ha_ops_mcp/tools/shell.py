@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from ha_ops_mcp.server import registry
@@ -93,6 +95,8 @@ async def haops_exec_shell(
     if token_data.details.get("command") != command:
         return {"error": "Command does not match the token. Re-run the preview."}
 
+    t0 = time.monotonic()
+    timed_out = False
     try:
         proc = await asyncio.create_subprocess_shell(
             command,
@@ -105,35 +109,67 @@ async def haops_exec_shell(
         )
     except TimeoutError:
         proc.kill()
-        ctx.safety.consume_token(token)
-        return {
-            "error": f"Command timed out after {timeout}s",
-            "command": command,
-        }
+        # Best-effort: drain whatever the killed process buffered so the
+        # timeout case still persists partial output.
+        try:
+            stdout, stderr = await proc.communicate()
+        except Exception:
+            stdout, stderr = b"", b""
+        timed_out = True
     except FileNotFoundError:
         return {"error": f"Working directory not found: {cwd}"}
     except Exception as e:
         return {"error": f"Execution failed: {e}"}
 
     ctx.safety.consume_token(token)
+    duration_ms = round((time.monotonic() - t0) * 1000, 1)
+
+    stdout_text = stdout.decode(errors="replace").rstrip()
+    stderr_text = stderr.decode(errors="replace").rstrip()
+    exit_code = None if timed_out else proc.returncode
+
+    # Persist the full output durably (Timeline surfaces it inline). Never let
+    # a store failure break the tool's return — swallow + log.
+    output_id: str | None = None
+    try:
+        entry = ctx.shell_output.save(
+            command=command,
+            cwd=cwd,
+            exit_code=exit_code,
+            duration_ms=duration_ms,
+            stdout=stdout_text,
+            stderr=stderr_text,
+        )
+        output_id = entry.id
+    except Exception:  # noqa: BLE001 — persistence is best-effort
+        logging.getLogger(__name__).exception("shell-output persist failed")
 
     await ctx.audit.log(
         tool="exec_shell",
         details={
             "command": command,
             "cwd": cwd,
-            "exit_code": proc.returncode,
+            "exit_code": exit_code,
+            "output_id": output_id,
         },
         token_id=token,
     )
 
+    if timed_out:
+        return {
+            "error": f"Command timed out after {timeout}s",
+            "command": command,
+            "stdout": stdout_text[:50000],
+            "stderr": stderr_text[:50000],
+        }
+
     response: dict[str, Any] = {
         "exit_code": proc.returncode,
-        "stdout": stdout.decode(errors="replace").rstrip(),
-        "stderr": stderr.decode(errors="replace").rstrip(),
+        "stdout": stdout_text,
+        "stderr": stderr_text,
     }
 
-    # Truncate very large output
+    # Truncate very large output (model-response cap; the store keeps more).
     for key in ("stdout", "stderr"):
         if len(response[key]) > 50000:
             response[key] = response[key][:50000] + "\n... (truncated)"
