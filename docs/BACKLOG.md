@@ -69,6 +69,19 @@ mushroom (maintained, themable). Also: tokens as HA theme CSS-vars? Scope:
 `new-dashboard` only or also the older `lovelace` overview (17 views)?
 Increment (tokenize-in-place) vs big-bang.
 
+### Cap the Timeline shell-output served body (DOM weight)
+
+`GET /api/ui/timeline/shell_output` (shipped with shell-output persistence)
+serves the **full** stored output; `ShellOutputStore` caps each stream at 1 MB,
+so a maximally-verbose run can push ~2 MB of text into a single Alpine
+`<pre x-text>` node on row-expand (the `max-h-96 overflow` clips *painting*, not
+the DOM text node). This is asymmetric with the diff lazy-load surface, which
+caps the wire/DOM payload at 60 KB (`_TIMELINE_INLINE_DIFF_CAP`) and shows a
+"truncated — full patch in the audit dir" footer. **Low priority** — real shell
+output rarely approaches 1 MB, and `x-text` (not `x-html`) means it's only a
+weight concern, not correctness/XSS. Fix when convenient: serve a ~256 KB inline
+slice with a "truncated — full output persisted" note, mirroring the diff cap.
+
 ## Auth & users
 
 ### Dedicated `ha-ops-user` service account for addon auth

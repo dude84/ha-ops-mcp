@@ -110,7 +110,7 @@ class ShellOutputStore:
             stderr_bytes=len(err.encode("utf-8")),
             truncated=out_trunc or err_trunc,
         )
-        with open(self._manifest, "a") as f:
+        with open(self._manifest, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry.to_dict()) + "\n")
         self._prune()
         return entry
