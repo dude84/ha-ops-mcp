@@ -25,6 +25,7 @@ from ha_ops_mcp.safety.classification import classify
 from ha_ops_mcp.safety.confirmation import SafetyManager
 from ha_ops_mcp.safety.path_guard import PathGuard
 from ha_ops_mcp.safety.rollback import RollbackManager
+from ha_ops_mcp.safety.shell_output import ShellOutputStore
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,7 @@ class HaOpsContext:
     rollback: RollbackManager
     backup: BackupManager
     captures: CaptureStore
+    shell_output: ShellOutputStore
     audit: AuditLog
     path_guard: PathGuard
     auth_provider: Any | None = None  # HaOpsOAuthProvider when auth enabled
@@ -193,6 +195,18 @@ def create_context(config: HaOpsConfig) -> HaOpsContext:
         max_age_days=config.captures.max_age_days,
     )
 
+    # Persisted shell output (haops_exec_shell) — default <backup_dir>/shell_output,
+    # a sibling of captures/ on the survival /backup volume. Retention mirrors
+    # captures (newest max_count kept, older than max_age_days pruned on init).
+    shell_output_dir_str = (
+        config.shell_output.dir or str(Path(config.backup.dir) / "shell_output")
+    )
+    shell_output = ShellOutputStore(
+        Path(shell_output_dir_str).resolve(),
+        max_count=config.shell_output.max_count,
+        max_age_days=config.shell_output.max_age_days,
+    )
+
     # Legacy detection: the pre-v0.22.0 fallback placed the audit log at
     # <backup_dir>/../audit (a sibling, not inside backup_dir). Warn if
     # that stray directory still has data so the admin knows to move it.
@@ -223,6 +237,7 @@ def create_context(config: HaOpsConfig) -> HaOpsContext:
         rollback=rollback,
         backup=backup,
         captures=captures,
+        shell_output=shell_output,
         audit=audit,
         path_guard=path_guard,
     )

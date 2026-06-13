@@ -27,6 +27,7 @@ from ha_ops_mcp.safety.captures import CaptureStore
 from ha_ops_mcp.safety.confirmation import SafetyManager
 from ha_ops_mcp.safety.path_guard import PathGuard
 from ha_ops_mcp.safety.rollback import RollbackManager
+from ha_ops_mcp.safety.shell_output import ShellOutputStore
 from ha_ops_mcp.server import HaOpsContext
 
 # ── HA database schema (core tables) ──
@@ -542,6 +543,7 @@ def ctx(
         rollback=RollbackManager(),
         backup=BackupManager(backup_dir),
         captures=CaptureStore(backup_dir / "captures"),
+        shell_output=ShellOutputStore(backup_dir / "shell_output"),
         audit=AuditLog(backup_dir / "audit"),
         path_guard=PathGuard(config_dir),
     )
