@@ -1,3 +1,7 @@
+## 0.54.1
+
+**Dangling store entries warn instead of failing silently.** When a manifest entry survives but its backing file is gone (manual delete, volume hiccup), both the shell-output store and the capture-gallery store already soft-failed to `None` (the UI shows a 404 on expand/view) — but said nothing in the log. Now they emit a `WARNING` naming the id + path, so the manifest↔file inconsistency is visible instead of silent. Warn-only: no self-heal, no orphan sweep, never raises — the read path stays a soft-fail, not a crash.
+
 ## 0.54.0
 
 **`haops_exec_shell` output is now persisted and visible in the Timeline.** Shell output used to be returned to the model and then lost — once the context rolled over, there was no record of what a command actually printed, and nothing for a human to look back at. Now every run is saved durably and surfaced inline on its existing Timeline row.
