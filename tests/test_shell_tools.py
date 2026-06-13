@@ -90,3 +90,28 @@ async def test_exec_shell_audit_carries_output_id(ctx):
     assert isinstance(details.get("output_id"), str) and details["output_id"]
     # The output_id resolves to a real stored run.
     assert ctx.shell_output.get(details["output_id"]) is not None
+
+
+@pytest.mark.asyncio
+async def test_exec_shell_timeout_persists_partial(ctx):
+    # A command that outpaces the timeout: it prints, then sleeps past the cap.
+    cmd = "echo partial-out; sleep 100"
+    preview = await haops_exec_shell(ctx, command=cmd, timeout=1)
+    result = await haops_exec_shell(
+        ctx, command=cmd, confirm=True, token=preview["token"], cwd="/tmp",
+    )
+    # Tool returns a timeout error but still carries (capped) output.
+    assert "error" in result
+    assert "timed out" in result["error"]
+    assert "stdout" in result and "stderr" in result
+    # The run is persisted with exit_code=None (killed, no clean exit).
+    entries = ctx.shell_output.list_entries(limit=5)
+    assert entries, "expected a persisted timeout run"
+    latest = entries[0]
+    assert latest.command == cmd
+    assert latest.exit_code is None
+    # And the audit row links to it.
+    recent = ctx.audit.read_recent(limit=10)
+    shell_rows = [e for e in recent if e.get("tool") == "exec_shell"]
+    assert shell_rows
+    assert shell_rows[0].get("details", {}).get("exit_code") is None

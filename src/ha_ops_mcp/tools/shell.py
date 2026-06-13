@@ -109,6 +109,8 @@ async def haops_exec_shell(
         )
     except TimeoutError:
         proc.kill()
+        # communicate() is safe to re-call after kill(): SIGKILL closes the
+        # subprocess pipes, so the second drain returns promptly, never hangs.
         # Best-effort: drain whatever the killed process buffered so the
         # timeout case still persists partial output.
         try:
@@ -164,7 +166,7 @@ async def haops_exec_shell(
         }
 
     response: dict[str, Any] = {
-        "exit_code": proc.returncode,
+        "exit_code": exit_code,
         "stdout": stdout_text,
         "stderr": stderr_text,
     }
