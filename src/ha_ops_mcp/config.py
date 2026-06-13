@@ -76,6 +76,16 @@ class CaptureConfig:
 
 
 @dataclass
+class ShellOutputConfig:
+    # Persisted haops_exec_shell output (surfaced inline on the Timeline).
+    # Empty dir = derive <backup.dir>/shell_output in server.py. Retention
+    # mirrors captures: newest max_count kept, older than max_age_days pruned.
+    dir: str = ""
+    max_count: int = 500
+    max_age_days: int = 30
+
+
+@dataclass
 class AuditConfig:
     # Empty string means "derive from backup.dir" for back-compat with deploys
     # that predate this option. server.py resolves and canonicalises the path.
@@ -107,6 +117,7 @@ class HaOpsConfig:
     safety: SafetyConfig = field(default_factory=SafetyConfig)
     backup: BackupConfig = field(default_factory=BackupConfig)
     captures: CaptureConfig = field(default_factory=CaptureConfig)
+    shell_output: ShellOutputConfig = field(default_factory=ShellOutputConfig)
     audit: AuditConfig = field(default_factory=AuditConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
 
@@ -132,6 +143,9 @@ _ENV_MAP: dict[str, tuple[str, str]] = {
     "CAPTURES_DIR": ("captures", "dir"),
     "CAPTURES_MAX_COUNT": ("captures", "max_count"),
     "CAPTURES_MAX_AGE_DAYS": ("captures", "max_age_days"),
+    "SHELL_OUTPUT_DIR": ("shell_output", "dir"),
+    "SHELL_OUTPUT_MAX_COUNT": ("shell_output", "max_count"),
+    "SHELL_OUTPUT_MAX_AGE_DAYS": ("shell_output", "max_age_days"),
     "AUDIT_DIR": ("audit", "dir"),
     "AUDIT_LOG_READS": ("audit", "log_reads"),
     "AUTH_ENABLED": ("auth", "enabled"),
@@ -229,6 +243,7 @@ def load_config(config_path: Path | None = None) -> HaOpsConfig:
         safety=_build_dataclass(SafetyConfig, data.get("safety")),
         backup=_build_dataclass(BackupConfig, data.get("backup")),
         captures=_build_dataclass(CaptureConfig, data.get("captures")),
+        shell_output=_build_dataclass(ShellOutputConfig, data.get("shell_output")),
         audit=_build_dataclass(AuditConfig, data.get("audit")),
         auth=_build_dataclass(AuthConfig, data.get("auth")),
     )

@@ -48,3 +48,22 @@ def test_resolve_token_from_file(tmp_path: Path):
 
     config = load_config(config_file)
     assert config.ha.resolve_token() == "file_token_abc"
+
+
+def test_shell_output_config_defaults():
+    from ha_ops_mcp.config import HaOpsConfig
+
+    cfg = HaOpsConfig()
+    assert cfg.shell_output.dir == ""
+    assert cfg.shell_output.max_count == 500
+    assert cfg.shell_output.max_age_days == 30
+
+
+def test_shell_output_env_override(monkeypatch):
+    from ha_ops_mcp.config import load_config
+
+    monkeypatch.setenv("HA_OPS_SHELL_OUTPUT_MAX_COUNT", "12")
+    monkeypatch.setenv("HA_OPS_SHELL_OUTPUT_DIR", "/tmp/so")
+    cfg = load_config(None)
+    assert cfg.shell_output.max_count == 12
+    assert cfg.shell_output.dir == "/tmp/so"
