@@ -15,6 +15,36 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.54.0` — verified 2026-06-13 (Singapore HA)
+
+| Component | Version | How to check |
+|---|---|---|
+| ha-ops-mcp (addon) | **0.54.0** (tag `v0.54.0`, `e9577b6`) | `haops_system_info` / `git describe --tags` |
+| Home Assistant Core | **2026.6.3** | `haops_self_check` → `rest_api.ha_version` |
+| HA DB backend | **MariaDB 11.4.10-MariaDB**, schema **53** | `haops_system_info` → `database` |
+| Claude Code CLI | **2.1.177** | `claude --version` |
+| Terminal host | **iTerm2 3.6.11** | iTerm → About / `$TERM_PROGRAM_VERSION` |
+| macOS | **26.5.1** (build 25F80, Darwin 25.5.0) | `sw_vers` |
+| Bun (CC runtime) | **1.3.14** | `bun --version` |
+| Node (local) | **v26.0.0** | `node --version` |
+| Addon base image | **Debian trixie** + Playwright chromium-headless-shell (~1.5 GB) — unchanged from v0.53.3 (no Dockerfile/base change in v0.54.0) | `haops_exec_shell "chromium --version"` |
+| MCP transport | streamable-http, OAuth on | `claude mcp list` |
+| MCP URL | `http://homeassistant.local:8901/mcp` | must stay mDNS — OAuth resource is pinned to this host |
+| HA host LAN IP | `10.0.0.150` (stable) | `dscacheutil -q host -a name homeassistant.local` |
+
+**Notes for this baseline:**
+- **v0.54.0 ships shell-output persistence** — `haops_exec_shell` now saves full stdout/stderr to
+  a `ShellOutputStore` (`<backup.dir>/shell_output`, manifest + per-run JSON, retention prune, 1 MB/stream
+  cap) and stamps an `output_id` into its audit row; the sidebar Timeline lazy-loads + renders it inline
+  on row-expand. **No new MCP tool** (store is ha-ops-admin data, not HA state — still **78 tools**).
+- **Verified live end-to-end this session:** ran `dmesg` (full buffer, ~50k+ chars). The MCP client
+  capped/offloaded the *model-facing* result, but the **full output persisted to the store and rendered
+  untruncated in the Timeline sidebar** — the exact "model view ↔ human view decoupled, output durable
+  either way" behavior the feature exists for. `haops_self_check` `overall: ok` (all backends).
+- **HA Core updated** this session: **2026.6.1 → 2026.6.3**. Stack otherwise unchanged from v0.53.3
+  (MariaDB 11.4.10 schema 53, Debian+Playwright image, same client host / mDNS URL / LAN IP).
+- **Client drift since v0.53.3:** Claude Code **2.1.166 → 2.1.177** (connection stayed healthy across it).
+
 ### `v0.53.3` — verified 2026-06-07 (Singapore HA)
 
 | Component | Version | How to check |
