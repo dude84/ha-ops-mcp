@@ -329,6 +329,41 @@ def register_ui_routes(mcp: FastMCP, ctx: HaOpsContext) -> None:
             "diff": diff_text,
         })
 
+    @mcp.custom_route("/api/ui/timeline/shell_output", methods=["GET"])  # type: ignore[untyped-decorator]
+    async def api_shell_output(request: Request) -> Response:
+        """Lazy-load a persisted haops_exec_shell run's stdout/stderr.
+
+        The Timeline list payload carries only `output_id` (in the entry's
+        details_excerpt); the frontend fetches the body on row-expand and
+        caches it on the entry, mirroring the diff lazy-load.
+
+        Response: {command, cwd, exit_code, duration_ms, stdout, stderr,
+        truncated}. 400 if `id` missing, 404 if the run / file is gone.
+        """
+        if not _is_authorized(request):
+            return _unauthorized()
+        run_id = request.query_params.get("id", "").strip()
+        if not run_id:
+            return JSONResponse(
+                {"error": "id query param required"}, status_code=400
+            )
+        entry = ctx.shell_output.get(run_id)
+        output = ctx.shell_output.read_output(run_id)
+        if entry is None or output is None:
+            return JSONResponse(
+                {"error": f"Shell output {run_id!r} not found"},
+                status_code=404,
+            )
+        return JSONResponse({
+            "command": entry.command,
+            "cwd": entry.cwd,
+            "exit_code": entry.exit_code,
+            "duration_ms": entry.duration_ms,
+            "stdout": output["stdout"],
+            "stderr": output["stderr"],
+            "truncated": entry.truncated,
+        })
+
     @mcp.custom_route("/api/ui/backups", methods=["GET"])  # type: ignore[untyped-decorator]
     async def api_backups(request: Request) -> Response:
         """Summary of persistent backups — per-type counts/bytes, oldest/
@@ -1382,7 +1417,7 @@ def _audit_details_excerpt(tool: str, details: dict[str, Any]) -> dict[str, Any]
         "entity_customize": ["entity_ids", "customizations", "overrides"],
         "entities_assign_area": ["area_id", "area", "entity_ids"],
         "db_execute": ["sql", "rowcount"],
-        "exec_shell": ["command", "cwd", "timeout"],
+        "exec_shell": ["command", "cwd", "timeout", "output_id"],
         "addon_restart": ["slug", "addon_slug"],
         "system_restart": [],
     }.get(tool, list(details.keys())[:6])

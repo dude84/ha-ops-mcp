@@ -1357,3 +1357,28 @@ async def test_timeline_attaches_linked_capture(client, ctx):
     assert entries
     assert entries[0]["capture"]["id"] == cap.id
     assert entries[0]["capture"]["kind"] == "screenshot"
+
+
+def test_shell_output_endpoint_returns_output(client, ctx):
+    entry = ctx.shell_output.save(
+        command="echo route", cwd="/tmp", exit_code=0,
+        duration_ms=2.0, stdout="route-out\n", stderr="",
+    )
+    res = client.get(f"/api/ui/timeline/shell_output?id={entry.id}")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["command"] == "echo route"
+    assert body["exit_code"] == 0
+    assert "route-out" in body["stdout"]
+    assert body["stderr"] == ""
+    assert body["truncated"] is False
+
+
+def test_shell_output_endpoint_404_unknown(client):
+    res = client.get("/api/ui/timeline/shell_output?id=doesnotexist")
+    assert res.status_code == 404
+
+
+def test_shell_output_endpoint_400_missing_id(client):
+    res = client.get("/api/ui/timeline/shell_output")
+    assert res.status_code == 400
