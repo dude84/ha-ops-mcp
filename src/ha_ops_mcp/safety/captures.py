@@ -16,11 +16,14 @@ Mutations are still audit-logged by the caller for traceability.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -149,6 +152,12 @@ class CaptureStore:
             return None
         path = self._files / entry.filename
         if not path.is_file():
+            # Manifest entry survives but its artifact file is gone (manual
+            # delete / volume hiccup). Soft-fail to None — callers surface a
+            # 404 — but warn so the inconsistency is visible, not silent.
+            logger.warning(
+                "capture %s in manifest but file missing: %s", capture_id, path
+            )
             return None
         return entry, path.read_bytes()
 

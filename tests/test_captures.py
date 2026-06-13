@@ -240,3 +240,21 @@ def test_round_trip_kinds(tmp_path, ext):
     entry, data = s.read_bytes(e.id)
     assert data == b"data"
     assert entry.kind == kind
+
+
+def test_read_bytes_missing_file_warns_and_softfails(tmp_path, caplog):
+    import logging
+
+    s = _store(tmp_path)
+    e = s.save(content=b"\x89PNGdata", kind="screenshot", view="lovelace", ext="png")
+    # Delete the artifact file out from under the manifest entry.
+    (tmp_path / "captures" / "files" / e.filename).unlink()
+
+    with caplog.at_level(logging.WARNING):
+        got = s.read_bytes(e.id)
+
+    assert got is None  # soft-fail, no exception
+    assert e.id in caplog.text
+    assert "file missing" in caplog.text
+    # Warn-only: entry not self-healed, still listed.
+    assert any(x.id == e.id for x in s.list_entries(limit=10))

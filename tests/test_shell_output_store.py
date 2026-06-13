@@ -68,3 +68,24 @@ def test_prune_enforces_max_count(tmp_path: Path):
     # Oldest two pruned, their files gone.
     assert store.read_output(ids[0]) is None
     assert store.read_output(ids[4]) is not None
+
+
+def test_read_output_missing_file_warns_and_softfails(tmp_path, caplog):
+    import logging
+
+    store = ShellOutputStore(tmp_path / "shell_output")
+    entry = store.save(
+        command="echo hi", cwd="/tmp", exit_code=0,
+        duration_ms=1.0, stdout="hi\n", stderr="",
+    )
+    # Delete the output file out from under the manifest entry.
+    (tmp_path / "shell_output" / "files" / f"{entry.id}.json").unlink()
+
+    with caplog.at_level(logging.WARNING):
+        out = store.read_output(entry.id)
+
+    assert out is None  # soft-fail, no exception
+    assert entry.id in caplog.text
+    assert "file missing" in caplog.text
+    # Warn-only: the entry is NOT self-healed away, still listed.
+    assert any(e.id == entry.id for e in store.list_entries(limit=10))

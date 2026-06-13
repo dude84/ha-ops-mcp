@@ -15,11 +15,14 @@ tools; the writing tool audit-logs the run for traceability.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -150,10 +153,17 @@ class ShellOutputStore:
             return None
         path = self._files / f"{run_id}.json"
         if not path.is_file():
+            # Manifest entry survives but its output file is gone (manual
+            # delete / volume hiccup). Soft-fail to None — callers surface a
+            # 404 — but warn so the inconsistency is visible, not silent.
+            logger.warning(
+                "shell-output %s in manifest but file missing: %s", run_id, path
+            )
             return None
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
+            logger.warning("shell-output %s file is not valid JSON: %s", run_id, path)
             return None
         return {
             "stdout": str(data.get("stdout", "")),
