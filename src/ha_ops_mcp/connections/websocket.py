@@ -39,6 +39,7 @@ class WebSocketClient:
         self._msg_id = 0
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
         self._listener_task: asyncio.Task[None] | None = None
+        self._reconnect_lock = asyncio.Lock()
 
     async def __aenter__(self) -> WebSocketClient:
         self._conn = await websockets.connect(self._url)
@@ -114,28 +115,41 @@ class WebSocketClient:
         state = getattr(self._conn, "state", None)
         if state is None:
             return False
-        # OPEN = 1; anything else is connecting/closing/closed
-        return str(state).endswith("OPEN")
+        # state is a websockets State (IntEnum). Compare by .name — NOT
+        # str(state): Python 3.11+ changed IntEnum.__str__ to return the
+        # integer ("1"), so str(State.OPEN).endswith("OPEN") is always False
+        # and would force a reconnect on every command.
+        return getattr(state, "name", None) == "OPEN"
 
     async def _ensure_connected(self) -> None:
-        """Reconnect if the connection is dead."""
+        """Reconnect if the connection is dead.
+
+        Guarded by a lock so that concurrent send_command() callers don't each
+        spawn a reconnect and clobber self._conn (which orphans the other's
+        socket and amplifies churn). Double-checked: a caller that waited on the
+        lock re-tests liveness and skips the reconnect if a peer already did it.
+        """
         if self._is_conn_alive():
             return
-        logger.info("WebSocket connection is dead, reconnecting...")
-        # Clean up dead state
-        if self._listener_task and not self._listener_task.done():
-            self._listener_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await self._listener_task
-        if self._conn is not None:
-            with contextlib.suppress(Exception):
-                await self._conn.close()
-        self._conn = None
-        self._listener_task = None
-        # Reconnect
-        self._conn = await websockets.connect(self._url)
-        await self._authenticate()
-        self._listener_task = asyncio.create_task(self._listen())
+        async with self._reconnect_lock:
+            # Another coroutine may have reconnected while we waited.
+            if self._is_conn_alive():
+                return
+            logger.info("WebSocket connection is dead, reconnecting...")
+            # Clean up dead state
+            if self._listener_task and not self._listener_task.done():
+                self._listener_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await self._listener_task
+            if self._conn is not None:
+                with contextlib.suppress(Exception):
+                    await self._conn.close()
+            self._conn = None
+            self._listener_task = None
+            # Reconnect
+            self._conn = await websockets.connect(self._url)
+            await self._authenticate()
+            self._listener_task = asyncio.create_task(self._listen())
 
     async def send_command(
         self, msg_type: str, timeout: float = 30.0, **kwargs: Any
