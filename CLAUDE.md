@@ -289,6 +289,28 @@ At startup, the connection layer must:
 - No classes where a function will do — but use classes for stateful things (connections, backends)
 - Error handling: catch specific exceptions, return structured error messages to MCP client (never raw tracebacks)
 
+## HA compatibility window — keep it current (agent routine)
+
+Two files declare which HA Core versions this server works against, and they must move together:
+
+- `src/ha_ops_mcp/compat.py` — `BUILT_AGAINST_HA`, `BUILT_AGAINST_DB_SCHEMA`, `MIN_SUPPORTED_HA`,
+  `MAX_TESTED_HA`. Consumed by the startup warning, `haops_system_info`, and `haops_tools_check`.
+- `docs/HA_COMPATIBILITY.md` — the prose half, the verification-history table, and the **inventory
+  of the HA API surface we depend on**. That inventory is the point: HA's breaking-change lists are
+  overwhelmingly integration-level, so diff them against the list instead of reading them whole.
+
+`tests/test_compat.py` asserts `BUILT_AGAINST_HA` satisfies its own window, so bumping one constant
+without the other fails. **Also update the README and DOCS.md compatibility tables** — they're
+user-facing and go stale silently.
+
+**When to bump (do it automatically, no need to ask):** after `haops_tools_check` returns `all_pass`
+on an HA version newer than `MAX_TESTED_HA`. That single tool call *is* the verification — 13
+read-only groups covering every backend. Add a row to the history table, and to KNOWN_GOOD_ENV.md.
+
+**When an HA release ships breaking changes**, check them against HA_COMPATIBILITY.md's surface list
+before assuming impact, and record anything version-specific there (not in HA_QUIRKS.md, which is for
+behaviour that holds across versions).
+
 ## Known-good environment baseline — keep it current (agent routine)
 
 `docs/KNOWN_GOOD_ENV.md` holds a version snapshot of the **full client+server stack**

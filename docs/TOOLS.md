@@ -69,14 +69,14 @@ Wraps HA's collection-helper WebSocket API for `input_boolean`, `input_number`, 
 
 | Tool | Type | Description |
 |---|---|---|
-| `haops_system_info` | Read | HA version, DB backend/schema, entity counts, timezone. |
+| `haops_system_info` | Read | HA version, DB backend/schema, entity counts, timezone, and the HA compatibility window this build was verified against. |
 | `haops_system_logs` | Read | Filtered error log — by level, integration, regex, line count. |
 | `haops_system_reload` | Write | Targeted domain reload (automations, scripts, scenes, core, all) without restart. Optional post-reload entity verification. |
 | `haops_system_restart` | Write | Two-phase HA restart. Last resort — prefer `haops_system_reload` for individual domains. |
 | `haops_system_core` | Write | Two-phase Supervisor-driven Core stop/start/restart. Stop disables the watchdog first (re-enabled on start) — needed to free a resource HA holds, e.g. a serial port for in-place Zigbee flashing. HA OS / Supervised only. |
 | `haops_system_backup` | Write | Trigger a full HA backup via Supervisor or Core API. |
 | `haops_self_check` | Read | Validate all connections — REST, WebSocket, database, filesystem, backup directory. Run first to diagnose connectivity. |
-| `haops_tools_check` | Read | Passive integration test — exercises each tool group with real read-only operations. Run after HA upgrades. |
+| `haops_tools_check` | Read | Passive integration test — exercises each tool group with real read-only operations, and reports the HA compatibility window under `summary.compatibility`. **Run after every HA upgrade** — each failing group names the tools it affects. |
 
 ## Zigbee / ZHA tools
 

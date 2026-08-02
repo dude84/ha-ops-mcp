@@ -7,6 +7,10 @@ drives tool design decisions).
 
 Add new entries as we hit them. Keep it terse — lookup table, not essay.
 
+Quirks that are **specific to an HA version** (a WebSocket command that disappeared, a default
+that changed) belong in [HA_COMPATIBILITY.md](HA_COMPATIBILITY.md) instead, alongside the API
+surface they affect. This file is for behaviour that holds across versions.
+
 ---
 
 ## YAML & Formatting Quirks

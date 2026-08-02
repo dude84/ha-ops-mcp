@@ -10,7 +10,32 @@ An [MCP server](https://modelcontextprotocol.io/) that gives AI assistants (and 
 
 Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.io/integrations/mcp_server/), [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), [hass-mcp](https://github.com/voska/hass-mcp)) focus on device control — "turn on the lights", query states, trigger automations via natural language. ha-ops-mcp is for the work that comes *during and after* setup: cleaning up 200 orphaned entities, reorganising dashboards across views, purging a bloated recorder database, editing YAML without losing comments, understanding what references `sensor.energy_grid` before renaming it, **seeing your dashboards** (server-side headless screenshots + load-performance capture), and doing all of that with diffs you can review and rollback if something goes wrong (most of the time...). Device control here is a *secondary* objective — the generic `haops_service_call` covers it; there are no bespoke per-device tools.
 
-**78 tools. 694 tests. Mypy strict. Debian image with Playwright/Chromium (v0.50.0+).**
+**78 tools. 731 tests. Mypy strict. Debian image with Playwright/Chromium (v0.50.0+).**
+
+## Home Assistant compatibility
+
+| | |
+|---|---|
+| **Built against** | HA Core **2026.7.4** |
+| **Supported window** | **2026.5 – 2026.7** |
+| **Recorder DB schema** | **53** |
+
+Every release is verified against a live instance with `haops_tools_check` — 13 read-only groups exercising REST, WebSocket, database, filesystem, registries, Supervisor, shell, reference graph, debugger, helpers, Zigbee, UI and user tools. A release ships when that returns `all_pass`.
+
+**Running a newer HA than the window?** Nothing will refuse to start. The server logs a warning, and `haops_system_info` reports a `compatibility` block telling you the same. HA ships on the first Wednesday of every month, so the newest verified version goes stale by design — outside the window means *untested*, not *known-broken*. If something misbehaves, run `haops_tools_check` first: each failing group names the tools it affects.
+
+### Verified against
+
+| ha-ops-mcp | HA Core | DB schema | Result |
+|---|---|---|---|
+| 0.55.0 | 2026.7.4 | 53 | 13/13 groups pass |
+| 0.54.0 | 2026.6.3 | 53 | all backends ok |
+| 0.53.3 | 2026.6.1 | 53 | all backends ok |
+| 0.37.0 | 2026.5.4 | 53 | all backends ok |
+
+[**HA_COMPATIBILITY.md**](https://github.com/dude84/ha-ops-mcp/blob/main/docs/HA_COMPATIBILITY.md) has the full picture: the exact HA API surface this server depends on (WebSocket commands, REST and Supervisor endpoints, `.storage` files, recorder tables) and the version-specific HA behaviour we've hit. Most HA breaking changes are integration-level and touch none of it — that document is the list to check them against.
+
+Requires Python **3.11+** (the addon image ships its own). Databases: SQLite, MariaDB/MySQL, PostgreSQL.
 
 ## Installation
 

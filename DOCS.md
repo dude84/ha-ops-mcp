@@ -4,6 +4,18 @@ An MCP server addon that gives AI assistants (and you) operational access to you
 
 Built for the maintenance and observability work that comes during and after setup. **Device control** (lights, switches, scenes) is a **secondary objective** — handled by the generic `haops_service_call` escape hatch, not bespoke per-device tools.
 
+## Home Assistant compatibility
+
+| | |
+|---|---|
+| **Built against** | HA Core **2026.7.4** |
+| **Supported window** | **2026.5 – 2026.7** |
+| **Recorder DB schema** | **53** |
+
+Each release is verified against a live instance with `haops_tools_check` (13 read-only groups covering every backend). On a newer HA than the window, the addon still starts — it logs a warning and `haops_system_info` reports a `compatibility` block. HA ships monthly, so "newest verified" goes stale by design: outside the window means **untested**, not broken.
+
+If a tool misbehaves after an HA update, open the **Health** tab (or call `haops_tools_check`) — each failing group names the tools it affects. Details and the full HA API surface this addon depends on: [docs/HA_COMPATIBILITY.md](https://github.com/dude84/ha-ops-mcp/blob/main/docs/HA_COMPATIBILITY.md).
+
 ## Sidebar panel
 
 The addon adds an **HA Ops** panel to your HA sidebar (via ingress). Four tabs:
@@ -73,5 +85,6 @@ See [docs/TOOLS.md](https://github.com/dude84/ha-ops-mcp/blob/main/docs/TOOLS.md
 ## More information
 
 - [README](https://github.com/dude84/ha-ops-mcp) — overview, installation, examples
+- [HA_COMPATIBILITY](https://github.com/dude84/ha-ops-mcp/blob/main/docs/HA_COMPATIBILITY.md) — supported HA versions and the HA API surface this addon depends on
 - [CHANGELOG](https://github.com/dude84/ha-ops-mcp/blob/main/CHANGELOG.md) — release history
 - [Issues](https://github.com/dude84/ha-ops-mcp/issues) — bug reports and feature requests

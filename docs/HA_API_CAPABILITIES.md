@@ -16,7 +16,9 @@ Each tool depends on one or more backend **capabilities**. If a capability isn't
 - **Any** — both Supervisor token and long-lived access token work
 - **Sup only** — requires the auto-injected `SUPERVISOR_TOKEN` (addon context). Long-lived user tokens are rejected by the Supervisor API.
 
-The addon auto-detects token type and routes requests accordingly — Supervisor token routes through `http://supervisor/core`, long-lived tokens route directly to `http://homeassistant:8123`. No manual URL configuration needed.
+The addon auto-detects token type and routes requests accordingly — Supervisor token routes through `http://supervisor/core`, long-lived tokens route directly to HA Core. No manual URL configuration needed: on the long-lived-token path the addon probes port **8123** then **80** and uses whichever answers (HA 2026.8+ defaults *new* HA OS installs to port 80; existing installs keep 8123).
+
+The HA-version window these capabilities were verified against — and the full inventory of WebSocket commands, REST/Supervisor endpoints, `.storage` files and recorder tables behind them — is in [HA_COMPATIBILITY.md](HA_COMPATIBILITY.md).
 
 ## Per-tool matrix
 
