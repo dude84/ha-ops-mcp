@@ -43,6 +43,8 @@ See [INSTALL.md](https://github.com/dude84/ha-ops-mcp/blob/main/docs/INSTALL.md)
 
 **Quick start (addon):** add `https://github.com/dude84/ha-ops-mcp` as a repository in **Settings > Apps > App Store**, install, start. Default config works — Supervisor token and DB auto-detection, no manual setup needed.
 
+> **Use v0.55.1 or later.** Every earlier release fails to start on a fresh build with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` — the MCP SDK published 2.0.0 on 2026-07-28 and removed that module, and dependencies were previously uncapped. Rolling back to an older tag does not help; v0.55.1 caps every dependency below its next major.
+
 ### Connecting an MCP client
 
 The addon exposes a streamable-HTTP endpoint on port 8901 (default). To connect Claude Code:

@@ -9,6 +9,8 @@ Migrating to the MCP SDK 2.x API is deliberately **not** part of this fix — it
 
 ## 0.55.0
 
+> **⚠️ Broken on a fresh build — use 0.55.1 or later.** This and every earlier release fail to start with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` when the addon image is rebuilt after 2026-07-28, the day the MCP SDK published 2.0.0. Rolling back does not help — an older tag rebuilds against the same broken dependency resolution. See 0.55.1 above.
+
 **The HA version this server works against is now recorded, checked, and reported.** Nothing in the tree said which Home Assistant release ha-ops-mcp was built or verified against, so "it broke after an HA update" had no baseline to diff against and the supported-window warning CLAUDE.md has always specified was never implemented.
 
 - **New `src/ha_ops_mcp/compat.py`** — declares the built-against HA version (**2026.7.4**), the recorder DB schema seen there (**53**), and the supported window (**2026.5 – 2026.7**). One module, no enforcement: an out-of-window HA logs a warning and the server carries on. A newer HA is reported as *untested*, explicitly **not** as broken — HA ships monthly and any release will outlive its window within weeks.
