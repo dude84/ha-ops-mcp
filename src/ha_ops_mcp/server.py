@@ -14,6 +14,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from ha_ops_mcp.compat import BUILT_AGAINST_HA, check_ha_version
 from ha_ops_mcp.config import HaOpsConfig, load_config
 from ha_ops_mcp.connections.database import DatabaseBackend, create_backend
 from ha_ops_mcp.connections.rest import RestClient
@@ -271,6 +272,46 @@ def _migrate_legacy_oauth(
         )
 
 
+async def _detect_ha_version(ctx: HaOpsContext) -> None:
+    """Record the live HA version on the context and warn if out of window.
+
+    Best-effort and non-fatal: HA may not be up yet when the addon starts, and
+    a version we can't read is not a reason to refuse service. Prefers the
+    `.HA_VERSION` file (Tier 1, always present when /config is mapped) and
+    falls back to `GET /api/config`.
+    """
+    version: str | None = None
+
+    version_file = Path(ctx.config.filesystem.config_root) / ".HA_VERSION"
+    try:
+        if version_file.is_file():
+            version = version_file.read_text().strip() or None
+    except OSError:
+        version = None
+
+    if not version:
+        try:
+            config = await ctx.rest.get("/api/config")
+            version = config.get("version")
+        except Exception as e:  # noqa: BLE001 — startup must never hard-fail
+            logger.warning(
+                "Could not determine Home Assistant version at startup: %s. "
+                "This build is verified against HA %s.",
+                e,
+                BUILT_AGAINST_HA,
+            )
+            return
+
+    ctx.ha_version = version
+    warning = check_ha_version(version)
+    if warning:
+        logger.warning("%s", warning)
+    else:
+        logger.info(
+            "Home Assistant %s (verified against %s)", version, BUILT_AGAINST_HA
+        )
+
+
 def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContext]:
     """Create the MCP server and context.
 
@@ -294,6 +335,7 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
                 "WebSocket connection failed at startup: %s — will retry on first use",
                 e,
             )
+        await _detect_ha_version(ctx)
         try:
             yield
         finally:

@@ -15,6 +15,42 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.55.0` — verified 2026-08-02 (Singapore HA)
+
+| Component | Version | How to check |
+|---|---|---|
+| ha-ops-mcp (addon) | **0.55.0** (tag `v0.55.0`) | `haops_self_check` → `ha_ops_version` |
+| Home Assistant Core | **2026.7.4** | `haops_self_check` → `rest_api.ha_version` |
+| HA Supervisor | **2026.07.5** | `haops_tools_check` → `supervisor.tests.supervisor_info` |
+| HA OS | **18.2** (amd64) | `haops_tools_check` → `supervisor.tests.supervisor_info` |
+| HA DB backend | **MariaDB 11.4.10-MariaDB**, schema **53** | `haops_system_info` → `database` |
+| Claude Code CLI | **2.1.220** | `claude --version` |
+| Terminal host | **iTerm2 3.6.11** | iTerm → About / `$TERM_PROGRAM_VERSION` |
+| macOS | **26.5.2** (build 25F84, Darwin 25.5.0) | `sw_vers` |
+| Bun (CC runtime) | **1.3.14** | `bun --version` |
+| Node (local) | **v26.5.0** | `node --version` |
+| Addon base image | **Debian trixie** + Playwright chromium-headless-shell (~1.5 GB) — unchanged since v0.53.3 | `haops_exec_shell "chromium --version"` |
+| MCP transport | streamable-http, OAuth on | `claude mcp list` |
+| MCP URL | `http://homeassistant.local:8901/mcp` | must stay mDNS — OAuth resource is pinned to this host |
+| HA host LAN IP | `10.0.0.150` (stable) | `dscacheutil -q host -a name homeassistant.local` |
+
+**Notes for this baseline:**
+- **First baseline taken on HA 2026.7.x.** `haops_tools_check` → `all_pass`, **13/13 groups, 0 broken
+  tools**. HA Core jumped **2026.6.3 → 2026.7.4** since the v0.54.0 row; nothing in 2026.7's breaking
+  changes touches our API surface (all integration-level, plus automation trigger-key renames).
+- **v0.55.0 adds `src/ha_ops_mcp/compat.py`** — the HA compatibility window is now declared in code,
+  logged at startup when the live instance falls outside it, and reported by `haops_system_info` and
+  `haops_tools_check`. The prose version with the full API-surface inventory is `docs/HA_COMPATIBILITY.md`;
+  **that file is the one to read after an HA update**, this one is for client/connectivity drift.
+- **ZHA WebSocket commands verified live** on 2026.7.4: `zha/devices/reconfigure` and
+  `zha/topology/update` both still exist (the `zha/*/remove` commands do not — see HA_COMPATIBILITY.md).
+  `haops_tools_check`'s zigbee group now probes the reconfigure command every run, so a future removal
+  fails a check instead of silently breaking a tool.
+- **Client drift since v0.54.0:** Claude Code **2.1.177 → 2.1.220**, node **v26.0.0 → v26.5.0**,
+  macOS **26.5.1 → 26.5.2** (build 25F80 → 25F84). Connection stayed healthy across all of it.
+- **Forward-looking:** HA **2026.8 lands 2026-08-05** with a device-registry change (one device entry
+  per integration) that will change device counts. Re-verify after updating; don't take it on day one.
+
 ### `v0.54.0` — verified 2026-06-13 (Singapore HA)
 
 | Component | Version | How to check |

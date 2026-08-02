@@ -38,8 +38,29 @@ if bashio::var.is_empty "${ha_token}"; then
     ws_url="http://supervisor/core"
     bashio::log.info "Using Supervisor token (auto-provisioned)"
 else
-    ha_url="http://homeassistant:8123"
-    ws_url="http://homeassistant:8123"
+    # HA Core's port is NOT fixed. It has always been configurable via
+    # http.server_port, and since HA 2026.8 *new* HA OS installs default to
+    # port 80 instead of 8123 (existing installs keep whatever they had).
+    # Probe rather than assume: try 8123 first (every pre-2026.8 install and
+    # every upgraded one), fall back to 80. Connection success is enough —
+    # HA answers on / without a token, so we don't need auth to detect the port.
+    ha_port=""
+    for candidate in 8123 80; do
+        if curl -s -o /dev/null -m 3 "http://homeassistant:${candidate}/" 2>/dev/null; then
+            ha_port="${candidate}"
+            break
+        fi
+    done
+    if bashio::var.is_empty "${ha_port}"; then
+        ha_port="8123"
+        bashio::log.warning \
+            "Could not reach HA Core on port 8123 or 80 — defaulting to 8123. \
+If your instance uses a custom http.server_port, set it in the addon options."
+    else
+        bashio::log.info "Detected HA Core on port ${ha_port}"
+    fi
+    ha_url="http://homeassistant:${ha_port}"
+    ws_url="http://homeassistant:${ha_port}"
     bashio::log.info "Using custom token (long-lived access token)"
 fi
 

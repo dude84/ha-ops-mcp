@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ha_ops_mcp.compat import compat_info
 from ha_ops_mcp.server import registry
 
 if TYPE_CHECKING:
@@ -396,6 +397,57 @@ async def _check_supervisor(ctx: HaOpsContext) -> dict[str, Any]:
     }
 
 
+#: IEEE that cannot belong to a real device. Sent to `zha/devices/reconfigure`
+#: purely to make ZHA answer — a live command rejects it with "Device not
+#: found" *before* touching any hardware, while a command that HA has dropped
+#: answers "Unknown command". Nothing is reconfigured either way.
+_NULL_IEEE = "00:00:00:00:00:00:00:00"
+
+
+async def _probe_zha_ws(ctx: HaOpsContext) -> dict[str, Any]:
+    """Probe that the `zha/*` WebSocket commands our tools call still exist.
+
+    The zigpy DB read below proves ZHA is installed; it says nothing about the
+    WS surface. HA has quietly deleted `zha/*` commands before — `zha/devices/
+    remove` and `zha/device/remove` both answer "Unknown command" as of 2026.7
+    — and `haops_zha_reconfigure_device` / `haops_zigbee_scan` would have gone
+    silently broken. This probe makes that visible.
+
+    Only `zha/devices/reconfigure` is probed. It is the cheapest live signal:
+    a bogus IEEE fails fast and harmlessly. `zha/topology/update` is
+    deliberately NOT probed — it kicks off a full mesh walk that takes 30-60s
+    and floods the network, which is not something a health check should do.
+    """
+    from ha_ops_mcp.connections.websocket import WebSocketError
+
+    try:
+        await ctx.ws.send_command("zha/devices/reconfigure", ieee=_NULL_IEEE)
+    except WebSocketError as e:
+        msg = str(e)
+        if "unknown command" in msg.lower():
+            return {
+                "ok": False,
+                "command": "zha/devices/reconfigure",
+                "error": "Command no longer exists on this HA/ZHA version.",
+                "impact": "haops_zha_reconfigure_device is broken. "
+                "haops_zigbee_scan (zha/topology/update) is likely broken too.",
+            }
+        # Any other error means ZHA parsed the command and rejected the
+        # payload — which is exactly what we wanted to prove.
+        return {"ok": True, "command": "zha/devices/reconfigure", "probe": "rejected_bogus_ieee"}
+    except Exception as e:
+        return {"ok": False, "command": "zha/devices/reconfigure", "error": str(e)[:200]}
+
+    # A bogus IEEE should never succeed. If it does, ZHA changed semantics.
+    return {
+        "ok": True,
+        "command": "zha/devices/reconfigure",
+        "probe": "accepted_bogus_ieee",
+        "note": "Command exists but did not reject an all-zero IEEE — "
+        "ZHA validation may have changed.",
+    }
+
+
 async def _check_zigbee(ctx: HaOpsContext) -> dict[str, Any]:
     """Check the zigpy DB is present + readable (powers haops_zigbee_info)."""
     from ha_ops_mcp.tools.zigbee import _read_zigbee_db, _zigbee_db_path
@@ -422,6 +474,8 @@ async def _check_zigbee(ctx: HaOpsContext) -> dict[str, Any]:
         }
     except Exception as e:
         checks["zigbee_db_read"] = {"ok": False, "error": str(e)[:200]}
+
+    checks["zha_ws_commands"] = await _probe_zha_ws(ctx)
 
     all_ok = all(c.get("ok") for c in checks.values())
     return {
@@ -733,6 +787,11 @@ async def haops_tools_check(ctx: HaOpsContext) -> dict[str, Any]:
         if group.get("status") in ("fail", "partial"):
             broken_tools.extend(group.get("tools_affected", []))
 
+    # Compatibility window — added after the status tally so it can't be
+    # mistaken for a check group by the loops above.
+    live_ha = results.get("rest_api", {}).get("tests", {}).get(
+        "api_config", {}
+    ).get("ha_version")
     results["summary"] = {
         "overall": overall,
         "groups_passing": pass_count,
@@ -740,6 +799,7 @@ async def haops_tools_check(ctx: HaOpsContext) -> dict[str, Any]:
         "groups_partial": partial_count,
         "groups_skipped": skip_count,
         "broken_tools": broken_tools,
+        "compatibility": compat_info(live_ha),
     }
 
     return results

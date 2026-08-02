@@ -7,6 +7,10 @@ An MCP (Model Context Protocol) server that provides operations tools for Home A
 **Read these documents before writing any code:**
 1. This file — architecture, patterns, and implementation rules
 2. `docs/HA_QUIRKS.md` — field-tested HA quirks and operational patterns
+3. `docs/HA_COMPATIBILITY.md` — which HA versions we're built/verified against, and the exact HA
+   API surface we depend on. **Read this after every HA update** — it's the list to diff HA's
+   breaking changes against. The machine-readable half is `src/ha_ops_mcp/compat.py`; bumping one
+   without the other is a bug (there's a test for it).
 
 ## Key architectural decisions
 

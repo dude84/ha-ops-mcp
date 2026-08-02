@@ -16,6 +16,10 @@ from ruamel.yaml import YAML
 
 @dataclass
 class HaConfig:
+    # 8123 is the historical HA Core default and what every existing install
+    # still uses. HA 2026.8+ *new* HA OS installs default to port 80, so a
+    # fresh instance may need this overridden. The addon does not rely on this
+    # default — run.sh probes 8123 then 80 and exports HA_OPS_URL.
     url: str = "http://homeassistant.local:8123"
     ws_url: str = ""  # WebSocket URL override (defaults to url if empty)
     token: str = ""

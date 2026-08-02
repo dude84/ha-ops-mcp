@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ha_ops_mcp.compat import compat_info
 from ha_ops_mcp.connections.rest import RestClientError
 from ha_ops_mcp.server import registry
 from ha_ops_mcp.utils.logs import fetch_log_text
@@ -53,7 +54,10 @@ async def _get_ha_version(ctx: HaOpsContext) -> str | None:
     description=(
         "System overview for the Home Assistant instance. "
         "Returns: HA version, database backend and schema version, "
-        "entity/automation/integration counts, and config directory path. "
+        "entity/automation/integration counts, and config directory path, plus "
+        "a 'compatibility' block naming the HA version this ha-ops-mcp build "
+        "was verified against and whether the live instance is inside that "
+        "window (check it first when a tool behaves oddly after an HA update). "
         "Read-only, no parameters. Good starting point for understanding the instance."
     ),
 )
@@ -63,6 +67,7 @@ async def haops_system_info(ctx: HaOpsContext) -> dict[str, Any]:
     info: dict[str, Any] = {
         "ha_version": ha_version,
         "config_root": ctx.config.filesystem.config_root,
+        "compatibility": compat_info(ha_version),
     }
 
     # DB info
