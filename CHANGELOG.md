@@ -1,3 +1,12 @@
+## 0.55.1
+
+**Fixed: the addon failed to start after any rebuild, with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'`.** The MCP SDK released **2.0.0**, which removes `mcp.server.fastmcp` entirely — `FastMCP` is renamed to `McpServer` under `mcp.server.mcpserver`. Every dependency was declared as an unbounded `>=`, and the addon image is built **on the HA host** at install/update time with no lockfile and no pre-built wheel, so the next rebuild resolved `mcp` to 2.0.0 and died on import before reaching any of our code. Nothing in ha-ops-mcp changed to cause this; the ground moved.
+
+- **Every runtime dependency now has an upper bound** — capped below the next major for 1.0+ packages, below the next minor for 0.x packages (where 0.x projects put their breaking changes). `mcp` resolves to 1.29.0, the last 1.x, which still ships `FastMCP`. This is the actual fix: an on-host-built addon with unbounded dependencies is a time bomb, and this was it going off.
+- **Import failure now explains itself.** A dependency `ImportError` at startup exits with a message naming the cause and what to do about it, instead of a bare traceback that reads like the addon is broken.
+
+Migrating to the MCP SDK 2.x API is deliberately **not** part of this fix — it's a rename across the whole server surface and needs its own release.
+
 ## 0.55.0
 
 **The HA version this server works against is now recorded, checked, and reported.** Nothing in the tree said which Home Assistant release ha-ops-mcp was built or verified against, so "it broke after an HA update" had no baseline to diff against and the supported-window warning CLAUDE.md has always specified was never implemented.

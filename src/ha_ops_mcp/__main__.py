@@ -21,7 +21,26 @@ def main() -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
-    from ha_ops_mcp.server import create_server
+    try:
+        from ha_ops_mcp.server import create_server
+    except ImportError as e:
+        # The addon image is built on the HA host with no lockfile, so a
+        # dependency's new major can land in a rebuild and break the import
+        # with no change on our side. A bare traceback here reads like "the
+        # addon is broken"; name the actual cause instead. (v0.55.1: mcp 2.0.0
+        # removed mcp.server.fastmcp.)
+        raise SystemExit(
+            f"ha-ops-mcp failed to import a dependency: {e}\n\n"
+            "This usually means an incompatible dependency version was pulled "
+            "in when the addon image was built. pyproject.toml caps every "
+            "dependency below its next major for exactly this reason — if you "
+            "installed from source or with --upgrade, reinstall so the "
+            "constraints are honoured:\n\n"
+            "    pip install --force-reinstall ha-ops-mcp\n\n"
+            "If you are on the addon, rebuild it. If this persists, please "
+            "report it at https://github.com/dude84/ha-ops-mcp/issues with "
+            "the output of `pip list`."
+        ) from e
 
     mcp, ctx = create_server(args.config)
 
