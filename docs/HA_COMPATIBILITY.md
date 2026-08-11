@@ -16,12 +16,12 @@ server logs a warning at startup when the live instance falls outside the window
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.7.4** |
+| **Built against** | HA Core **2026.8.1** |
 | **Recorder DB schema** | **53** (unchanged since 2026.5) |
-| **Oldest supported** | **2026.5** |
-| **Newest verified** | **2026.7** |
+| **Oldest supported** | **2026.6** |
+| **Newest verified** | **2026.8** |
 | Verified how | `haops_tools_check` → `all_pass`, 13/13 groups, 0 broken tools |
-| Verified on | Singapore HA, 2026-08-02, addon v0.55.0 |
+| Verified on | Poland HA, 2026-08-11, addon v0.56.0 |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.56.0 | 2026.8.1 | 53 | 13/13 pass | 2026-08-11 |
 | 0.55.0 | 2026.7.4 | 53 | 13/13 pass | 2026-08-02 |
 | 0.54.0 | 2026.6.3 | 53 | all backends ok | 2026-06-13 |
 | 0.53.3 | 2026.6.1 | 53 | all backends ok | 2026-06-07 |

@@ -43,9 +43,9 @@ def test_built_against_is_inside_its_own_window() -> None:
 
 
 def test_in_window_versions_produce_no_warning() -> None:
-    assert check_ha_version("2026.5.0") is None
-    assert check_ha_version("2026.6.3") is None
-    assert check_ha_version("2026.7.4") is None
+    assert check_ha_version("2026.6.0") is None
+    assert check_ha_version("2026.7.3") is None
+    assert check_ha_version("2026.8.1") is None
 
 
 def test_too_old_warns() -> None:
@@ -56,7 +56,7 @@ def test_too_old_warns() -> None:
 
 
 def test_too_new_warns_without_claiming_breakage() -> None:
-    warning = check_ha_version("2026.8.0")
+    warning = check_ha_version("2026.9.0")
     assert warning is not None
     assert "newer" in warning
     # A newer HA is untested, NOT known-broken — the message must not scare.
@@ -83,8 +83,8 @@ def test_compat_info_without_live_version() -> None:
 
 
 def test_compat_info_with_in_window_version() -> None:
-    info = compat_info("2026.7.4")
-    assert info["live_ha"] == "2026.7.4"
+    info = compat_info("2026.8.1")
+    assert info["live_ha"] == "2026.8.1"
     assert info["in_window"] is True
     assert "warning" not in info
 

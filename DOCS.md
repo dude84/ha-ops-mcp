@@ -8,8 +8,8 @@ Built for the maintenance and observability work that comes during and after set
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.7.4** |
-| **Supported window** | **2026.5 – 2026.7** |
+| **Built against** | HA Core **2026.8.1** |
+| **Supported window** | **2026.6 – 2026.8** |
 | **Recorder DB schema** | **53** |
 
 Each release is verified against a live instance with `haops_tools_check` (13 read-only groups covering every backend). On a newer HA than the window, the addon still starts — it logs a warning and `haops_system_info` reports a `compatibility` block. HA ships monthly, so "newest verified" goes stale by design: outside the window means **untested**, not broken.

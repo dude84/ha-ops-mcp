@@ -15,6 +15,29 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.56.0` — verified 2026-08-11 (**Poland HA** — first baseline on HA 2026.8)
+
+| Component | Version | How to check |
+|---|---|---|
+| ha-ops-mcp (addon) | **0.56.0** (tag `v0.56.0`) | `haops_self_check` → `ha_ops_version` |
+| Home Assistant Core | **2026.8.1** | `haops_self_check` → `rest_api.ha_version` |
+| Supervisor / HAOS | **2026.07.5** / **18.2** | `haops_tools_check` → `supervisor` |
+| HA DB backend | **MariaDB 11.4.10-MariaDB**, schema **53** | `haops_system_info` → `database` |
+| Claude Code CLI | **2.1.226** | `claude --version` |
+| Terminal host | **iTerm2 3.6.11** | iTerm → About / `$TERM_PROGRAM_VERSION` |
+| macOS | **26.5.2** (Darwin 25.5.0) | `sw_vers` |
+| Bun (CC runtime) | **1.3.14** | `bun --version` |
+| Node (local) | **v26.5.0** | `node --version` |
+| MCP server name | `ha-ops-pl` (Singapore instance is `ha-ops`) | `claude mcp list` |
+
+Notes:
+- **HA Core jumped 2026.7.4 → 2026.8.1** since the v0.55.1 row. `haops_tools_check` → `all_pass`,
+  **13/13 groups, 0 broken tools**, so the compatibility window was bumped to **2026.6 – 2026.8**
+  (`compat.py` + README + DOCS + HA_COMPATIBILITY together).
+- Recorder schema **still 53** — unchanged across four HA releases now.
+- New in this build: `haops_entity_rename` (bulk two-phase renames). Exercised immediately on the
+  PL plug fleet: 84 entities renamed in 4 calls, 0 errors.
+
 ### `v0.55.1` — verified 2026-08-02 (**Poland HA** — first PL baseline)
 
 | Component | Version | How to check |
