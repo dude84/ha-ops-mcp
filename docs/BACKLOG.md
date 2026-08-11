@@ -177,17 +177,56 @@ online, what did the last build produce, **will the firmware fit the target's
 free flash**. That last one is a live question for the 1 MB NOUS A5T
 (372 KB free under full Tasmota → must go minimal-first).
 
-Scope deliberately **excludes compiling**. Verified 2026-08-12: no `esphome` CLI
-in the addon image, and the ESPHome Device Builder addon is unreachable from our
-container — port 6052 unpublished (`network: {'6052/tcp': None}`), all container
-hostnames refuse connections, ingress returns **401** to a Bearer LLAT (ingress
-needs a frontend-minted session token), and there is no docker escape hatch
-(`docker_api: False`, `protected: True`, `privileged: []`, no `/var/run/docker.sock`).
-Bundling PlatformIO + the xtensa toolchain to duplicate an addon the user already
-runs is not worth hundreds of MB on an already-~1.5 GB image — see
-`reference_image_size_alpine_dead_end`.
+Compiling **in our own image** stays out of scope: bundling PlatformIO + the
+xtensa toolchain to duplicate an addon the user already runs is not worth hundreds
+of MB on an already-~1.5 GB image (see `reference_image_size_alpine_dead_end`).
+Verified 2026-08-12 that the builder addon is also unreachable over the network:
+no `esphome` CLI in our image, port 6052 unpublished (`network: {'6052/tcp': None}`),
+all container hostnames refuse connections, and ingress returns **401** to a Bearer
+LLAT (it wants a frontend-minted session token).
+
+**BUT** — once gap 5 lands, compiling becomes reachable by `docker exec` into the
+ESPHome container, i.e. borrow the toolchain instead of shipping it. Revisit this
+entry's scope after gap 5; `haops_esphome_build` may become viable.
 
 So: `haops_esphome_status` = enumerate node configs, map each to its HA
 device/entities and online state, and report the last build's artifacts + firmware
 size from `.esphome/build/<node>/.pioenvs/<node>/firmware.bin`. Pure filesystem +
 registry, no toolchain.
+
+### 5. Addon never got the Docker escalation path it was designed for — HIGH
+
+**Regression against intent, found 2026-08-12.** The design assumed
+`haops_exec_shell` could escalate to other containers via `docker exec` (e.g. to
+borrow the ESPHome toolchain, inspect the recorder, or debug another addon).
+It cannot, and not by policy — the capability is simply **absent from the
+manifest**. `config.yaml` declares `map`, `hassio_role: manager`,
+`host_network: false` and nothing else; Supervisor accordingly reports
+`docker_api: False`, `full_access: False`, `privileged: []`, and there is no
+`/var/run/docker.sock` in the container.
+
+To enable:
+
+1. Add `docker_api: true` to `config.yaml`.
+2. The user must then switch **Protection mode OFF** on the addon — Supervisor
+   strips `docker_api`/`full_access`/`privileged` while protection is on, so the
+   manifest change alone does nothing.
+3. No docker CLI needed in the image: the socket can be driven directly, e.g.
+   `curl --unix-socket /var/run/docker.sock -X POST http://localhost/containers/<id>/exec`.
+   Adding the CLI is optional sugar.
+
+Verify before promising `exec`: HA's docs describe `docker_api` as *read-only*
+access, yet Portainer-class addons clearly start/stop/exec with it. Confirm which
+operations Supervisor actually permits before designing the tool — if exec is
+genuinely blocked, the fallback is `full_access: true`, which is a much bigger
+hammer.
+
+**State the security trade-off explicitly when proposing this to the user:**
+protection-off + docker_api means the addon can reach every container on the
+host. The addon is already effectively root-on-HA (`config:rw` + `exec_shell`), so
+this widens blast radius from "all of HA" to "all containers" — a real step, worth
+one deliberate decision rather than a silent manifest bump.
+
+Natural follow-on once granted: a first-class `haops_container_exec`
+(list containers, exec a command, stream output) so callers stop hand-rolling
+socket curls in `exec_shell`.
