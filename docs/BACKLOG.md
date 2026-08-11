@@ -115,3 +115,79 @@ Approved-but-parked. Related: [[project_ui_suite_program]].
 _(Native user-account-management — `haops_user_*` — **shipped v0.51.0**. The
 `ha-ops-user` bootstrap it enabled is now mechanically possible; revisit only if
 that account is ever pursued.)_
+
+---
+
+## Gaps found during the PL plug-fleet rename (2026-08-11/12)
+
+All four surfaced in one working session that renamed ~90 entities across 22
+plugs, so they're evidenced, not speculative. Ranked by how much damage they do
+when absent.
+
+### 1. `haops_entity_rename` cannot rewrite its own references — HIGH
+
+**Approved.** Renaming a registry entry leaves every dashboard card, automation,
+script and template pointing at the dead id. It bit twice in one session:
+
+- a Power-tab chart still on `sensor.…active_power_4`
+- three Climate-tab device-temperature sensors on `…maeu01_device_temperature{,_2,_3}`
+
+Both were caught only *incidentally*, because `haops_dashboard_patch` validates
+entity refs as a side effect and printed `entity_warnings`. Nothing would have
+caught a stale ref in an automation.
+
+Shape: `rewrite_references: true` (default false). Preview lists the rename **and**
+every reference it would rewrite; apply does registry + `haops_batch_apply` over
+dashboards/YAML as one transaction, so a partial rename is impossible. The ref
+index (`haops_references` / `haops_refactor_check`) already knows the edges —
+this is wiring, not new analysis. Report anything it can't rewrite (e.g. a
+templated `states('sensor.x')` built by string concat) rather than silently
+skipping.
+
+### 2. `haops_registry_query` served stale cached data — HIGH (correctness bug)
+
+Returned two Tasmota IR ghost devices that the live registry had **already
+dropped**. Three removal attempts then failed with `Unknown device`, and a direct
+read of `.storage/core.device_registry` confirmed they were gone. The tool caused
+a false report of live devices.
+
+Fix: invalidate the cache on any registry write this process performs, and
+include cache age (or a `source: cache|fresh` field) in the response so a caller
+can tell. A read tool that can be confidently wrong is worse than a slow one.
+
+### 3. No `haops_device_remove` — MEDIUM
+
+Deleting a device is UI-only today. On this build:
+
+- `config_entries/device/remove` → `Unknown command`
+- `tasmota/device/remove` → `Unknown command`
+- `config/device_registry/remove_config_entry` → only unlinks an entry, and
+  returned `Unknown device` for an already-gone device
+
+Blocks a concrete workflow: the Tasmota→ESPHome strip swap needs the old Tasmota
+device deleted to free `switch.plug_office_strip_*` for the ESPHome node.
+Investigate the per-integration path (MQTT/Tasmota discovery removal vs
+`config/device_registry/update` + entry unlink) before designing the tool.
+
+### 4. No ESPHome awareness — MEDIUM
+
+`/config/esphome/*.yaml` is only reachable through the generic config tools. There
+is no first-class answer to: which node yaml maps to which HA device, is the node
+online, what did the last build produce, **will the firmware fit the target's
+free flash**. That last one is a live question for the 1 MB NOUS A5T
+(372 KB free under full Tasmota → must go minimal-first).
+
+Scope deliberately **excludes compiling**. Verified 2026-08-12: no `esphome` CLI
+in the addon image, and the ESPHome Device Builder addon is unreachable from our
+container — port 6052 unpublished (`network: {'6052/tcp': None}`), all container
+hostnames refuse connections, ingress returns **401** to a Bearer LLAT (ingress
+needs a frontend-minted session token), and there is no docker escape hatch
+(`docker_api: False`, `protected: True`, `privileged: []`, no `/var/run/docker.sock`).
+Bundling PlatformIO + the xtensa toolchain to duplicate an addon the user already
+runs is not worth hundreds of MB on an already-~1.5 GB image — see
+`reference_image_size_alpine_dead_end`.
+
+So: `haops_esphome_status` = enumerate node configs, map each to its HA
+device/entities and online state, and report the last build's artifacts + firmware
+size from `.esphome/build/<node>/.pioenvs/<node>/firmware.bin`. Pure filesystem +
+registry, no toolchain.
