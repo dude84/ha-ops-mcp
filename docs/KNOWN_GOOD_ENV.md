@@ -15,6 +15,31 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.55.1` — verified 2026-08-02 (**Poland HA** — first PL baseline)
+
+| Component | Version | How to check |
+|---|---|---|
+| ha-ops-mcp (addon) | **0.55.1** (tag `v0.55.1`) | `haops_self_check` → `ha_ops_version` |
+| Home Assistant Core | **2026.7.4** | `haops_self_check` → `rest_api.ha_version` |
+| HA DB backend | **MariaDB 11.4.10-MariaDB**, schema **53** | `haops_system_info` → `database` |
+| Claude Code CLI | **2.1.220** | `claude --version` |
+| Terminal host | **iTerm2 3.6.11** | iTerm → About / `$TERM_PROGRAM_VERSION` |
+| macOS | **26.5.2** (Darwin 25.5.0) | `sw_vers` |
+| Bun (CC runtime) | **1.3.14** | `bun --version` |
+| Node (local) | **v26.5.0** | `node --version` |
+| MCP server name | `ha-ops-pl` (Singapore instance is `ha-ops`) | `claude mcp list` |
+| MCP transport | streamable-http, OAuth on | `claude mcp list` |
+| PL HA host | HAOS 18.1 OVA in a KVM VM, 2 vCPU `kvm64`, 8 GB RAM | `haops_exec_shell` / Supervisor |
+
+**Notes for this baseline:**
+- **This is the Poland instance**, not Singapore — separate HA, separate addon install, separate
+  OAuth store. All other rows in this file are Singapore. Same client stack, so client drift is shared.
+- **v0.55.1 is the fix for the mcp 2.0 dependency break** — every release before it is marked broken
+  (see `962dd9a`). Verified here after the user updated the addon: `haops_self_check` → `overall: ok`,
+  all five backends (REST, WebSocket, MariaDB, filesystem, backup dir) green on the first call.
+- PL instance shape at verification: **875 entities**, 30 automations, `PL Home`, `Europe/Warsaw`.
+- Compatibility window satisfied: live 2026.7.4, window 2026.5 → 2026.7, `in_window: true`.
+
 ### `v0.55.0` — verified 2026-08-02 (Singapore HA)
 
 | Component | Version | How to check |

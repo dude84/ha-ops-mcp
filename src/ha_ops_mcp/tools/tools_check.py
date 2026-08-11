@@ -143,6 +143,7 @@ async def _check_websocket(ctx: HaOpsContext) -> dict[str, Any]:
             "haops_dashboard_resources",
             "haops_config_validate",
             "haops_entity_toggle", "haops_entity_remove",
+            "haops_entity_rename",
             "haops_ws_command", "haops_zha_reconfigure_device",
             "haops_zigbee_scan",
         ],

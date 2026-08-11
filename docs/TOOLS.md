@@ -45,6 +45,7 @@ All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 | `haops_entity_audit` | Read | Health report — unavailable, orphaned, stale, duplicate names, area:device ratio outliers. |
 | `haops_entity_remove` | Write | Two-phase entity removal with backup and rollback savepoints. |
 | `haops_entity_toggle` | Write | Two-phase bulk enable/disable (symmetric `disabled_by` flip) with rollback savepoints. |
+| `haops_entity_rename` | Write | Two-phase BULK rename — entity_id, name override, area — validated up front (existence, domain, collisions), rollback savepoints per item. |
 | `haops_monitor_entity` | Read | Poll one entity (or attribute) live for a fixed window; returns time series + stats (min/max/mean/stdev, change count). For averaging noisy reads / catching transients. |
 
 ## Registry tools

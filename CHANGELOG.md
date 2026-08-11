@@ -1,3 +1,14 @@
+## 0.56.0
+
+**New tool: `haops_entity_rename` — bulk entity renames in one two-phase call.** Born from a real session: migrating the PL plug fleet to a `plug_<role>` naming convention took ~60 registry renames at two `haops_ws_command` calls each, and an attempt to script the bulk change via `haops_exec_shell` was (correctly) blocked by the safety classifier. Renaming is a first-class, common operation and now has a first-class tool.
+
+- Each item: `{entity_id, new_entity_id?, name?, area_id?}` — any mix, many entities per call. `name`/`area_id` set to explicit `null` clear the override.
+- All-or-nothing validation before a token is issued: existence, entity_id format, same-domain rule, collision checks against the registry **and** against other targets in the same batch.
+- Per-item rollback savepoints; the returned `transaction_id` works with `haops_rollback` (new `rename` undo action restores the old id/name/area).
+- Tool description spells out the sharp edges: HA migrates long-term statistics automatically, short-term history stays under the old id, and automation/dashboard references are NOT rewritten — sweep with `haops_references`/dashboard `entity_warnings` afterwards.
+
+`haops_tools_check` and the audit classifier cover the new tool.
+
 ## 0.55.1
 
 **Fixed: the addon failed to start after any rebuild, with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'`.** The MCP SDK released **2.0.0**, which removes `mcp.server.fastmcp` entirely — `FastMCP` is renamed to `McpServer` under `mcp.server.mcpserver`. Every dependency was declared as an unbounded `>=`, and the addon image is built **on the HA host** at install/update time with no lockfile and no pre-built wheel, so the next rebuild resolved `mcp` to 2.0.0 and died on import before reaching any of our code. Nothing in ha-ops-mcp changed to cause this; the ground moved.

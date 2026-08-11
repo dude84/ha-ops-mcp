@@ -56,7 +56,7 @@ almost all HA breakage is integration-level and touches none of it.
 | `config/area_registry/list` | registry tools (fallback) |
 | `config/device_registry/list` | registry tools (fallback) |
 | `config/entity_registry/list` | registry tools (fallback) |
-| `config/entity_registry/update` | `haops_entity_toggle`, `haops_entity_customize` |
+| `config/entity_registry/update` | `haops_entity_toggle`, `haops_entity_customize`, `haops_entity_rename` |
 | `config/entity_registry/remove` | `haops_entity_remove` |
 | `config/floor_registry/list` | `haops_registry_query` (file is often absent) |
 | `config/auth/list`, `/create`, `/update`, `/delete` | `haops_user_*` |

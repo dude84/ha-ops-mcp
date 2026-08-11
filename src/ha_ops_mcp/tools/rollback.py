@@ -186,13 +186,30 @@ async def _execute_undo(
             return {"target": did, "restore_failed": str(e)}
 
     if undo.type == UndoType.ENTITY:
-        # entity enable/disable undo. data["action"] is the direction to
-        # apply on rollback: "enable" -> disabled_by=None, "disable" ->
-        # disabled_by="user". HA exposes this WS-only (REST endpoint removed).
+        # entity registry undo. data["action"]:
+        # - "enable"/"disable": direction to apply on rollback.
+        # - "rename": data["revert"] holds the config/entity_registry/update
+        #   payload fields (new_entity_id/name/area_id) restoring the old
+        #   identity; data["entity_id"] is the CURRENT (post-rename) id.
+        # HA exposes all of this WS-only (REST endpoint removed).
         from ha_ops_mcp.connections.websocket import WebSocketError
 
         eid = undo.data["entity_id"]
         action = undo.data.get("action", "enable")
+        if action == "rename":
+            try:
+                await ctx.ws.send_command(
+                    "config/entity_registry/update",
+                    entity_id=eid,
+                    **undo.data.get("revert", {}),
+                )
+                return {
+                    "target": eid,
+                    "action": "rename",
+                    "restored": "entity identity restored",
+                }
+            except WebSocketError as e:
+                return {"target": eid, "restore_failed": str(e)}
         new_disabled_by = None if action == "enable" else "user"
         try:
             await ctx.ws.send_command(

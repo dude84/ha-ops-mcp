@@ -253,3 +253,115 @@ async def test_entity_remove_uses_websocket_not_rest(ctx, mock_ws, mock_rest):
     assert ws_calls
     assert ws_calls[0].kwargs.get("entity_id") == "sensor.temperature"
     assert mock_rest.delete.await_count == 0
+
+
+# ── haops_entity_rename ──────────────────────────────────────────────────────
+
+from ha_ops_mcp.tools.entity import haops_entity_rename  # noqa: E402
+
+
+@pytest.mark.asyncio
+async def test_entity_rename_preview(ctx):
+    result = await haops_entity_rename(
+        ctx,
+        renames=[{"entity_id": "sensor.temperature",
+                  "new_entity_id": "sensor.plug_office_power",
+                  "name": "Office Plug Power", "area_id": "office"}],
+    )
+    assert "token" in result
+    assert result["count"] == 1
+    item = result["preview"][0]
+    assert item["new_entity_id"] == "sensor.plug_office_power"
+    assert item["name"] == "Office Plug Power"
+    assert item["area_id"] == "office"
+    assert "_old" not in item
+
+
+@pytest.mark.asyncio
+async def test_entity_rename_confirm_calls_ws(ctx):
+    preview = await haops_entity_rename(
+        ctx,
+        renames=[{"entity_id": "sensor.temperature",
+                  "new_entity_id": "sensor.plug_office_power"}],
+    )
+    result = await haops_entity_rename(
+        ctx, renames=[], confirm=True, token=preview["token"]
+    )
+    assert result["success"] is True
+    assert result["renamed"][0]["new_entity_id"] == "sensor.plug_office_power"
+    assert "transaction_id" in result
+    ctx.ws.send_command.assert_called_with(
+        "config/entity_registry/update",
+        entity_id="sensor.temperature",
+        new_entity_id="sensor.plug_office_power",
+    )
+
+
+@pytest.mark.asyncio
+async def test_entity_rename_null_name_clears_override(ctx):
+    preview = await haops_entity_rename(
+        ctx, renames=[{"entity_id": "sensor.temperature", "name": None}]
+    )
+    result = await haops_entity_rename(
+        ctx, renames=[], confirm=True, token=preview["token"]
+    )
+    assert result["success"] is True
+    ctx.ws.send_command.assert_called_with(
+        "config/entity_registry/update",
+        entity_id="sensor.temperature",
+        name=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_entity_rename_validation_aborts_whole_batch(ctx):
+    result = await haops_entity_rename(
+        ctx,
+        renames=[
+            {"entity_id": "sensor.temperature",
+             "new_entity_id": "sensor.ok_target"},
+            {"entity_id": "sensor.nope", "new_entity_id": "sensor.x"},
+        ],
+    )
+    assert "error" in result
+    assert "token" not in result
+    assert any("sensor.nope" in p for p in result["problems"])
+
+
+@pytest.mark.asyncio
+async def test_entity_rename_rejects_domain_change_and_collisions(ctx):
+    result = await haops_entity_rename(
+        ctx,
+        renames=[
+            {"entity_id": "sensor.temperature",
+             "new_entity_id": "switch.temperature"},
+            {"entity_id": "light.living_room",
+             "new_entity_id": "light.living_room"},  # self-target: allowed
+        ],
+    )
+    assert "error" in result
+    assert any("domain change" in p for p in result["problems"])
+
+
+@pytest.mark.asyncio
+async def test_entity_rename_duplicate_targets_rejected(ctx):
+    result = await haops_entity_rename(
+        ctx,
+        renames=[
+            {"entity_id": "sensor.temperature",
+             "new_entity_id": "sensor.same_target"},
+            {"entity_id": "sensor.orphan",
+             "new_entity_id": "sensor.same_target"},
+        ],
+    )
+    assert "error" in result
+    assert any("already exists" in p for p in result["problems"])
+
+
+@pytest.mark.asyncio
+async def test_entity_rename_no_change_item_rejected(ctx):
+    result = await haops_entity_rename(
+        ctx, renames=[{"entity_id": "sensor.temperature"}]
+    )
+    assert "error" in result
+    assert any("no changes requested" in p for p in result["problems"])

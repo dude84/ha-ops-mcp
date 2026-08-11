@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -963,6 +964,206 @@ async def haops_entity_toggle(
         "success": not errors,
         result_key: changed,
         "errors": errors,
+        "transaction_id": txn.id,
+    }
+
+
+_ENTITY_ID_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+
+
+@registry.tool(
+    name="haops_entity_rename",
+    description=(
+        "Bulk rename entities in the HA entity registry — entity_id, friendly "
+        "name override, and/or area, many entities in ONE two-phase call. "
+        "Use this instead of N × haops_ws_command config/entity_registry/update "
+        "when renaming a device's entity family or migrating to a naming "
+        "convention. "
+        "Two-phase: 1) call without confirm to preview every change (existence, "
+        "domain match, and collision checks run here). 2) call with "
+        "confirm=true and the token to execute. Fully validated up front: any "
+        "invalid item aborts the preview so a half-renamed batch can't happen "
+        "at the validation layer (per-item WS errors during apply are "
+        "reported, and each applied item gets a rollback savepoint). "
+        "Parameters: renames (list of objects, required) — each item: "
+        "{entity_id (required), new_entity_id?, name?, area_id?}. At least one "
+        "change key per item. new_entity_id must keep the same domain. "
+        "name/area_id explicitly set to null CLEAR the override (fall back to "
+        "the device/original name, no area). Omitted keys are left untouched. "
+        "confirm (bool, default false), token (string, if confirming). "
+        "NOTE: HA migrates long-term statistics to the new id automatically; "
+        "short-term states history stays under the old id. Renaming an entity "
+        "referenced by automations/dashboards does NOT update those references "
+        "— sweep with haops_references / dashboard entity_warnings after. "
+        "Returns (apply): {success, renamed: [..], errors: [..], "
+        "transaction_id} — transaction_id works with haops_rollback."
+    ),
+    params={
+        "renames": {
+            "type": "array",
+            "description": (
+                "Items: {entity_id, new_entity_id?, name?, area_id?}. "
+                "name/area_id: null clears the override."
+            ),
+        },
+        "confirm": {
+            "type": "boolean", "description": "Execute the change",
+            "default": False,
+        },
+        "token": {
+            "type": "string",
+            "description": "Confirmation token from preview step",
+        },
+    },
+)
+async def haops_entity_rename(
+    ctx: HaOpsContext,
+    renames: list[dict[str, Any]],
+    confirm: bool = False,
+    token: str | None = None,
+) -> dict[str, Any]:
+    if not confirm:
+        if not renames:
+            return {"error": "No renames provided"}
+
+        entities = await _get_entity_registry(ctx)
+        by_id = {e.get("entity_id"): e for e in entities}
+
+        items: list[dict[str, Any]] = []
+        errors: list[str] = []
+        claimed_targets: set[str] = set()
+
+        for i, item in enumerate(renames):
+            if not isinstance(item, dict) or "entity_id" not in item:
+                errors.append(f"item {i}: missing entity_id")
+                continue
+            eid = item["entity_id"]
+            entry = by_id.get(eid)
+            if entry is None:
+                errors.append(f"{eid}: not found in entity registry")
+                continue
+
+            change: dict[str, Any] = {"entity_id": eid}
+            new_id = item.get("new_entity_id")
+            if new_id is not None:
+                if not _ENTITY_ID_RE.match(new_id):
+                    errors.append(f"{eid}: invalid new_entity_id '{new_id}'")
+                    continue
+                if new_id.split(".", 1)[0] != eid.split(".", 1)[0]:
+                    errors.append(
+                        f"{eid}: domain change to '{new_id}' not allowed"
+                    )
+                    continue
+                if new_id != eid and (
+                    new_id in by_id or new_id in claimed_targets
+                ):
+                    errors.append(f"{eid}: target '{new_id}' already exists")
+                    continue
+                claimed_targets.add(new_id)
+                change["new_entity_id"] = new_id
+            # Presence-sensitive: an explicit null clears the override.
+            if "name" in item:
+                change["name"] = item["name"]
+            if "area_id" in item:
+                change["area_id"] = item["area_id"]
+
+            if len(change) == 1:
+                errors.append(f"{eid}: no changes requested")
+                continue
+            change["_old"] = {
+                "name": entry.get("name"),
+                "area_id": entry.get("area_id"),
+            }
+            items.append(change)
+
+        if errors:
+            return {
+                "error": "Validation failed — nothing renamed",
+                "problems": errors,
+                "valid_items": len(items),
+            }
+
+        tk = ctx.safety.create_token(
+            action="entity_rename", details={"items": items}
+        )
+        preview = [
+            {k: v for k, v in it.items() if k != "_old"} for it in items
+        ]
+        return {
+            "preview": preview,
+            "count": len(preview),
+            "token": tk.id,
+            "message": "Review the renames above. Call again with "
+            "confirm=true and this token to apply.",
+        }
+
+    # Phase 2: execute
+    if token is None:
+        return {"error": "confirm=true requires a token"}
+    try:
+        token_data = ctx.safety.validate_token(token)
+    except Exception as e:
+        return {"error": str(e)}
+
+    from ha_ops_mcp.connections.websocket import WebSocketError
+
+    items = token_data.details.get("items", [])
+    txn = ctx.rollback.begin("entity_rename")
+
+    renamed: list[dict[str, Any]] = []
+    errors_out: list[dict[str, str]] = []
+    for it in items:
+        eid = it["entity_id"]
+        old = it.get("_old", {})
+        payload: dict[str, Any] = {"entity_id": eid}
+        revert: dict[str, Any] = {}
+        if "new_entity_id" in it:
+            payload["new_entity_id"] = it["new_entity_id"]
+            revert["new_entity_id"] = eid
+        if "name" in it:
+            payload["name"] = it["name"]
+            revert["name"] = old.get("name")
+        if "area_id" in it:
+            payload["area_id"] = it["area_id"]
+            revert["area_id"] = old.get("area_id")
+
+        final_id = it.get("new_entity_id", eid)
+        txn.savepoint(
+            name=f"rename:{eid}",
+            undo=UndoEntry(
+                type=UndoType.ENTITY,
+                description=f"Rename {final_id} back to {eid}",
+                data={
+                    "entity_id": final_id,
+                    "action": "rename",
+                    "revert": revert,
+                },
+            ),
+        )
+        try:
+            await ctx.ws.send_command(
+                "config/entity_registry/update", **payload
+            )
+            renamed.append(
+                {k: v for k, v in it.items() if k != "_old"}
+            )
+        except WebSocketError as e:
+            errors_out.append({"entity_id": eid, "error": str(e)})
+
+    ctx.safety.consume_token(token)
+    ctx.rollback.commit(txn.id)
+
+    await ctx.audit.log(
+        tool="entity_rename",
+        details={"renamed": renamed, "errors": errors_out},
+        success=not errors_out,
+        token_id=token,
+    )
+
+    return {
+        "success": not errors_out,
+        "renamed": renamed,
+        "errors": errors_out,
         "transaction_id": txn.id,
     }
 
