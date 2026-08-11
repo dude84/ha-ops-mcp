@@ -1,3 +1,7 @@
+## 0.56.1
+
+**Compatibility window moved to HA 2026.6 – 2026.8.** `haops_tools_check` returned `all_pass` (13/13 groups, 0 broken tools) against live **HA Core 2026.8.1**, so the window was bumped rather than left to warn on every startup. Recorder schema is **still 53** — unchanged across four HA releases. `compat.py`, the README/DOCS/HA_COMPATIBILITY tables, the verification history and a new `KNOWN_GOOD_ENV` baseline row all moved together.
+
 ## 0.56.0
 
 **New tool: `haops_entity_rename` — bulk entity renames in one two-phase call.** Born from a real session: migrating the PL plug fleet to a `plug_<role>` naming convention took ~60 registry renames at two `haops_ws_command` calls each, and an attempt to script the bulk change via `haops_exec_shell` was (correctly) blocked by the safety classifier. Renaming is a first-class, common operation and now has a first-class tool.
