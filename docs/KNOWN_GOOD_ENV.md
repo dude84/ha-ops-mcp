@@ -15,6 +15,19 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.58.0` — verified 2026-08-12 (**Poland HA**)
+
+Whole stack **identical to the `v0.57.0` row below** — HA 2026.8.1, Supervisor 2026.07.5, HAOS 18.2,
+Docker 29.6.2, MariaDB schema 53, Claude Code 2.1.226, iTerm2 3.6.11, macOS 26.5.2, Bun 1.3.14,
+Node v26.5.0. Only the add-on version moved. Deliberately kept as its own row rather than folded
+into the one below, because a row per shipped tag is what makes the history diffable.
+
+- `haops_self_check` → `overall: ok`, and it now includes
+  **`docker: ok — /run/docker.sock, 19 containers, 19 running`** (new in v0.57.1).
+- `haops_addon_update` exercised live on both a third-party add-on and our own slug; both correctly
+  reported `already_latest` with no rebuild fired. The self-refusal branch can't be exercised while
+  we're current — `already_latest` short-circuits ahead of it by design.
+
 ### `v0.57.0` — verified 2026-08-12 (**Poland HA** — first baseline with Docker socket access)
 
 | Component | Version | How to check |
