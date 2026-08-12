@@ -17,6 +17,7 @@ from mcp.server.fastmcp import FastMCP
 from ha_ops_mcp.compat import BUILT_AGAINST_HA, check_ha_version
 from ha_ops_mcp.config import HaOpsConfig, load_config
 from ha_ops_mcp.connections.database import DatabaseBackend, create_backend
+from ha_ops_mcp.connections.docker import DockerClient
 from ha_ops_mcp.connections.rest import RestClient
 from ha_ops_mcp.connections.websocket import WebSocketClient
 from ha_ops_mcp.safety.audit import AuditLog
@@ -88,6 +89,11 @@ class HaOpsContext:
     audit: AuditLog
     path_guard: PathGuard
     auth_provider: Any | None = None  # HaOpsOAuthProvider when auth enabled
+    # Docker Engine access to sibling containers. Always present as an object;
+    # whether it actually works depends on `docker_api: true` in the manifest
+    # AND Protection mode being OFF, so callers must check `.available()`
+    # rather than assuming a non-None client can do anything.
+    docker: DockerClient | None = None
     ha_version: str | None = None
     db_schema_version: int | None = None
     # Per-request cache for the reference index — set by tool/route
@@ -241,6 +247,7 @@ def create_context(config: HaOpsConfig) -> HaOpsContext:
         shell_output=shell_output,
         audit=audit,
         path_guard=path_guard,
+        docker=DockerClient(),
     )
 
 
@@ -429,6 +436,7 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
     import ha_ops_mcp.tools.backup  # noqa: F401
     import ha_ops_mcp.tools.batch  # noqa: F401
     import ha_ops_mcp.tools.config  # noqa: F401
+    import ha_ops_mcp.tools.container  # noqa: F401
     import ha_ops_mcp.tools.dashboard  # noqa: F401
     import ha_ops_mcp.tools.db  # noqa: F401
     import ha_ops_mcp.tools.debugger  # noqa: F401

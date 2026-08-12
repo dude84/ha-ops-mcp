@@ -47,6 +47,8 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "addon_info": ("read", "addon"),
     "addon_logs": ("read", "addon"),
     "registry_query": ("read", "registry"),
+    "container_list": ("read", "container"),
+    "container_logs": ("read", "container"),
     "device_info": ("read", "registry"),
     "references": ("read", "references"),
     "refactor_check": ("read", "references"),
@@ -94,6 +96,10 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "backup_revert": ("mutate", "backup"),
     "rollback": ("mutate", "config"),
     "exec_shell": ("mutate", "shell"),
+    # Arbitrary command in another container — as far-reaching as exec_shell,
+    # and classified the same way rather than as "destructive" (which is
+    # reserved for operations that are inherently data-loss).
+    "container_exec": ("mutate", "container"),
     "user_create": ("mutate", "user"),
     "user_update": ("mutate", "user"),
     # sidebar-only capture-gallery mutations (no MCP tool; audit source=sidebar)
@@ -153,6 +159,8 @@ _TYPE_LABELS: dict[str, str] = {
     "captures_delete": "delete capture", "captures_prune": "prune captures",
     "captures_annotate": "annotate capture",
     "exec_shell": "shell", "batch_apply": "batch", "batch_preview": "preview",
+    "container_exec": "container exec", "container_list": "list",
+    "container_logs": "logs",
     "db_purge": "db purge", "db_query": "db read", "db_health": "db health",
     "db_statistics": "db stats",
     # reads

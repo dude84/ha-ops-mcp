@@ -610,6 +610,89 @@ async def _check_shell(ctx: HaOpsContext) -> dict[str, Any]:
     }
 
 
+async def _check_docker(ctx: HaOpsContext) -> dict[str, Any]:
+    """Probe the Docker socket behind the container tools.
+
+    Reports ``skip`` — not ``fail`` — when the socket is absent. That is the
+    default, correct state for any install running with Protection mode ON, and
+    turning it into a failure would make ``all_pass`` unreachable for everyone
+    who hasn't opted in.
+    """
+    checks: dict[str, Any] = {}
+
+    if ctx.docker is None or not ctx.docker.available():
+        return {
+            "status": "skip",
+            "tools_affected": [
+                "haops_container_list",
+                "haops_container_logs",
+                "haops_container_exec",
+            ],
+            "reason": (
+                ctx.docker.unavailable_reason
+                if ctx.docker is not None
+                else "Docker client not initialised."
+            ),
+            "tests": {},
+        }
+
+    checks["socket"] = {"ok": True, "path": ctx.docker.socket_path()}
+
+    try:
+        containers = await ctx.docker.containers(all_containers=True)
+        running = [c for c in containers if c.get("state") == "running"]
+        checks["list"] = {
+            "ok": len(containers) > 0,
+            "total": len(containers),
+            "running": len(running),
+        }
+    except Exception as e:
+        checks["list"] = {"ok": False, "error": str(e)[:200]}
+        containers = []
+
+    # Exec against our OWN container: proves the exec path end-to-end (create,
+    # start, demux, exit code) without touching anything else on the host.
+    self_name = None
+    for c in containers:
+        if "ha_ops_mcp" in (c.get("name") or "") or "ha-ops-mcp" in (
+            c.get("name") or ""
+        ):
+            self_name = c.get("name")
+            break
+
+    if self_name:
+        try:
+            result = await ctx.docker.exec_run(
+                self_name, ["echo", "ha-ops-tools-check"], timeout=15.0
+            )
+            checks["exec"] = {
+                "ok": result.get("exit_code") == 0
+                and "ha-ops-tools-check" in result.get("stdout", ""),
+                "exit_code": result.get("exit_code"),
+                "container": self_name,
+            }
+        except Exception as e:
+            checks["exec"] = {"ok": False, "error": str(e)[:200]}
+    else:
+        # Socket works but we couldn't find ourselves — exec is unproven, so
+        # say so rather than quietly passing on the list check alone.
+        checks["exec"] = {
+            "ok": False,
+            "error": "Could not identify own container to probe exec",
+        }
+
+    all_ok = all(c.get("ok") for c in checks.values())
+    return {
+        "status": "pass" if all_ok else "partial",
+        "tools_affected": [
+            "haops_container_list",
+            "haops_container_logs",
+            "haops_container_exec",
+        ],
+        "tests": checks,
+    }
+
+
 async def _check_debugger(ctx: HaOpsContext) -> dict[str, Any]:
     """Probe the endpoints behind the v0.7 debugger tools."""
     checks: dict[str, Any] = {}
@@ -759,6 +842,7 @@ async def haops_tools_check(ctx: HaOpsContext) -> dict[str, Any]:
     results["registries"] = await _check_registries(ctx)
     results["supervisor"] = await _check_supervisor(ctx)
     results["shell"] = await _check_shell(ctx)
+    results["docker"] = await _check_docker(ctx)
     results["refs"] = await _check_refs(ctx)
     results["debugger"] = await _check_debugger(ctx)
     results["helpers"] = await _check_helpers(ctx)

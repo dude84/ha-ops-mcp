@@ -32,9 +32,45 @@ The addon holds, by design:
 - **`backup:rw`, `share:rw`** — the backup + share volumes.
 - **`hassio_role: manager`** — add-on management + Core stop/start/restart.
 - **`usb` / `uart`** — raw serial/USB devices (e.g. Zigbee coordinator flashing).
+- **`docker_api`** — declared, but **inert unless you turn Protection mode off**.
+  See below.
 
 Given the above, the **real security boundary is the addon container itself**,
-not any in-app permission. The mutation guards below are about *reversibility and
+not any in-app permission.
+
+### Docker socket access (v0.57.0+) — opt-in, and a genuine step up
+
+The manifest declares `docker_api: true`, which powers `haops_container_list`,
+`haops_container_logs` and `haops_container_exec`. These let the addon borrow
+capabilities its own image lacks — the motivating case being compiling an
+ESPHome firmware with the ESPHome addon's toolchain instead of shipping a second
+copy of it.
+
+**The declaration alone grants nothing.** Supervisor strips `docker_api` while
+Protection mode is ON, and Protection mode is ON by default. Every installation
+must deliberately switch it off (Settings → Add-ons → HA Ops MCP → Info) and
+restart the addon. That checkbox *is* the opt-in gate; if you never touch it,
+the three container tools return an explanation of how to enable them and do
+nothing else.
+
+**Understand what you are granting.** The Docker socket reaches *every*
+container on the host, so this widens the blast radius from "all of Home
+Assistant" to "all containers on the machine" — Supervisor and HA Core included.
+Since the addon is already root-equivalent on HA (`config:rw` + `exec_shell`),
+this is a smaller step than it first looks, but it is a real one and worth a
+deliberate decision rather than being switched on by habit.
+
+`haops_container_exec` is two-phase confirmed like `haops_exec_shell`, and its
+token is bound to **both** the command and the target container, so a token
+minted for a harmless command in one container cannot be replayed against
+another. Every exec is written to the audit log with its container, command and
+exit code. As with all mutation guards here: that is reversibility and
+auditability, not containment.
+
+One sharp edge worth knowing: the Docker Engine API has no "cancel exec". If an
+exec times out, ha-ops-mcp **abandons** it — the process keeps running inside
+the target container. The response says so explicitly. Don't launch unbounded
+work through it. The mutation guards below are about *reversibility and
 auditability*, not about containing a determined operator (a power user is
 expected to be able to bypass them).
 

@@ -1,3 +1,16 @@
+## 0.57.0
+
+**New tools: `haops_container_list`, `haops_container_logs`, `haops_container_exec` — reach other containers on the HA host.** This closes a gap between design and manifest: `haops_exec_shell` was always intended to be able to escalate to sibling containers (borrow the ESPHome toolchain, inspect a container with no API, debug another add-on), but `docker_api` was simply never declared, so Supervisor reported `docker_api: False` and there was no `/var/run/docker.sock` to talk to. It wasn't policy — it was an omission.
+
+- `docker_api: true` added to the add-on manifest. **This grants nothing on its own:** Supervisor strips the capability while Protection mode is ON, and it defaults to ON. Each installation must deliberately turn protection off (Info tab) and restart. That checkbox is the opt-in gate, so the capability stays inert for everyone who doesn't want it.
+- No docker CLI in the image — `connections/docker.py` drives the Engine API directly over the unix socket via aiohttp's `UnixConnector`, pinned to API `v1.41`.
+- When the socket is absent the tools return the **remedy** ("turn off Protection mode, restart"), not a generic failure. The fix is a checkbox the user has to find, so the error has to name it.
+- `haops_container_exec` is two-phase confirmed, and the token is bound to **both** the command and the target container — a token minted for a harmless command in one container can't be replayed against another.
+- Docker's frame-multiplexed output is demuxed into separate stdout/stderr, tolerating both TTY-mode (unframed) output and a truncated final frame rather than raising.
+- **Timeouts abandon, they don't kill:** the Engine API has no cancel-exec, so a timed-out command keeps running inside the target container. The response says so explicitly instead of implying it stopped.
+- `haops_tools_check` gains a `docker` group that probes list + exec (execing against our own container, touching nothing else). It reports `skip` — not `fail` — when the socket is absent, so an install that never opts in still reaches `all_pass`.
+- Security trade-off documented rather than buried: the socket reaches *every* container on the host, widening the add-on's blast radius from "all of Home Assistant" to "all containers on the machine". See SECURITY.md.
+
 ## 0.56.1
 
 **Compatibility window moved to HA 2026.6 – 2026.8.** `haops_tools_check` returned `all_pass` (13/13 groups, 0 broken tools) against live **HA Core 2026.8.1**, so the window was bumped rather than left to warn on every startup. Recorder schema is **still 53** — unchanged across four HA releases. `compat.py`, the README/DOCS/HA_COMPATIBILITY tables, the verification history and a new `KNOWN_GOOD_ENV` baseline row all moved together.

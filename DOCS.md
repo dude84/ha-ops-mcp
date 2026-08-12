@@ -1,6 +1,6 @@
 # ha-ops-mcp
 
-An MCP server addon that gives AI assistants (and you) operational access to your Home Assistant instance. 78 tools covering database management, YAML config editing (with comment preservation), Lovelace dashboard CRUD via JSON Patch, entity registry hygiene, collection-helper CRUD (input_boolean / input_number / counter / timer / schedule / etc.), cross-surface reference graph, automation debugging, system health monitoring, add-on management, Zigbee/ZHA introspection, shell access, native user management, and a **headless UI/UX surface** — server-side dashboard screenshots + load-performance capture via Playwright/Chromium (v0.50.0+, Debian-based image) — all with two-phase confirmation, automatic backups, in-session rollback, and a full audit trail.
+An MCP server addon that gives AI assistants (and you) operational access to your Home Assistant instance. 82 tools covering database management, YAML config editing (with comment preservation), Lovelace dashboard CRUD via JSON Patch, entity registry hygiene, collection-helper CRUD (input_boolean / input_number / counter / timer / schedule / etc.), cross-surface reference graph, automation debugging, system health monitoring, add-on management, Zigbee/ZHA introspection, shell access, native user management, and a **headless UI/UX surface** — server-side dashboard screenshots + load-performance capture via Playwright/Chromium (v0.50.0+, Debian-based image) — all with two-phase confirmation, automatic backups, in-session rollback, and a full audit trail.
 
 Built for the maintenance and observability work that comes during and after setup. **Device control** (lights, switches, scenes) is a **secondary objective** — handled by the generic `haops_service_call` escape hatch, not bespoke per-device tools.
 
@@ -67,6 +67,21 @@ Leave blank to auto-detect from HA's recorder config. Or specify explicitly:
 The addon requests generic USB access (`usb: true`) and auto-mapped UART/serial nodes (`uart: true`). This lets tools reach USB peripherals directly — most notably **flashing the Zigbee coordinator firmware in place** (e.g. Sonoff ZBDongle-P / CC2652P at `/dev/ttyUSB*`) via `haops_exec_shell`, without moving the dongle to another machine.
 
 This is a deliberate capability expansion: combined with shell access, the addon can read and write any USB/serial device the host exposes. It sits behind the same trust boundary as shell access — treat the addon like SSH to production. Changing these flags requires an addon **rebuild** (the device cgroup is applied at container creation, not at runtime).
+
+### Container access (Docker socket) — opt-in
+
+`haops_container_list`, `haops_container_logs` and `haops_container_exec` reach **other containers on the HA host** — other add-ons, HA Core, the Supervisor. The point is borrowing tools this image doesn't ship: compiling an ESPHome firmware with the ESPHome add-on's own toolchain, for example, rather than shipping a second copy of the compiler.
+
+**Two things are required, and the manifest is only the first:**
+
+1. `docker_api: true` in the add-on manifest — already declared since v0.57.0.
+2. **Protection mode OFF** — Settings → Add-ons → HA Ops MCP → Info tab, then restart the add-on.
+
+Supervisor silently strips `docker_api` while Protection mode is on, and it is on by default, so step 2 is what actually grants access. Until you do it the three tools are inert and return instructions instead of an opaque error. `haops_tools_check` reports the `docker` group as `skip` (not `fail`) in that state, so an install that never opts in still reaches `all_pass`.
+
+Before switching protection off, read the trade-off in [SECURITY.md](SECURITY.md#docker-socket-access-v0570--opt-in-and-a-genuine-step-up): the socket reaches every container on the machine, which widens the add-on's reach from "all of Home Assistant" to "all containers".
+
+Note `haops_container_exec` **abandons** a command that hits its timeout — the Docker API has no cancel, so the process keeps running inside the target container. The response says so. Don't start unbounded work with it. For add-on logs, prefer `haops_addon_logs`: it goes through Supervisor and needs none of this.
 
 ## Connecting an MCP client
 

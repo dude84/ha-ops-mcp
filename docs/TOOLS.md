@@ -147,10 +147,15 @@ Stateless typed graph rebuilt per query — registries, structured YAML, dashboa
 | Tool | Type | Description |
 |---|---|---|
 | `haops_exec_shell` | Write | Two-phase shell execution. No safety net beyond two-phase confirmation. |
+| `haops_container_list` | Read | List containers on the HA host. Needs the Docker socket (see below). |
+| `haops_container_logs` | Read | Recent stdout/stderr from another container. Prefer `haops_addon_logs` for add-ons. |
+| `haops_container_exec` | Write | Two-phase command execution **inside another container**. Token is bound to command *and* container. Timeout abandons, not kills. |
 | `haops_addon_list` | Read | List installed add-ons. Requires Supervisor API. |
 | `haops_addon_info` | Read | Add-on details + live resource stats. |
 | `haops_addon_logs` | Read | Add-on log output. |
 | `haops_addon_restart` | Write | Two-phase add-on restart. |
+
+**Container tools need the Docker socket, which is opt-in.** `docker_api: true` is in the manifest (v0.57.0+), but Supervisor strips it while **Protection mode** is ON — and it defaults to ON. Turn it off in the add-on's Info tab and restart. Until then the three tools return instructions on how to enable them rather than failing opaquely, and `haops_tools_check`'s `docker` group reports `skip`, so `all_pass` is still reachable without opting in. The socket reaches *every* container on the host — read [SECURITY.md](../SECURITY.md) before enabling.
 
 ## OAuth management tools
 

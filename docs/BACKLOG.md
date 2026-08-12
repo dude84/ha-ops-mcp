@@ -185,16 +185,30 @@ no `esphome` CLI in our image, port 6052 unpublished (`network: {'6052/tcp': Non
 all container hostnames refuse connections, and ingress returns **401** to a Bearer
 LLAT (it wants a frontend-minted session token).
 
-**BUT** — once gap 5 lands, compiling becomes reachable by `docker exec` into the
-ESPHome container, i.e. borrow the toolchain instead of shipping it. Revisit this
-entry's scope after gap 5; `haops_esphome_build` may become viable.
+**UNBLOCKED 2026-08-12 (gap 5 shipped in v0.57.0).** Compiling is now reachable by
+`docker exec` into the ESPHome container — borrow the toolchain instead of shipping
+it — so `haops_esphome_build` is viable as a thin wrapper over
+`haops_container_exec` (find the esphome container, `esphome compile <node>.yaml`,
+report the artifact path + firmware size). Gated on the same Protection-mode
+opt-in, and on confirming Supervisor actually permits exec.
 
 So: `haops_esphome_status` = enumerate node configs, map each to its HA
 device/entities and online state, and report the last build's artifacts + firmware
 size from `.esphome/build/<node>/.pioenvs/<node>/firmware.bin`. Pure filesystem +
 registry, no toolchain.
 
-### 5. Addon never got the Docker escalation path it was designed for — HIGH
+### 5. Addon never got the Docker escalation path it was designed for — ✅ DONE in v0.57.0
+
+**Shipped 2026-08-12.** `docker_api: true` is in the manifest and
+`haops_container_list` / `_logs` / `_exec` drive the Engine API over the unix
+socket (no docker CLI in the image, aiohttp `UnixConnector`, API pinned to
+`v1.41`). Two-phase confirm on exec with the token bound to **both** command and
+container; `tools_check` gained a `docker` group that reports `skip` when the
+socket is absent so `all_pass` stays reachable for non-opted-in installs.
+**Still needs a live verification pass:** the user must switch Protection mode
+OFF and restart, then confirm (a) the socket appears and (b) `exec` is actually
+permitted — HA's docs call `docker_api` read-only, and that claim is untested
+here. Original entry below for context.
 
 **Regression against intent, found 2026-08-12.** The design assumed
 `haops_exec_shell` could escalate to other containers via `docker exec` (e.g. to
