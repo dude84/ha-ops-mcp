@@ -368,3 +368,217 @@ async def haops_addon_restart(
         "name": info.get("name"),
         "message": f"Add-on '{info.get('name')}' is restarting.",
     }
+
+
+async def _fire_detached_self_update(ctx: HaOpsContext, slug: str) -> None:
+    """Trigger our own update from a detached child, after a short delay.
+
+    Self-update cannot be done inline: Supervisor stops this container to
+    rebuild it, so the HTTP response to the caller would never be flushed and
+    the client would see a transport error instead of the warning it needs.
+
+    Instead we hand the POST to a `setsid`-detached child that sleeps first.
+    The tool returns normally, the caller reads the warning, and only then does
+    Supervisor tear us down. The child dying with the container is fine — by
+    then Supervisor has accepted the request and does the work host-side.
+    """
+    import asyncio
+    import shlex
+
+    token = _supervisor_token(ctx)
+    url = f"{_SUPERVISOR_URL}/addons/{slug}/update"
+    cmd = (
+        f"sleep 2; curl -s -X POST -H {shlex.quote(f'Authorization: Bearer {token}')} "
+        f"{shlex.quote(url)} >/dev/null 2>&1"
+    )
+    await asyncio.create_subprocess_exec(
+        "setsid",
+        "sh",
+        "-c",
+        cmd,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+@registry.tool(
+    name="haops_addon_update",
+    description=(
+        "SUPERUSER TOOL: Update an add-on to its latest version. "
+        "Reloads the add-on store index first, so a release published moments "
+        "ago is seen (this is the 'Check for updates' click in the UI). "
+        "Two-phase: call without confirm to preview the version change, then "
+        "again with confirm=true and the token. "
+        "Reports 'already_latest' and does nothing when no update exists. "
+        "UPDATING THIS ADD-ON ITSELF is refused unless allow_self=true, "
+        "because the MCP session dies mid-rebuild and a build that fails to "
+        "start can then only be recovered from the Home Assistant UI — there "
+        "is no way back in through MCP. With allow_self=true the update is "
+        "fired detached after a ~2s delay so this response still reaches you; "
+        "expect the session to drop and the rebuild to take several minutes "
+        "(the ha-ops-mcp image builds on the host). "
+        "Parameters: slug (string, required — from haops_addon_list), "
+        "allow_self (bool, default false), "
+        "confirm (bool, default false), "
+        "token (string, required if confirm=true)."
+    ),
+    params={
+        "slug": {
+            "type": "string",
+            "description": "Add-on slug",
+        },
+        "allow_self": {
+            "type": "boolean",
+            "description": "Permit updating the add-on hosting this session",
+            "default": False,
+        },
+        "confirm": {
+            "type": "boolean",
+            "description": "Execute the update",
+            "default": False,
+        },
+        "token": {
+            "type": "string",
+            "description": "Confirmation token from the preview step",
+        },
+    },
+)
+async def haops_addon_update(
+    ctx: HaOpsContext,
+    slug: str,
+    allow_self: bool = False,
+    confirm: bool = False,
+    token: str | None = None,
+) -> dict[str, Any]:
+    # Refresh the store index before reading versions — Supervisor caches it,
+    # so without this a release published minutes ago reports as "latest".
+    # Best-effort: a failure here only means we might miss a brand-new version.
+    await _supervisor_post(ctx, "/store/reload")
+
+    info = await _supervisor_get(ctx, f"/addons/{slug}/info")
+    if info is None:
+        return {"error": f"Add-on '{slug}' not found or Supervisor API unavailable"}
+
+    current = info.get("version")
+    latest = info.get("version_latest")
+    is_self = await _is_self_addon(ctx, slug)
+
+    if not info.get("update_available"):
+        return {
+            "already_latest": True,
+            "slug": slug,
+            "name": info.get("name"),
+            "version": current,
+            "version_latest": latest,
+            "message": f"'{info.get('name')}' is already at {current}.",
+        }
+
+    if is_self and not allow_self:
+        return {
+            "error": (
+                f"Refusing to update '{info.get('name')}' — it hosts this MCP "
+                "session. Pass allow_self=true to override. Be aware: the "
+                "session drops mid-rebuild, and if the new build fails to "
+                "start you can only recover from the Home Assistant UI "
+                "(Settings > Add-ons), not from here."
+            ),
+            "slug": slug,
+            "self": True,
+            "version": current,
+            "version_latest": latest,
+        }
+
+    if not confirm:
+        warning = (
+            f"This will update '{info.get('name')}' from {current} to {latest}. "
+            "The add-on's service is interrupted while it rebuilds."
+        )
+        if is_self:
+            warning += (
+                " UPDATING SELF: this response is returned first, then the "
+                "update fires ~2s later and your MCP session drops. The "
+                "ha-ops-mcp image builds on the host, so expect several "
+                "minutes before it answers again (in Claude Code: `/mcp` to "
+                "reconnect). If the new version fails to start, recovery is "
+                "via the Home Assistant UI only."
+            )
+        tk = ctx.safety.create_token(
+            action="addon_update",
+            details={
+                "slug": slug,
+                "name": info.get("name"),
+                "version": current,
+                "version_latest": latest,
+                "self": is_self,
+            },
+        )
+        return {
+            "slug": slug,
+            "name": info.get("name"),
+            "version": current,
+            "version_latest": latest,
+            "self": is_self,
+            "warning": warning,
+            "token": tk.id,
+            "message": "Call again with confirm=true and this token to update.",
+        }
+
+    if token is None:
+        return {"error": "confirm=true requires a token"}
+
+    try:
+        token_data = ctx.safety.validate_token(token)
+    except Exception as e:  # noqa: BLE001 — returned to the caller as a message
+        return {"error": str(e)}
+
+    # A token minted for one add-on must not update a different one.
+    if token_data.details.get("slug") != slug:
+        return {"error": "Add-on slug does not match the token. Re-run the preview."}
+
+    await ctx.audit.log(
+        tool="addon_update",
+        details={
+            "slug": slug,
+            "name": info.get("name"),
+            "version": current,
+            "version_latest": latest,
+            "self": is_self,
+        },
+        token_id=token,
+    )
+    ctx.safety.consume_token(token)
+
+    if is_self:
+        # Audit is written BEFORE firing: once Supervisor stops us there is no
+        # opportunity to log anything, and an unlogged self-update is exactly
+        # the entry someone will look for when the add-on doesn't come back.
+        await _fire_detached_self_update(ctx, slug)
+        return {
+            "triggered": True,
+            "slug": slug,
+            "name": info.get("name"),
+            "version": current,
+            "version_latest": latest,
+            "self": True,
+            "warning": (
+                f"Update to {latest} fires in ~2s. This MCP session will drop "
+                "and stay down for several minutes while the image rebuilds on "
+                "the host. Reconnect afterwards (`/mcp` in Claude Code). If it "
+                "never comes back, check Settings > Add-ons > "
+                f"{info.get('name')} in the Home Assistant UI."
+            ),
+        }
+
+    result = await _supervisor_post(ctx, f"/addons/{slug}/update")
+    if isinstance(result, dict) and "error" in result:
+        return result
+
+    return {
+        "success": True,
+        "slug": slug,
+        "name": info.get("name"),
+        "version_before": current,
+        "version": latest,
+        "message": f"'{info.get('name')}' updated {current} -> {latest}.",
+    }

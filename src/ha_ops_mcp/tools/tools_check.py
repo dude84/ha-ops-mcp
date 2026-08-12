@@ -392,7 +392,7 @@ async def _check_supervisor(ctx: HaOpsContext) -> dict[str, Any]:
         "tools_affected": [
             "haops_addon_list", "haops_addon_info",
             "haops_addon_logs", "haops_addon_restart",
-            "haops_system_core",
+            "haops_addon_update", "haops_system_core",
         ],
         "tests": checks,
     }

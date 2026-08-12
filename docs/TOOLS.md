@@ -1,4 +1,4 @@
-# Tools (60)
+# Tools (83)
 
 All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 
@@ -76,7 +76,7 @@ Wraps HA's collection-helper WebSocket API for `input_boolean`, `input_number`, 
 | `haops_system_restart` | Write | Two-phase HA restart. Last resort — prefer `haops_system_reload` for individual domains. |
 | `haops_system_core` | Write | Two-phase Supervisor-driven Core stop/start/restart. Stop disables the watchdog first (re-enabled on start) — needed to free a resource HA holds, e.g. a serial port for in-place Zigbee flashing. HA OS / Supervised only. |
 | `haops_system_backup` | Write | Trigger a full HA backup via Supervisor or Core API. |
-| `haops_self_check` | Read | Validate all connections — REST, WebSocket, database, filesystem, backup directory. Run first to diagnose connectivity. |
+| `haops_self_check` | Read | Validate all connections — REST, WebSocket, database, filesystem, backup directory, Docker socket. Run first to diagnose connectivity. |
 | `haops_tools_check` | Read | Passive integration test — exercises each tool group with real read-only operations, and reports the HA compatibility window under `summary.compatibility`. **Run after every HA upgrade** — each failing group names the tools it affects. |
 
 ## Zigbee / ZHA tools
@@ -154,6 +154,7 @@ Stateless typed graph rebuilt per query — registries, structured YAML, dashboa
 | `haops_addon_info` | Read | Add-on details + live resource stats. |
 | `haops_addon_logs` | Read | Add-on log output. |
 | `haops_addon_restart` | Write | Two-phase add-on restart. |
+| `haops_addon_update` | Write | Two-phase add-on update (reloads the store index first). Updating **this** add-on needs `allow_self=true` — the session drops and a non-booting build is only recoverable from the HA UI. |
 
 **Container tools need the Docker socket, which is opt-in.** `docker_api: true` is in the manifest (v0.57.0+), but Supervisor strips it while **Protection mode** is ON — and it defaults to ON. Turn it off in the add-on's Info tab and restart. Until then the three tools return instructions on how to enable them rather than failing opaquely, and `haops_tools_check`'s `docker` group reports `skip`, so `all_pass` is still reachable without opting in. The socket reaches *every* container on the host — read [SECURITY.md](../SECURITY.md) before enabling.
 

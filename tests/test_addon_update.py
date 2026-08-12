@@ -1,0 +1,208 @@
+"""Tests for haops_addon_update.
+
+The self-update path is what needs covering: it is the one branch that cannot
+be verified by running it (it tears down the process), so the guard rails —
+refuse-without-flag, slug-bound token, audit-before-fire — are asserted here.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+
+from ha_ops_mcp.tools import addon as addon_mod
+from ha_ops_mcp.tools.addon import haops_addon_update
+
+SELF_SLUG = "f5a4c56f_ha_ops_mcp"
+OTHER_SLUG = "5c53de3b_esphome"
+
+
+class _FakeSafety:
+    def __init__(self) -> None:
+        self.tokens: dict[str, Any] = {}
+        self.consumed: list[str] = []
+
+    def create_token(self, action: str, details: dict[str, Any]):
+        tk = SimpleNamespace(id="tok1", action=action, details=details)
+        self.tokens["tok1"] = tk
+        return tk
+
+    def validate_token(self, token_id: str):
+        if token_id not in self.tokens:
+            raise ValueError("Invalid or already-used token")
+        return self.tokens[token_id]
+
+    def consume_token(self, token_id: str) -> None:
+        self.consumed.append(token_id)
+        self.tokens.pop(token_id, None)
+
+
+class _FakeAudit:
+    def __init__(self) -> None:
+        self.entries: list[dict[str, Any]] = []
+
+    async def log(self, **kwargs: Any) -> None:
+        self.entries.append(kwargs)
+
+
+def _ctx() -> Any:
+    return SimpleNamespace(safety=_FakeSafety(), audit=_FakeAudit())
+
+
+@pytest.fixture(autouse=True)
+def _supervisor(monkeypatch):
+    """Fake Supervisor: two add-ons, both with an update pending."""
+    posts: list[str] = []
+    infos = {
+        SELF_SLUG: {
+            "name": "HA Ops MCP",
+            "slug": SELF_SLUG,
+            "version": "0.57.0",
+            "version_latest": "0.57.1",
+            "update_available": True,
+            "state": "started",
+        },
+        OTHER_SLUG: {
+            "name": "ESPHome Device Builder",
+            "slug": OTHER_SLUG,
+            "version": "2026.7.3",
+            "version_latest": "2026.7.4",
+            "update_available": True,
+            "state": "started",
+        },
+    }
+
+    async def fake_get(ctx, path):
+        if path == "/addons/self/info":
+            return infos[SELF_SLUG]
+        for slug, info in infos.items():
+            if path == f"/addons/{slug}/info":
+                return info
+        return None
+
+    async def fake_post(ctx, path, data=None):
+        posts.append(path)
+        return {"ok": True}
+
+    fired: list[str] = []
+
+    async def fake_fire(ctx, slug):
+        fired.append(slug)
+
+    monkeypatch.setattr(addon_mod, "_supervisor_get", fake_get)
+    monkeypatch.setattr(addon_mod, "_supervisor_post", fake_post)
+    monkeypatch.setattr(addon_mod, "_fire_detached_self_update", fake_fire)
+    monkeypatch.setattr(addon_mod, "_self_slug_cache", None)
+    return SimpleNamespace(posts=posts, infos=infos, fired=fired)
+
+
+@pytest.mark.asyncio
+async def test_reloads_store_before_reading_versions(_supervisor):
+    """Supervisor caches the store index — a stale index hides new releases."""
+    await haops_addon_update(_ctx(), slug=OTHER_SLUG)
+    assert "/store/reload" in _supervisor.posts
+
+
+@pytest.mark.asyncio
+async def test_other_addon_preview_then_update(_supervisor):
+    ctx = _ctx()
+    preview = await haops_addon_update(ctx, slug=OTHER_SLUG)
+    assert preview["version"] == "2026.7.3"
+    assert preview["version_latest"] == "2026.7.4"
+    assert preview["self"] is False
+    assert f"/addons/{OTHER_SLUG}/update" not in _supervisor.posts
+
+    result = await haops_addon_update(
+        ctx, slug=OTHER_SLUG, confirm=True, token=preview["token"]
+    )
+    assert result["success"] is True
+    assert f"/addons/{OTHER_SLUG}/update" in _supervisor.posts
+    assert ctx.safety.consumed == ["tok1"]
+
+
+@pytest.mark.asyncio
+async def test_already_latest_is_a_noop(_supervisor):
+    _supervisor.infos[OTHER_SLUG]["update_available"] = False
+    result = await haops_addon_update(_ctx(), slug=OTHER_SLUG)
+    assert result["already_latest"] is True
+    assert f"/addons/{OTHER_SLUG}/update" not in _supervisor.posts
+
+
+@pytest.mark.asyncio
+async def test_self_update_refused_without_allow_self(_supervisor):
+    result = await haops_addon_update(_ctx(), slug=SELF_SLUG)
+    assert "error" in result
+    assert result["self"] is True
+    assert "allow_self" in result["error"]
+    # Must not even mint a token for a path it is refusing.
+    assert "token" not in result
+    assert _supervisor.fired == []
+
+
+@pytest.mark.asyncio
+async def test_self_update_preview_warns_about_session_loss(_supervisor):
+    preview = await haops_addon_update(_ctx(), slug=SELF_SLUG, allow_self=True)
+    assert preview["self"] is True
+    assert "session" in preview["warning"].lower()
+    # The unrecoverable case must be named, not implied.
+    assert "Home Assistant UI" in preview["warning"]
+    assert _supervisor.fired == []
+
+
+@pytest.mark.asyncio
+async def test_self_update_fires_detached_and_returns_first(_supervisor):
+    ctx = _ctx()
+    preview = await haops_addon_update(ctx, slug=SELF_SLUG, allow_self=True)
+    result = await haops_addon_update(
+        ctx, slug=SELF_SLUG, allow_self=True, confirm=True, token=preview["token"]
+    )
+    assert result["triggered"] is True
+    assert _supervisor.fired == [SELF_SLUG]
+    # Inline POST would never reach the caller — must NOT be used for self.
+    assert f"/addons/{SELF_SLUG}/update" not in _supervisor.posts
+
+
+@pytest.mark.asyncio
+async def test_self_update_audits_before_firing(_supervisor):
+    """An unlogged self-update is the entry you'd want if it never came back."""
+    ctx = _ctx()
+    preview = await haops_addon_update(ctx, slug=SELF_SLUG, allow_self=True)
+    await haops_addon_update(
+        ctx, slug=SELF_SLUG, allow_self=True, confirm=True, token=preview["token"]
+    )
+    assert ctx.audit.entries[-1]["tool"] == "addon_update"
+    assert ctx.audit.entries[-1]["details"]["self"] is True
+    assert ctx.audit.entries[-1]["details"]["version_latest"] == "0.57.1"
+
+
+@pytest.mark.asyncio
+async def test_token_is_bound_to_slug(_supervisor):
+    """A token minted for one add-on must not update a different one."""
+    ctx = _ctx()
+    preview = await haops_addon_update(ctx, slug=OTHER_SLUG)
+    result = await haops_addon_update(
+        ctx, slug=SELF_SLUG, allow_self=True, confirm=True, token=preview["token"]
+    )
+    assert "does not match the token" in result["error"]
+    assert _supervisor.fired == []
+
+
+@pytest.mark.asyncio
+async def test_confirm_requires_token(_supervisor):
+    result = await haops_addon_update(_ctx(), slug=OTHER_SLUG, confirm=True)
+    assert result["error"] == "confirm=true requires a token"
+
+
+@pytest.mark.asyncio
+async def test_unknown_addon(_supervisor):
+    result = await haops_addon_update(_ctx(), slug="nope")
+    assert "not found" in result["error"]
+
+
+def test_classification():
+    from ha_ops_mcp.safety.classification import classify, type_label
+
+    assert classify("addon_update", None) == ("mutate", "addon")
+    assert type_label("addon_update", None) == "update addon"

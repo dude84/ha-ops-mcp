@@ -1,6 +1,6 @@
 # ha-ops-mcp
 
-An MCP server addon that gives AI assistants (and you) operational access to your Home Assistant instance. 82 tools covering database management, YAML config editing (with comment preservation), Lovelace dashboard CRUD via JSON Patch, entity registry hygiene, collection-helper CRUD (input_boolean / input_number / counter / timer / schedule / etc.), cross-surface reference graph, automation debugging, system health monitoring, add-on management, Zigbee/ZHA introspection, shell access, native user management, and a **headless UI/UX surface** — server-side dashboard screenshots + load-performance capture via Playwright/Chromium (v0.50.0+, Debian-based image) — all with two-phase confirmation, automatic backups, in-session rollback, and a full audit trail.
+An MCP server addon that gives AI assistants (and you) operational access to your Home Assistant instance. 83 tools covering database management, YAML config editing (with comment preservation), Lovelace dashboard CRUD via JSON Patch, entity registry hygiene, collection-helper CRUD (input_boolean / input_number / counter / timer / schedule / etc.), cross-surface reference graph, automation debugging, system health monitoring, add-on management, Zigbee/ZHA introspection, shell access, native user management, and a **headless UI/UX surface** — server-side dashboard screenshots + load-performance capture via Playwright/Chromium (v0.50.0+, Debian-based image) — all with two-phase confirmation, automatic backups, in-session rollback, and a full audit trail.
 
 Built for the maintenance and observability work that comes during and after setup. **Device control** (lights, switches, scenes) is a **secondary objective** — handled by the generic `haops_service_call` escape hatch, not bespoke per-device tools.
 
@@ -12,7 +12,7 @@ Built for the maintenance and observability work that comes during and after set
 | **Supported window** | **2026.6 – 2026.8** |
 | **Recorder DB schema** | **53** |
 
-Each release is verified against a live instance with `haops_tools_check` (13 read-only groups covering every backend). On a newer HA than the window, the addon still starts — it logs a warning and `haops_system_info` reports a `compatibility` block. HA ships monthly, so "newest verified" goes stale by design: outside the window means **untested**, not broken.
+Each release is verified against a live instance with `haops_tools_check` (14 read-only groups covering every backend). On a newer HA than the window, the addon still starts — it logs a warning and `haops_system_info` reports a `compatibility` block. HA ships monthly, so "newest verified" goes stale by design: outside the window means **untested**, not broken.
 
 If a tool misbehaves after an HA update, open the **Health** tab (or call `haops_tools_check`) — each failing group names the tools it affects. Details and the full HA API surface this addon depends on: [docs/HA_COMPATIBILITY.md](https://github.com/dude84/ha-ops-mcp/blob/main/docs/HA_COMPATIBILITY.md).
 

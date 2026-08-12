@@ -1,3 +1,13 @@
+## 0.58.0
+
+**New tool: `haops_addon_update`** — update add-ons without leaving the session. It reloads the add-on store index first, which is the "Check for updates" click in the UI and the reason a release published moments earlier otherwise reports as already-latest.
+
+- Two-phase confirmed, and the token is bound to the **slug** — a token minted for one add-on can't update another.
+- Reports `already_latest` and does nothing when there's no update, rather than firing a no-op rebuild.
+- **Self-update is refused unless `allow_self=true`.** Updating the add-on that hosts the MCP session can't return normally: Supervisor stops the container to rebuild, so the response never reaches the caller. With the flag set, the POST is handed to a detached child that waits ~2s, so the tool returns its "session will drop" warning *first* and Supervisor tears us down after.
+- The reason for the flag rather than plain two-phase: v0.55.1 is precedent that an add-on update can produce a build that doesn't start (the MCP SDK 2.0 break). If that happens to a self-update, there is no way back in through MCP — recovery is the Home Assistant UI only. The warning says so in those words.
+- Audit is written **before** firing a self-update: once Supervisor stops the container there's no chance to log, and an unlogged self-update is exactly the entry you'd go looking for when the add-on doesn't come back.
+
 ## 0.57.1
 
 **`haops_self_check` now reports Docker access**, so the healthcheck answers "can I reach other containers?" without needing `haops_tools_check`. It also appears in the sidebar's Health tab automatically — that panel renders any check with a `status`, so no UI change was needed.
