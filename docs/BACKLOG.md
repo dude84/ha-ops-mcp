@@ -205,10 +205,16 @@ socket (no docker CLI in the image, aiohttp `UnixConnector`, API pinned to
 `v1.41`). Two-phase confirm on exec with the token bound to **both** command and
 container; `tools_check` gained a `docker` group that reports `skip` when the
 socket is absent so `all_pass` stays reachable for non-opted-in installs.
-**Still needs a live verification pass:** the user must switch Protection mode
-OFF and restart, then confirm (a) the socket appears and (b) `exec` is actually
-permitted — HA's docs call `docker_api` read-only, and that claim is untested
-here. Original entry below for context.
+**VERIFIED LIVE 2026-08-12** on PL (HA 2026.8.1, Supervisor 2026.07.5, Docker
+29.6.2): socket at `/run/docker.sock`, 19/19 containers listed, `exec` returning
+`exit_code: 0` against the ESPHome add-on (ESPHome 2026.7.4 / Python 3.14.6).
+`haops_tools_check` → `all_pass` 14/14. **`docker_api` is NOT read-only** —
+`read_only=True` is a bind-mount flag on the socket inode, not an API
+restriction, so `full_access: true` was never needed. Gotcha worth remembering:
+Supervisor evaluates the mount at *container creation*, so turning Protection
+mode off does nothing until the add-on is restarted. Details in
+HA_COMPATIBILITY.md. Docker access is also surfaced in `haops_self_check`
+(reports `skip` when not enabled) and therefore in the sidebar Health tab. Original entry below for context.
 
 **Regression against intent, found 2026-08-12.** The design assumed
 `haops_exec_shell` could escalate to other containers via `docker exec` (e.g. to

@@ -15,6 +15,38 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.57.0` — verified 2026-08-12 (**Poland HA** — first baseline with Docker socket access)
+
+| Component | Version | How to check |
+|---|---|---|
+| ha-ops-mcp (addon) | **0.57.0** (tag `v0.57.0`) | `haops_self_check` → `ha_ops_version` |
+| Home Assistant Core | **2026.8.1** | `haops_self_check` → `rest_api.ha_version` |
+| Supervisor / HAOS | **2026.07.5** / **18.2** | `haops_tools_check` → `supervisor` |
+| Docker Engine (host) | **29.6.2** | `haops_container_list`, or Supervisor `/docker/info` |
+| HA DB backend | **MariaDB 11.4.10-MariaDB**, schema **53** | `haops_system_info` → `database` |
+| Add-on protection mode | **OFF** (required for container tools) | `/addons/self/info` → `protected: false` |
+| Claude Code CLI | **2.1.226** | `claude --version` |
+| Terminal host | **iTerm2 3.6.11** | iTerm → About / `$TERM_PROGRAM_VERSION` |
+| macOS | **26.5.2** (25F84, Darwin 25.5.0) | `sw_vers` |
+| Bun (CC runtime) | **1.3.14** | `bun --version` |
+| Node (local) | **v26.5.0** | `node --version` |
+| MCP server name | `ha-ops-pl` (Singapore instance is `ha-ops`) | `claude mcp list` |
+
+Notes:
+- `haops_tools_check` → **`all_pass`, 14/14 groups** (the new `docker` group included), 0 broken tools.
+- **Container access verified working**: socket at `/run/docker.sock`, 19/19 containers listed, and
+  `exec` returning `exit_code: 0`. Confirmed against the ESPHome add-on
+  (`app_5c53de3b_esphome`, ESPHome **2026.7.4**, Python **3.14.6**), which is the toolchain this
+  capability exists to borrow.
+- **`docker_api` is NOT read-only, despite HA's wording** — see HA_COMPATIBILITY.md. Full Engine API
+  including exec. `full_access: true` is not needed.
+- **Two gates, and the second one bites:** Supervisor evaluates
+  `if not protected and access_docker_api` when it *creates* the container, so turning Protection mode
+  off does nothing until the add-on is restarted. On this baseline the update recreated the container
+  while still protected, and the socket only appeared after an explicit restart.
+- HA Core, Supervisor, HAOS, DB and all client-side versions unchanged from the `v0.56.0` row — the
+  only moving parts were the add-on and its protection setting.
+
 ### `v0.56.0` — verified 2026-08-11 (**Poland HA** — first baseline on HA 2026.8)
 
 | Component | Version | How to check |

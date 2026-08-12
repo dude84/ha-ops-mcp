@@ -1,3 +1,12 @@
+## 0.57.1
+
+**`haops_self_check` now reports Docker access**, so the healthcheck answers "can I reach other containers?" without needing `haops_tools_check`. It also appears in the sidebar's Health tab automatically — that panel renders any check with a `status`, so no UI change was needed.
+
+- `ok` with socket path + container/running counts when enabled; `skip` (never `fail`) when the socket is absent, since that is the default state and must not drag `overall` down to `issues_found`. A socket that is *present but unusable* is a genuine `fail`.
+- The skip reason is deliberately terser than the container tools' — the Health tab truncates values at 200 chars.
+
+**Docker access verified live** (see docs/HA_COMPATIBILITY.md): `docker_api` is **not** read-only. `read_only=True` is a bind-mount flag on the socket inode, not an API restriction, so `exec` works and `full_access: true` is unnecessary. The sharp edge is that Supervisor evaluates the mount at *container creation*, so turning Protection mode off has no effect until the add-on restarts.
+
 ## 0.57.0
 
 **New tools: `haops_container_list`, `haops_container_logs`, `haops_container_exec` — reach other containers on the HA host.** This closes a gap between design and manifest: `haops_exec_shell` was always intended to be able to escalate to sibling containers (borrow the ESPHome toolchain, inspect a container with no API, debug another add-on), but `docker_api` was simply never declared, so Supervisor reported `docker_api: False` and there was no `/var/run/docker.sock` to talk to. It wasn't policy — it was an omission.

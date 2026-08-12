@@ -10,7 +10,7 @@ An [MCP server](https://modelcontextprotocol.io/) that gives AI assistants (and 
 
 Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.io/integrations/mcp_server/), [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), [hass-mcp](https://github.com/voska/hass-mcp)) focus on device control — "turn on the lights", query states, trigger automations via natural language. ha-ops-mcp is for the work that comes *during and after* setup: cleaning up 200 orphaned entities, reorganising dashboards across views, purging a bloated recorder database, editing YAML without losing comments, understanding what references `sensor.energy_grid` before renaming it, **seeing your dashboards** (server-side headless screenshots + load-performance capture), and doing all of that with diffs you can review and rollback if something goes wrong (most of the time...). Device control here is a *secondary* objective — the generic `haops_service_call` covers it; there are no bespoke per-device tools.
 
-**82 tools. 760 tests. Mypy strict. Debian image with Playwright/Chromium (v0.50.0+).**
+**82 tools. 763 tests. Mypy strict. Debian image with Playwright/Chromium (v0.50.0+).**
 
 ## Home Assistant compatibility
 
@@ -20,7 +20,7 @@ Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.i
 | **Supported window** | **2026.6 – 2026.8** |
 | **Recorder DB schema** | **53** |
 
-Every release is verified against a live instance with `haops_tools_check` — 13 read-only groups exercising REST, WebSocket, database, filesystem, registries, Supervisor, shell, reference graph, debugger, helpers, Zigbee, UI and user tools. A release ships when that returns `all_pass`.
+Every release is verified against a live instance with `haops_tools_check` — 14 read-only groups exercising REST, WebSocket, database, filesystem, registries, Supervisor, shell, Docker, reference graph, debugger, helpers, Zigbee, UI and user tools. A release ships when that returns `all_pass`. (The Docker group reports `skip` unless you opt into container access, and `skip` does not block `all_pass`.)
 
 **Running a newer HA than the window?** Nothing will refuse to start. The server logs a warning, and `haops_system_info` reports a `compatibility` block telling you the same. HA ships on the first Wednesday of every month, so the newest verified version goes stale by design — outside the window means *untested*, not *known-broken*. If something misbehaves, run `haops_tools_check` first: each failing group names the tools it affects.
 
@@ -28,6 +28,7 @@ Every release is verified against a live instance with `haops_tools_check` — 1
 
 | ha-ops-mcp | HA Core | DB schema | Result |
 |---|---|---|---|
+| 0.57.1 | 2026.8.1 | 53 | 14/14 groups pass (Docker enabled) |
 | 0.56.0 | 2026.8.1 | 53 | 13/13 groups pass |
 | 0.55.0 | 2026.7.4 | 53 | 13/13 groups pass |
 | 0.54.0 | 2026.6.3 | 53 | all backends ok |

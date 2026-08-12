@@ -20,8 +20,8 @@ server logs a warning at startup when the live instance falls outside the window
 | **Recorder DB schema** | **53** (unchanged since 2026.5) |
 | **Oldest supported** | **2026.6** |
 | **Newest verified** | **2026.8** |
-| Verified how | `haops_tools_check` → `all_pass`, 13/13 groups, 0 broken tools |
-| Verified on | Poland HA, 2026-08-11, addon v0.56.0 |
+| Verified how | `haops_tools_check` → `all_pass`, 14/14 groups, 0 broken tools |
+| Verified on | Poland HA, 2026-08-12, addon v0.57.1 |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.57.1 | 2026.8.1 | 53 | 14/14 pass (Docker group enabled) | 2026-08-12 |
 | 0.56.0 | 2026.8.1 | 53 | 13/13 pass | 2026-08-11 |
 | 0.55.0 | 2026.7.4 | 53 | 13/13 pass | 2026-08-02 |
 | 0.54.0 | 2026.6.3 | 53 | all backends ok | 2026-06-13 |
@@ -39,7 +40,7 @@ exactly that.
 
 ## How to re-verify after an HA update
 
-1. `haops_tools_check` — 13 groups, all read-only. This is the whole test.
+1. `haops_tools_check` — 14 groups, all read-only. This is the whole test.
 2. If a group fails, its `tools_affected` list names the broken tools directly.
 3. Bump `BUILT_AGAINST_HA` / `MAX_TESTED_HA` in `src/ha_ops_mcp/compat.py`, add a row above, and
    add a `KNOWN_GOOD_ENV.md` baseline row.
@@ -81,7 +82,32 @@ almost all HA breakage is integration-level and touches none of it.
 ### Supervisor endpoints
 
 `/addons` · `/addons/self/info` · `/addons/<slug>/info|restart|stats` ·
-`/core/options|restart|start|stop` · `hassio/backup_full`
+`/core/options|restart|start|stop` · `hassio/backup_full` · `/docker/info`
+
+### Docker Engine socket (v0.57.0+, opt-in)
+
+`/run/docker.sock` — bind-mounted by Supervisor, **not** always present. Engine API
+`v1.41` pinned; endpoints used: `GET /containers/json` · `GET /containers/<id>/logs` ·
+`POST /containers/<id>/exec` · `POST /exec/<id>/start` · `GET /exec/<id>/json`.
+
+Two facts to re-check if container tools ever break:
+
+1. **Supervisor decides the mount at container-creation time**, in
+   `supervisor/docker/app.py`:
+   ```python
+   if not self.app.protected and self.app.access_docker_api:
+       mounts.append(MOUNT_DOCKER)   # /run/docker.sock -> /run/docker.sock, read_only=True
+   ```
+   So `docker_api: true` in our manifest plus Protection mode OFF is necessary
+   **and** the add-on must be restarted afterwards — toggling protection on a
+   running container changes nothing. Verified 2026-08-12 on Supervisor 2026.07.5.
+2. **`docker_api` is NOT a read-only API**, despite Supervisor's own docstring
+   ("Return if the app need read-only Docker API access") and HA's docs. `read_only=True`
+   is a bind-mount flag on the socket *inode*; `connect()` still yields the full
+   bidirectional Engine API. `exec` works — verified 2026-08-12 against the ESPHome
+   add-on container. There is no filtering proxy in the path, and `full_access: true`
+   is **not** required. Supervisor's `/docker/info` endpoint (metadata only, gated by the
+   same flag) is probably what gave "read-only" its reputation.
 
 ### `.storage` files (Tier 1 — preferred over the API)
 

@@ -364,3 +364,77 @@ def test_classification_covers_container_tools():
     assert classify("container_logs", None) == ("read", "container")
     assert classify("container_exec", None) == ("mutate", "container")
     assert type_label("container_exec", None) == "container exec"
+
+
+# ------------------------------------------------- self_check integration ----
+
+
+class _OkWs:
+    async def send_command(self, *a: Any, **kw: Any) -> Any:
+        return {}
+
+
+class _OkRest:
+    async def get(self, path: str) -> Any:
+        return {"version": "2026.8.1", "time_zone": "Europe/Warsaw"}
+
+
+def _self_check_ctx(tmp_path, *, docker: Any) -> Any:
+    """Context where every non-Docker check passes, isolating the new branch.
+
+    db is left None (self_check reports 'skip', which already counts as ok) so
+    ``overall`` is driven only by the Docker section under test.
+    """
+    return SimpleNamespace(
+        rest=_OkRest(),
+        ws=_OkWs(),
+        db=None,
+        docker=docker,
+        config=SimpleNamespace(
+            ha=SimpleNamespace(url="http://ha:8123", ws_url=None),
+            filesystem=SimpleNamespace(config_root=str(tmp_path)),
+            backup=SimpleNamespace(dir=str(tmp_path / "backups")),
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_self_check_reports_docker_ok(tmp_path):
+    """Docker section is present and counts containers when the socket works."""
+    from ha_ops_mcp.tools.system import haops_self_check
+
+    ctx = _self_check_ctx(tmp_path, docker=_FakeDocker(available=True))
+    result = await haops_self_check(ctx)
+    assert result["docker"]["status"] == "ok"
+    assert result["docker"]["containers"] == 2
+    assert result["docker"]["running"] == 1
+
+
+@pytest.mark.asyncio
+async def test_self_check_docker_skip_does_not_break_overall(tmp_path):
+    """A missing socket is the DEFAULT state — it must not fail the check."""
+    from ha_ops_mcp.tools.system import haops_self_check
+
+    ctx = _self_check_ctx(tmp_path, docker=_FakeDocker(available=False))
+    result = await haops_self_check(ctx)
+    assert result["docker"]["status"] == "skip"
+    assert result["overall"] == "ok"
+    # Rendered in the sidebar, which truncates at 200 chars.
+    assert len(result["docker"]["reason"]) <= 200
+
+
+@pytest.mark.asyncio
+async def test_self_check_docker_present_but_broken_is_a_fail(tmp_path):
+    """Socket present but unusable IS a real fault, unlike absence."""
+    from ha_ops_mcp.tools.system import haops_self_check
+
+    docker = _FakeDocker(available=True)
+
+    async def _boom(*a, **kw):
+        raise DockerUnavailableError("socket present but unusable")
+
+    docker.containers = _boom
+    ctx = _self_check_ctx(tmp_path, docker=docker)
+    result = await haops_self_check(ctx)
+    assert result["docker"]["status"] == "fail"
+    assert result["overall"] == "issues_found"

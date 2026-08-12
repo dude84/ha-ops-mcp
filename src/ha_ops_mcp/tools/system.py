@@ -113,7 +113,10 @@ async def haops_system_info(ctx: HaOpsContext) -> dict[str, Any]:
         "Validate that ha-ops-mcp is correctly configured and can reach "
         "all backends. Tests: HA REST API (token validity), WebSocket "
         "connection, database connectivity, filesystem access to config "
-        "root, and backup directory. Returns pass/fail for each check. "
+        "root, backup directory, and Docker socket access (for the "
+        "haops_container_* tools). Returns pass/fail for each check. "
+        "Docker reports 'skip' when not enabled — that is the default, not a "
+        "problem, and it does not affect the overall verdict. "
         "Run this first to diagnose connection issues. "
         "Read-only, no parameters."
     ),
@@ -228,6 +231,41 @@ async def haops_self_check(ctx: HaOpsContext) -> dict[str, Any]:
                 "status": "fail",
                 "error": str(e),
             }
+
+    # 6. Docker socket — powers the haops_container_* tools.
+    #
+    # Reports "skip", not "fail", when the socket is absent: that is the
+    # default state for any install running with Protection mode ON, and it
+    # must not drag `overall` down to issues_found. "fail" is reserved for a
+    # socket that is present but unusable, which IS a real fault.
+    if ctx.docker is not None and ctx.docker.available():
+        try:
+            containers = await ctx.docker.containers(all_containers=True)
+            running = sum(1 for c in containers if c.get("state") == "running")
+            checks["docker"] = {
+                "status": "ok",
+                "socket": ctx.docker.socket_path(),
+                "containers": len(containers),
+                "running": running,
+            }
+        except Exception as e:
+            checks["docker"] = {
+                "status": "fail",
+                "socket": ctx.docker.socket_path(),
+                "error": str(e)[:300],
+            }
+    else:
+        # Deliberately terser than DockerClient.unavailable_reason: this string
+        # is rendered in the sidebar Health tab, which truncates at 200 chars.
+        # The full remedy lives on the container tools' own responses.
+        checks["docker"] = {
+            "status": "skip",
+            "reason": (
+                "Not enabled (the default). Needs docker_api in the add-on "
+                "manifest + Protection mode OFF, then an add-on restart."
+            ),
+            "tools_unavailable": 3,
+        }
 
     # Summary
     all_ok = all(
