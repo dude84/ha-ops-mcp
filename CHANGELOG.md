@@ -1,3 +1,12 @@
+## 0.60.3
+
+Honesty fixes in the new ESPHome tool — both cases of reporting a value we hadn't actually established. Neither breaks anything; they make the output trustworthy.
+
+- **`has_api` / `has_ota` are now null, not false, for package-based configs.** A node that pulls remote packages defines `api:` and `ota:` *inside* the package, which we deliberately don't fetch — so their absence from the local file proves nothing, and `false` was a claim we couldn't support. Nodes with a plain local config still report a real boolean, and a new `uses_packages` flag says which situation you're in.
+- **`builder` reports `{checked: false}` when `include_builds=false`.** It previously said `available: false`, i.e. "the builder is missing", when the caller had simply asked us not to look.
+
+Verified against the live instance: `haops_tools_check` → `all_pass`, 15/15 groups including the new `esphome` group.
+
 ## 0.60.2
 
 More live-verification fallout, including one real bug in 0.60.0 and a documented "fact" that was simply wrong.

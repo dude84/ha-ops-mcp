@@ -546,3 +546,47 @@ async def test_legacy_builder_artifact_is_used_when_config_has_none(
     builds = result["nodes"][0]["builds"]
     assert builds[0]["location"] == "builder_data"
     assert builds[0]["path"].startswith("/data/build/")
+
+
+# ── Don't report what wasn't read ─────────────────────────────────────
+
+
+def test_package_based_config_reports_unknown_not_false(config_dir):
+    """`api:`/`ota:` live in the remote package, so False would be a lie."""
+    d = config_dir / "esphome"
+    d.mkdir(exist_ok=True)
+    path = d / "packaged.yaml"
+    path.write_text(
+        "esphome:\n  name: packaged\n\n"
+        "packages:\n  remote:\n    url: https://example.invalid/repo\n"
+    )
+
+    node = _parse_node(path)
+
+    assert node is not None
+    assert node["has_api"] is None
+    assert node["has_ota"] is None
+    assert node["uses_packages"] is True
+
+
+def test_plain_config_still_reports_false(esphome_dir):
+    path = esphome_dir / "plain.yaml"
+    path.write_text("esphome:\n  name: plain\n")
+
+    node = _parse_node(path)
+
+    assert node is not None
+    assert node["has_api"] is False
+    assert node["uses_packages"] is False
+
+
+@pytest.mark.asyncio
+async def test_skipping_builds_reports_unchecked_not_unavailable(
+    ctx, esphome_dir, mock_ws
+):
+    mock_ws.send_command.return_value = []
+
+    result = await haops_esphome_status(ctx, include_builds=False)
+
+    assert result["builder"] == {"checked": False}
+    assert "available" not in result["builder"]

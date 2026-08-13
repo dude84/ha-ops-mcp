@@ -148,6 +148,13 @@ def _expand_substitutions(value: str, subs: dict[str, Any]) -> str:
     return out
 
 
+def _has_block(data: dict[str, Any], key: str) -> bool | None:
+    """True/False for a top-level block, or None when it may be in a package."""
+    if key in data:
+        return True
+    return None if "packages" in data else False
+
+
 def _parse_node(path: Path) -> dict[str, Any] | None:
     """Read one node config. Returns None if it isn't an ESPHome node."""
     try:
@@ -201,8 +208,12 @@ def _parse_node(path: Path) -> dict[str, Any] | None:
         ),
         "platform": platform,
         "board": board,
-        "has_ota": "ota" in data,
-        "has_api": "api" in data,
+        # A node that pulls remote packages defines `api:` / `ota:` inside the
+        # package, which we do not fetch — so absence here proves nothing and
+        # `false` would be a lie. Report null instead.
+        "has_ota": _has_block(data, "ota"),
+        "has_api": _has_block(data, "api"),
+        "uses_packages": "packages" in data,
     }
 
 
@@ -552,7 +563,10 @@ async def haops_esphome_status(
     mapping = await _ha_mapping(ctx, nodes)
 
     builds: dict[str, list[dict[str, Any]]] = {}
-    builder: dict[str, Any] = {"available": False}
+    # Not "unavailable" — unchecked. Claiming the builder is missing when the
+    # caller asked us not to look is the same class of lie as reporting a field
+    # we never read.
+    builder: dict[str, Any] = {"checked": False}
     if include_builds:
         # Artifacts do NOT require Docker: current ESPHome versions build under
         # <config>/esphome/.esphome/build/. The socket only adds the legacy
@@ -588,7 +602,7 @@ async def haops_esphome_status(
         notes.append(
             f"Not adopted in HA (no esphome config entry): {', '.join(map(str, unmapped))}"
         )
-    if include_builds and not builder.get("available"):
+    if include_builds and not builder.get("available"):  # noqa: SIM102
         notes.append(f"{builder.get('impact')} {builder.get('reason')}")
 
     return {

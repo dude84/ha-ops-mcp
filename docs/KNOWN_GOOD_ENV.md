@@ -15,6 +15,26 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.60.2` — verified 2026-08-13 (**Poland HA** — first baseline with the ESPHome tools)
+
+Stack unchanged from the `v0.57.0` row below except macOS and Node: HA **2026.8.1**, Supervisor
+**2026.07.5**, HAOS **18.2**, Docker **29.6.2**, MariaDB schema **53**, Claude Code **2.1.226**,
+iTerm2 **3.6.11**, macOS **26.5.2** (build 25F84), Bun **1.3.14**, Node **v26.5.0**.
+
+- `haops_self_check` → `overall: ok`, `ha_ops_version: 0.60.2`, `docker: ok` (19/19 containers).
+- `haops_tools_check` → **`all_pass`, 15/15 groups, 0 broken tools** — first run including the new
+  `esphome` group (8 node configs parsed, builder container found). Live scale for reference:
+  1089 states, 1352 registry entities, 142 devices, 50 config entries (11 with
+  `supports_remove_device`), 2,088,704 `states` rows, refindex 1617 nodes / 2745 edges.
+- **Device registry is storage v3.2** on this instance (migrated 2026-08-05). Anything reading a
+  device's config entries must go through `storage_registry.device_config_entry_ids()` — see
+  HA_COMPATIBILITY.md. This is the first baseline verified against the post-split schema.
+- ESPHome toolchain reachable at `app_5c53de3b_esphome` (ESPHome **2026.7.4**). A live cold compile
+  of `pl-office-powerstrip` took **251 s** — hence the 110 s default timeout on
+  `haops_esphome_build`, which sits under the ~120 s MCP client limit so the call returns
+  "still compiling" instead of dying. Build artifacts land in
+  `/config/esphome/.esphome/build/<node>/` on this version, not the add-on's `/data/build`.
+
 ### `v0.58.0` — verified 2026-08-12 (**Poland HA**)
 
 Whole stack **identical to the `v0.57.0` row below** — HA 2026.8.1, Supervisor 2026.07.5, HAOS 18.2,
