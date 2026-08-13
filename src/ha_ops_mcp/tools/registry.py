@@ -28,6 +28,10 @@ _SUMMARY_FIELDS: dict[str, list[str]] = {
     "devices": [
         "id", "name", "name_by_user", "manufacturer", "model",
         "sw_version", "hw_version", "area_id", "disabled_by",
+        # HA 2026.8 (device registry storage v3.2): the plural `config_entries`
+        # list left storage in favour of these. Projecting them by default
+        # keeps "which integration owns this device" answerable from a summary.
+        "config_entry_id", "primary_config_entry", "composite_device_id",
     ],
     "entities": [
         "entity_id", "name", "original_name", "platform", "device_id",

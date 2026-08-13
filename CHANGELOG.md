@@ -1,3 +1,21 @@
+## 0.60.0
+
+**Device registry reads were broken on HA 2026.8 — found before shipping the upgrade.** Probing the live PL instance for the ESPHome work turned up something bigger: the device registry migrated to **storage version 3, minor 2** on 2026-08-05, and the plural `config_entries` list is **gone from storage**, replaced by singular `config_entry_id` / `config_subentry_id` plus `primary_config_entry`, `composite_device_id`, `split_at`.
+
+- `haops_device_remove` as shipped in 0.59.0 read only the plural list, so on 2026.8 it would have refused **every** device with "no config entry supports removal". `haops_device_info` returned `config_entries: null`, and the refindex silently stopped drawing device→config-entry edges.
+- The reason it went unnoticed: **HA's WebSocket payload still carries `config_entries`**, emitted by `DeviceEntry.dict_repr` and marked deprecated-but-kept. A compat shim on the API hides a storage break from anyone testing through the API — while a filesystem-first reader takes it head-on. Worth remembering as a category, not just this instance.
+- Fixed with `storage_registry.device_config_entry_ids()`, which accepts both shapes; every caller goes through it. It ignores `composite_primary_config_entry` on purpose: that names the pre-split composite's former primary, not an entry the record belongs to, so unlinking it would target the wrong thing.
+- `haops_device_info` now also reports `composite_device_id` / `split_at`, and the `devices` summary projection includes the new fields. Details and the verification in docs/HA_COMPATIBILITY.md.
+
+**New tools: `haops_esphome_status` and `haops_esphome_build`** — closes the last of the rename-session gaps. `/config/esphome/*.yaml` was reachable only through the generic config tools, which can say what a file contains but not which node maps to which HA device, whether it's online, or how big its firmware is.
+
+- `haops_esphome_status` maps every node config to its config entry, device, entity count and online state. Node parsing tolerates ESPHome's custom tags (`!secret`, `!lambda`, `!include`) and resolves `${substitutions}`; package fragments without an `esphome:` block are correctly not listed as nodes. The HA join is by **slug**, because case drifts between the config entry title and the device name (`pl-ir-blaster-down` vs `Pl-Ir-Blaster-Down`).
+- `haops_esphome_build` runs `esphome compile` inside the ESPHome add-on's own container over the Docker socket — borrowing its PlatformIO/xtensa toolchain rather than adding hundreds of MB to this image to duplicate an add-on the user already runs.
+- **`target_free_bytes` gives a fits/doesn't-fit verdict**, which is the point. The NOUS A5T (ESP8285, 1 MB) reported 372 KB free under Tasmota; its ESPHome image compiles to 483,296 bytes. That is a 110 KB overflow which otherwise only shows up as a failed flash — the tool now says so before anyone touches the device.
+- Two builder facts corrected against the live container, both previously assumed wrong in the backlog: build output is in **`/data/build/<node>/`** (the add-on's private volume, so invisible to our filesystem and reachable only over Docker — not `/config/esphome/.esphome/` as planned), and the artifact layout differs by framework (`.pioenvs/<node>/` for Arduino/ESP8266, `build/` for ESP-IDF/ESP32).
+- Timeouts abandon rather than kill, inherited from `haops_container_exec` — so the response says the compile is still running in the builder and a later call will report the finished artifact, instead of implying it stopped.
+- `haops_tools_check` gains an `esphome` group: node parsing (filesystem, always checkable) plus builder reachability. `skip` when there is no `esphome/` directory, `partial` when nodes parse but the builder is unreachable — half the tool still works in that state.
+
 ## 0.59.0
 
 Three gaps found during the PL plug-fleet rename, closed together. They came from one session that renamed ~90 entities across 22 plugs, so each is evidenced rather than speculative.

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ha_ops_mcp.server import registry
-from ha_ops_mcp.storage_registry import load_registry
+from ha_ops_mcp.storage_registry import device_config_entry_ids, load_registry
 
 if TYPE_CHECKING:
     from ha_ops_mcp.server import HaOpsContext
@@ -180,7 +180,11 @@ async def haops_device_info(
             **_summarize_device(dev, areas),
             "identifiers": dev.get("identifiers"),
             "connections": dev.get("connections"),
-            "config_entries": dev.get("config_entries"),
+            "config_entries": device_config_entry_ids(dev),
+            # HA 2026.8 splits one physical device into one record per config
+            # entry; these tie a split record back to its composite.
+            "composite_device_id": dev.get("composite_device_id"),
+            "split_at": dev.get("split_at"),
             "configuration_url": dev.get("configuration_url"),
         },
         "entities": linked,
@@ -326,7 +330,7 @@ async def haops_device_remove(
         entry_rows: list[dict[str, Any]] = []
         removable: list[str] = []
         caveats: list[str] = []
-        for entry_id in dev.get("config_entries") or []:
+        for entry_id in device_config_entry_ids(dev):
             entry = all_entries.get(entry_id, {})
             domain = entry.get("domain")
             supported = bool(entry.get("supports_remove_device"))
@@ -444,7 +448,7 @@ async def haops_device_remove(
     # yet at this point by definition.
     after = await _get_device_registry(ctx, fresh=True)
     still_there = next((d for d in after if d.get("id") == dev_id), None)
-    remaining = list(still_there.get("config_entries") or []) if still_there else []
+    remaining = device_config_entry_ids(still_there) if still_there else []
 
     await ctx.audit.log(
         tool="device_remove",

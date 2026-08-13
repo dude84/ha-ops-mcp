@@ -298,3 +298,103 @@ async def test_removal_is_audited(ctx, config_dir, mock_ws):
         "switch.plug_office_strip_1",
         "switch.plug_office_strip_2",
     ]
+
+
+# ── HA 2026.8 device registry v3.2 ────────────────────────────────────
+#
+# The registry split per integration: storage records carry a singular
+# `config_entry_id` (+ `primary_config_entry`, `composite_device_id`,
+# `split_at`) and the plural `config_entries` list survives only in the
+# WebSocket dict_repr as a deprecated compat field. Filesystem-first reads
+# therefore see the NEW shape while the WS fallback sees the old one, and this
+# tool has to work either way.
+
+DEVICE_V3 = {
+    "id": "dev_strip",
+    "name": "Office Strip",
+    "manufacturer": "NOUS",
+    "model": "A5T",
+    "config_entry_id": "entry_tasmota",
+    "primary_config_entry": "entry_tasmota",
+    "config_subentry_id": None,
+    "composite_device_id": None,
+    "split_at": None,
+}
+
+
+def test_entry_ids_from_the_v3_2_schema():
+    from ha_ops_mcp.storage_registry import device_config_entry_ids
+
+    assert device_config_entry_ids(DEVICE_V3) == ["entry_tasmota"]
+
+
+def test_entry_ids_from_the_legacy_schema():
+    from ha_ops_mcp.storage_registry import device_config_entry_ids
+
+    assert device_config_entry_ids(
+        {"config_entries": ["a", "b"]}
+    ) == ["a", "b"]
+
+
+def test_entry_ids_prefer_the_complete_legacy_list():
+    """The WS shape carries both; the plural list is the complete one."""
+    from ha_ops_mcp.storage_registry import device_config_entry_ids
+
+    assert device_config_entry_ids({
+        "config_entries": ["a", "b"],
+        "config_entry_id": "a",
+        "primary_config_entry": "a",
+    }) == ["a", "b"]
+
+
+def test_composite_primary_is_not_treated_as_an_owning_entry():
+    """It names the pre-split composite's former primary, not this record's."""
+    from ha_ops_mcp.storage_registry import device_config_entry_ids
+
+    assert device_config_entry_ids({
+        "config_entry_id": "entry_now",
+        "primary_config_entry": "entry_now",
+        "composite_primary_config_entry": "entry_before_split",
+    }) == ["entry_now"]
+
+
+def test_entry_ids_of_a_record_naming_none():
+    from ha_ops_mcp.storage_registry import device_config_entry_ids
+
+    assert device_config_entry_ids({"id": "d", "config_entries": []}) == []
+
+
+@pytest.mark.asyncio
+async def test_removal_works_against_the_v3_2_storage_shape(
+    ctx, config_dir, mock_ws
+):
+    """Regression: reading only `config_entries` refused every device on 2026.8."""
+    _seed(config_dir, devices=[DEVICE_V3], entities=ENTITIES)
+    mock_ws.send_command.side_effect = _ws_router(
+        [REMOVABLE_ENTRY], devices_after=[DEVICE_V3]
+    )
+
+    preview = await haops_device_remove(ctx, device="dev_strip")
+
+    assert "error" not in preview
+    assert preview["will_unlink_entries"] == ["entry_tasmota"]
+
+
+@pytest.mark.asyncio
+async def test_device_info_reports_split_fields(ctx, config_dir, mock_ws):
+    from ha_ops_mcp.tools.device import haops_device_info
+
+    split = {
+        **DEVICE_V3,
+        "composite_device_id": "composite_abc",
+        "split_at": "2026-08-05T17:58:43+00:00",
+    }
+    _seed(config_dir, devices=[split], entities=[])
+    ctx.rest.get.side_effect = None
+    ctx.rest.get.return_value = []
+
+    result = await haops_device_info(ctx, device="dev_strip")
+
+    assert result["device"]["config_entries"] == ["entry_tasmota"]
+    assert result["device"]["composite_device_id"] == "composite_abc"
+    assert result["device"]["split_at"] == "2026-08-05T17:58:43+00:00"

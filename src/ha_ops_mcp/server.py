@@ -443,6 +443,7 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
     import ha_ops_mcp.tools.device  # noqa: F401
     import ha_ops_mcp.tools.entity  # noqa: F401
     import ha_ops_mcp.tools.ergonomics  # noqa: F401
+    import ha_ops_mcp.tools.esphome  # noqa: F401
     import ha_ops_mcp.tools.helper  # noqa: F401
     import ha_ops_mcp.tools.refs  # noqa: F401
     import ha_ops_mcp.tools.registry  # noqa: F401

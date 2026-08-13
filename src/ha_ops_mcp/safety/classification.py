@@ -51,6 +51,10 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "container_logs": ("read", "container"),
     "device_info": ("read", "registry"),
     "device_remove": ("mutate", "registry"),
+    "esphome_status": ("read", "esphome"),
+    # Compiles in the ESPHome builder; writes only its build cache,
+    # touches no device and no HA state.
+    "esphome_build": ("mutate", "esphome"),
     "references": ("read", "references"),
     "refactor_check": ("read", "references"),
     "logbook": ("read", "system"),
@@ -156,6 +160,7 @@ _TYPE_LABELS: dict[str, str] = {
     "entity_rename": "rename",
     "entity_customize": "customize", "entities_assign_area": "assign area",
     "device_remove": "remove device",
+    "esphome_status": "esphome status", "esphome_build": "esphome build",
     "helper_create": "new helper", "helper_update": "edit helper",
     "helper_delete": "delete helper",
     "backup_revert": "revert", "backup_prune": "prune", "rollback": "rollback",

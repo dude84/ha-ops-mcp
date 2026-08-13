@@ -175,13 +175,53 @@ New HA OS installs default to **port 80** instead of 8123; existing installs are
 `run.sh` probes 8123 then 80 on the long-lived-token path. The Supervisor-token path
 (`http://supervisor/core`) is unaffected either way.
 
-### Device registry splits per integration — 2026.8 (not yet verified)
+### Device registry splits per integration — 2026.8 (VERIFIED 2026-08-13)
 
 A physical device delivered by more than one integration becomes **one device entry per
 integration** instead of a merged entry; entities migrate between them and HA raises a "replaced
 device" repair. Devices become restricted to a single config entry and at most one subentry.
 
-Nothing in ha-ops-mcp persists a `device_id`, so there is no stale state to migrate — every tool
-resolves devices at call time. But expect `haops_device_info`, `haops_registry_query`,
-`haops_entity_audit` and `haops_references` to report **more devices than before**, and expect
-duplicate-looking names. Re-verify these four after updating to 2026.8.
+Nothing in ha-ops-mcp persists a `device_id`, so there was no stale state to migrate — every tool
+resolves devices at call time. What **did** break is the record shape.
+
+Verified against the live PL instance (HA 2026.8.1, migration ran 2026-08-05, leaving a
+`core.device_registry.<ts>.migration_backup` beside the file):
+
+- `.storage/core.device_registry` is now **version 3, minor 2**. The plural **`config_entries`
+  list is gone from storage**, replaced by singular `config_entry_id` + `config_subentry_id`, plus
+  `primary_config_entry`, `composite_device_id`, `composite_primary_config_entry`, `split_at` and
+  `has_composite_identifiers`. On that instance: 142/142 devices carry `config_entry_id`, 3 are
+  splits (`split_at` + `composite_device_id` set).
+- **The WebSocket payload still carries `config_entries`.** `DeviceEntry.dict_repr` emits it and
+  `config_entries_subentries` with a comment marking both deprecated-and-kept. So the *same device*
+  reads differently depending on which tier answered — and since this server is filesystem-first by
+  design, the default path is the one that changed.
+
+That asymmetry is a trap worth naming: a compat shim on the API can hide a storage-schema break
+from anyone testing through the API, while a filesystem-first reader takes it head-on. Handled by
+`storage_registry.device_config_entry_ids()`, which accepts both shapes; every caller goes through
+it (`haops_device_info`, `haops_device_remove`, the refindex device→config-entry edges). It
+deliberately ignores `composite_primary_config_entry`, which names the pre-split composite's
+former primary rather than an entry the record belongs to.
+
+Also expect `haops_device_info`, `haops_registry_query`, `haops_entity_audit` and
+`haops_references` to report **more devices than before**, with duplicate-looking names.
+
+### ESPHome add-on container (used by `haops_esphome_*`)
+
+Not an HA API, but an external surface with the same "silently moves" risk, so it belongs on this
+list. Verified 2026-08-13 against `ghcr.io/esphome/esphome-hassio:2026.7.4`:
+
+| Fact | Value |
+|---|---|
+| Container name | `app_<slug>_esphome` (matched on name/image containing `esphome`) |
+| CLI | `/usr/local/bin/esphome` |
+| Node configs | `/config/esphome/*.yaml` — the same path we see |
+| Build output | **`/data/build/<node>/`** — the add-on's private volume, NOT `/config/esphome/.esphome/` |
+| Artifacts (Arduino/ESP8266) | `.pioenvs/<node>/firmware{,.ota,.factory}.bin` |
+| Artifacts (ESP-IDF/ESP32) | `build/firmware{,.ota,.factory}.bin` |
+| Size report | PlatformIO's `Flash: [== ] xx.x% (used A bytes from B bytes)` on stdout |
+
+The build path is the one that matters: because it is under `/data`, build artifacts are
+unreachable from our container's filesystem and readable only over the Docker socket. Anything
+that wants firmware sizes therefore inherits the Protection-mode opt-in.

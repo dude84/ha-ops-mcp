@@ -88,7 +88,10 @@ async def _index_registries(index: RefIndex, ctx: HaOpsContext) -> None:
     WebSocket registry when the .storage file predates a write this session
     made. The index is rebuilt per request, so it inherits that freshness.
     """
-    from ha_ops_mcp.storage_registry import load_registry
+    from ha_ops_mcp.storage_registry import (
+        device_config_entry_ids,
+        load_registry,
+    )
 
     async def _load_registry(_ctx: HaOpsContext, name: str) -> list[dict[str, Any]]:
         return (await load_registry(_ctx, name)).records
@@ -196,7 +199,9 @@ async def _index_registries(index: RefIndex, ctx: HaOpsContext) -> None:
                 location=".storage/core.device_registry",
             ))
         # config_entry → device (one device can be provided by multiple entries)
-        entry_ids = device.get("config_entries") or []
+        # Schema-agnostic: HA 2026.8 replaced the plural list with a singular
+        # config_entry_id in storage (see storage_registry).
+        entry_ids = device_config_entry_ids(device)
         if isinstance(entry_ids, list):
             for entry_id in entry_ids:
                 if not entry_id:

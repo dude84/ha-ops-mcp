@@ -1,4 +1,4 @@
-# Tools (84)
+# Tools (86)
 
 All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 
@@ -55,6 +55,13 @@ All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 | `haops_registry_query` | Read | Generic access to `.storage/core.*` registries: devices, entities, areas, floors, config_entries. Filter, project, paginate. Reports `provenance` (file vs live, file age) and auto-reads live when the `.storage` file predates a write this session made; `fresh=true` forces live. |
 | `haops_device_info` | Read | Device lookup by ID or name — full record + linked entities with state + area resolution. |
 | `haops_device_remove` | Write | Two-phase device deletion via the config-entry unlink path (what the UI's Delete button does). Preview lists the entities that disappear and `supports_remove_device` per entry, naming the working route when an integration doesn't support it (ZHA → `zha.remove`). **Irreversible** — not rollbackable. |
+
+## ESPHome tools (`haops_esphome_*`)
+
+| Tool | Type | Description |
+|---|---|---|
+| `haops_esphome_status` | Read | Node inventory: each `esphome/*.yaml` mapped to its HA config entry, device, entity count and online state, plus the last build's artifacts and sizes. Nodes/mapping are filesystem+registry; **artifacts need the Docker socket** (they live in `/data/build/` inside the ESPHome add-on's private volume, not under `/config`). Degrades with the reason, not silently. |
+| `haops_esphome_build` | Write | Compile a node by running `esphome compile` inside the ESPHome add-on's container — borrowing its PlatformIO/xtensa toolchain instead of shipping one. Reports artifacts, PlatformIO's flash/RAM usage, and with `target_free_bytes` a fits/doesn't-fit verdict against the device's free program space. Touches no device; writes only the builder's cache. Slow — a timeout abandons (not kills) the compile, so calling again later reports the finished artifact. |
 
 ## Helper tools (`haops_helper_*`)
 

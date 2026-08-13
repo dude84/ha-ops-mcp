@@ -809,6 +809,63 @@ async def _check_helpers(ctx: HaOpsContext) -> dict[str, Any]:
     }
 
 
+async def _check_esphome(ctx: HaOpsContext) -> dict[str, Any]:
+    """Probe the ESPHome node inventory and the builder container.
+
+    Reports ``skip`` when there is no `esphome/` directory — plenty of
+    installs have no ESPHome nodes, and that must not block ``all_pass``.
+    Node parsing is filesystem-only, so it is checked even when the Docker
+    socket (needed for build artifacts) is unavailable; a missing socket is
+    reported as a partial, since half the tool still works.
+    """
+    from pathlib import Path as _Path
+
+    from ha_ops_mcp.tools.esphome import _find_builder, _node_configs
+
+    tools_affected = ["haops_esphome_status", "haops_esphome_build"]
+    node_dir = _Path(ctx.config.filesystem.config_root) / "esphome"
+
+    if not node_dir.is_dir():
+        return {
+            "status": "skip",
+            "tools_affected": tools_affected,
+            "reason": f"No {node_dir} directory — no ESPHome nodes on this instance.",
+            "tests": {},
+        }
+
+    checks: dict[str, Any] = {}
+    try:
+        nodes = _node_configs(ctx)
+        checks["node_configs"] = {
+            "ok": True,
+            "count": len(nodes),
+            "unparseable": [n["file"] for n in nodes if n.get("error")],
+        }
+    except Exception as e:
+        checks["node_configs"] = {"ok": False, "error": str(e)[:200]}
+
+    container, err = await _find_builder(ctx)
+    checks["builder"] = (
+        {"ok": True, "container": container}
+        if container
+        else {
+            "ok": False,
+            "error": (err or "")[:300],
+            "note": (
+                "Node inventory and HA mapping still work; build artifacts and "
+                "haops_esphome_build do not."
+            ),
+        }
+    )
+
+    all_ok = all(c.get("ok") for c in checks.values())
+    return {
+        "status": "pass" if all_ok else "partial",
+        "tools_affected": tools_affected,
+        "tests": checks,
+    }
+
+
 async def _check_refs(ctx: HaOpsContext) -> dict[str, Any]:
     """Build the reference index and confirm the ref tools work.
 
@@ -871,6 +928,7 @@ async def haops_tools_check(ctx: HaOpsContext) -> dict[str, Any]:
     results["supervisor"] = await _check_supervisor(ctx)
     results["shell"] = await _check_shell(ctx)
     results["docker"] = await _check_docker(ctx)
+    results["esphome"] = await _check_esphome(ctx)
     results["refs"] = await _check_refs(ctx)
     results["debugger"] = await _check_debugger(ctx)
     results["helpers"] = await _check_helpers(ctx)

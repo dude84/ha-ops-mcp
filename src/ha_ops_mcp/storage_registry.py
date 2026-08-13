@@ -150,6 +150,44 @@ class RegistryRead:
         return out
 
 
+def device_config_entry_ids(device: dict[str, Any]) -> list[str]:
+    """Config entry ids that own a device record, across both schemas.
+
+    HA 2026.8 migrated the device registry to storage version 3.2 and split it
+    per integration: a physical device that belonged to several config entries
+    becomes several device records, each carrying a **singular**
+    `config_entry_id` (plus `primary_config_entry`, and `composite_device_id` /
+    `split_at` linking it back to the pre-split composite).
+
+    The plural `config_entries` list is gone from storage — but it is still
+    emitted by the WebSocket `dict_repr`, explicitly as a deprecated
+    back-compat field. So the same device reads differently depending on which
+    tier answered: the filesystem sees the new shape, the WS fallback the old
+    one. Anything asking "which entries own this device" has to accept both,
+    which is what this function is for.
+
+    `composite_primary_config_entry` is deliberately NOT included: it names the
+    pre-split composite's former primary entry, not an entry this record
+    belongs to, so unlinking it would target the wrong thing.
+
+    Args:
+        device: A device registry record from either tier.
+
+    Returns:
+        Entry ids, de-duplicated, order-stable. Empty if the record names none.
+    """
+    legacy = device.get("config_entries")
+    if isinstance(legacy, list) and legacy:
+        return [str(x) for x in legacy if x]
+
+    out: list[str] = []
+    for key in ("config_entry_id", "primary_config_entry"):
+        value = device.get(key)
+        if value and str(value) not in out:
+            out.append(str(value))
+    return out
+
+
 def _file_age(path: Path) -> float | None:
     try:
         return max(0.0, time.time() - path.stat().st_mtime)
