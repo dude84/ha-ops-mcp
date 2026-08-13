@@ -351,7 +351,10 @@ async def test_build_says_a_timeout_was_abandoned_not_killed(
 
     assert result["timed_out"] is True
     assert "ABANDONED, not killed" in result["note"]
-    assert "Call again later" in result["note"]
+    assert "Call again in a minute" in result["note"]
+    # Artifacts shown after a timeout are from the previous build, and the
+    # response has to say so rather than implying this build produced them.
+    assert "PREVIOUS build" in result["note"]
 
 
 @pytest.mark.asyncio
@@ -450,3 +453,96 @@ def test_self_referential_substitution_does_not_spin(config_dir):
     node = _parse_node(path)
 
     assert node is not None  # terminated rather than hanging
+
+
+# ── Build artifacts live in two places ────────────────────────────────
+#
+# Established on the live add-on: current ESPHome versions build into
+# <config>/esphome/.esphome/build/ (readable with no Docker), while older
+# versions used /data/build/ inside the add-on's private volume. The old tree
+# survives an upgrade, so both are checked — and after a fresh compile the
+# stale copy must not win.
+
+
+def _seed_fs_artifact(config_dir: Path, node: str, size: int, mtime: int) -> Path:
+    import os
+
+    d = (
+        config_dir / "esphome" / ".esphome" / "build" / node / ".pioenvs" / node
+    )
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / "firmware.ota.bin"
+    path.write_bytes(b"\0" * size)
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+@pytest.mark.asyncio
+async def test_artifacts_are_found_without_docker(ctx, esphome_dir, mock_ws):
+    _seed_fs_artifact(esphome_dir.parent, "pl-office-powerstrip", 483296, 1786500000)
+    ctx.docker = None
+    mock_ws.send_command.return_value = []
+
+    result = await haops_esphome_status(ctx)
+
+    builds = result["nodes"][0]["builds"]
+    assert builds[0]["size_bytes"] == 483296
+    assert builds[0]["location"] == "config"
+    # The socket is still reported as missing, but scoped to what it costs.
+    assert result["builder"]["available"] is False
+    assert "Compiling" in result["builder"]["impact"]
+
+
+@pytest.mark.asyncio
+async def test_fresh_config_artifact_beats_stale_builder_copy(
+    ctx, esphome_dir, mock_ws
+):
+    """The bug this fixes: reporting /data/build after a newer compile."""
+    _seed_fs_artifact(esphome_dir.parent, "pl-office-powerstrip", 400, 1786500000)
+
+    async def _run(container, cmd, **kwargs):
+        return {
+            "exit_code": 0,
+            # Older mtime, different size — must lose.
+            "stdout": (
+                "pl-office-powerstrip|.pioenvs/pl-office-powerstrip/"
+                "firmware.ota.bin|999999:1786000000\n"
+            ),
+            "stderr": "",
+        }
+
+    ctx.docker = _docker(_run)
+    mock_ws.send_command.return_value = []
+
+    result = await haops_esphome_status(ctx)
+
+    ota = [
+        a for a in result["nodes"][0]["builds"] if a["artifact"] == "firmware.ota.bin"
+    ]
+    assert len(ota) == 1
+    assert ota[0]["size_bytes"] == 400
+    assert ota[0]["location"] == "config"
+
+
+@pytest.mark.asyncio
+async def test_legacy_builder_artifact_is_used_when_config_has_none(
+    ctx, esphome_dir, mock_ws
+):
+    async def _run(container, cmd, **kwargs):
+        return {
+            "exit_code": 0,
+            "stdout": (
+                "pl-office-powerstrip|.pioenvs/pl-office-powerstrip/"
+                "firmware.ota.bin|483296:1786000000\n"
+            ),
+            "stderr": "",
+        }
+
+    ctx.docker = _docker(_run)
+    mock_ws.send_command.return_value = []
+
+    result = await haops_esphome_status(ctx)
+
+    builds = result["nodes"][0]["builds"]
+    assert builds[0]["location"] == "builder_data"
+    assert builds[0]["path"].startswith("/data/build/")

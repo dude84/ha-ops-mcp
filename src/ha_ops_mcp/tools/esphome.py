@@ -19,14 +19,21 @@ socket, not here: bundling PlatformIO plus the xtensa toolchain to duplicate an
 add-on the user already runs would add hundreds of MB to an already-large image.
 Borrow the toolchain, don't ship it.
 
-Two facts about the builder that are not guessable and cost an afternoon to
-find:
+Two facts about the builder that are not guessable, both established by
+probing the live add-on (2026-08-13, ESPHome 2026.7.4):
 
-- Build output lives in **`/data/build/<node>/`** inside the ESPHome container —
-  the add-on's private volume — NOT in `/config/esphome/.esphome/build`. So
-  artifacts are invisible to our filesystem and readable only through Docker.
+- Build output lands in **two** places depending on when the node was last
+  built. Current versions write `<config>/esphome/.esphome/build/<node>/`,
+  which is under the config root and so readable *without* Docker. Older
+  versions wrote `/data/build/<node>/` — the add-on's private volume, visible
+  only through the socket — and that tree survives an upgrade. Both are
+  checked, newest mtime wins; reporting a stale artifact after a fresh compile
+  would be worse than reporting none.
 - The artifact layout differs by framework: Arduino/ESP8266 puts them in
   `.pioenvs/<node>/firmware*.bin`, ESP-IDF/ESP32 in `build/firmware*.bin`.
+
+So only *compiling* actually needs the Docker socket. Sizes and artifact paths
+for a recently-built node are plain filesystem reads.
 """
 
 from __future__ import annotations
@@ -55,6 +62,12 @@ _SKIP_NAMES = frozenset({"secrets.yaml", "secrets.yml"})
 # Platform keys that carry a `board:`. Covers ESP8266/ESP32 plus LibreTiny and
 # RP2040 so a BK7231/RTL8710 node isn't reported as "unknown platform".
 _PLATFORM_KEYS = ("esp8266", "esp32", "rp2040", "bk72xx", "rtl87xx", "host")
+
+# Where the add-on used to put build output: its own private volume, which is
+# invisible to our filesystem and reachable only over Docker. Current versions
+# build under <config>/esphome/.esphome/build/ instead, but the old tree
+# survives an upgrade, so a node not rebuilt since then only appears here.
+_LEGACY_BUILD_DIR = "/data/build"
 
 # Artifact locations, in the order we prefer to report them. `.pioenvs` is the
 # Arduino/PlatformIO layout, `build/` the ESP-IDF one.
@@ -353,13 +366,46 @@ async def _find_builder(ctx: HaOpsContext) -> tuple[str | None, str | None]:
     return str(running[0]["name"]), None
 
 
-async def _artifacts(
+def _artifacts_filesystem(
+    ctx: HaOpsContext, nodes: list[str]
+) -> dict[str, list[dict[str, Any]]]:
+    """Stat build artifacts visible on OUR filesystem, no Docker involved.
+
+    Current ESPHome versions build into `<config>/esphome/.esphome/build/<node>/`,
+    which is under the config root and therefore readable directly. That makes
+    firmware sizes answerable with no Protection-mode opt-in at all — only
+    *compiling* needs the socket.
+    """
+    root = Path(ctx.config.filesystem.config_root) / _NODE_DIR / ".esphome" / "build"
+    out: dict[str, list[dict[str, Any]]] = {}
+    if not root.is_dir():
+        return out
+    for node in nodes:
+        for pattern in _ARTIFACT_GLOBS:
+            path = root / node / pattern.format(node=node)
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            out.setdefault(node, []).append({
+                "artifact": path.name,
+                "path": str(path),
+                "size_bytes": stat.st_size,
+                "mtime_epoch": int(stat.st_mtime),
+                "location": "config",
+            })
+    return out
+
+
+async def _artifacts_container(
     ctx: HaOpsContext, container: str, nodes: list[str]
 ) -> dict[str, list[dict[str, Any]]]:
-    """Stat the build artifacts for each node, in one exec.
+    """Stat build artifacts inside the builder's private `/data/build`.
 
-    One `sh -c` for all nodes rather than one per node: each exec is three
-    Engine round-trips, and this is a read for a status report.
+    Older ESPHome add-on versions built here, and the directory survives an
+    upgrade, so a node whose last build predates the change is only visible
+    this way. One `sh -c` covers every node — each exec is three Engine
+    round-trips and this is a read for a status report.
     """
     if not nodes:
         return {}
@@ -369,7 +415,7 @@ async def _artifacts(
         for pattern in _ARTIFACT_GLOBS:
             rel = pattern.format(node=node)
             lines.append(
-                f'p="/data/build/{node}/{rel}"; '
+                f'p="{_LEGACY_BUILD_DIR}/{node}/{rel}"; '
                 f'[ -f "$p" ] && printf "%s|%s|%s\\n" '
                 f'"{node}" "{rel}" "$(stat -c %s:%Y "$p")"'
             )
@@ -397,11 +443,44 @@ async def _artifacts(
             continue
         out.setdefault(node, []).append({
             "artifact": rel.rsplit("/", 1)[-1],
-            "path": f"/data/build/{node}/{rel}",
+            "path": f"{_LEGACY_BUILD_DIR}/{node}/{rel}",
             "size_bytes": size,
             "mtime_epoch": mtime,
+            "location": "builder_data",
         })
     return out
+
+
+async def _artifacts(
+    ctx: HaOpsContext, container: str | None, nodes: list[str]
+) -> dict[str, list[dict[str, Any]]]:
+    """Build artifacts per node, newest wins across both build locations.
+
+    Both directories can hold a copy of the same artifact — the add-on moved
+    its build path and left the old tree behind. Reporting the stale one after
+    a fresh compile is worse than reporting nothing, so entries are keyed by
+    artifact name and the newest mtime wins.
+    """
+    merged: dict[str, dict[str, dict[str, Any]]] = {}
+
+    for source in (
+        _artifacts_filesystem(ctx, nodes),
+        await _artifacts_container(ctx, container, nodes) if container else {},
+    ):
+        for node, found in source.items():
+            slot = merged.setdefault(node, {})
+            for item in found:
+                existing = slot.get(item["artifact"])
+                if existing is None or item["mtime_epoch"] > existing["mtime_epoch"]:
+                    slot[item["artifact"]] = item
+
+    return {
+        node: sorted(
+            items.values(),
+            key=lambda a: (-a["mtime_epoch"], str(a["artifact"])),
+        )
+        for node, items in merged.items()
+    }
 
 
 # ── haops_esphome_status ───────────────────────────────────────────────
@@ -418,12 +497,14 @@ async def _artifacts(
         "Parameters: node (string, optional — restrict to one node name or "
         "yaml filename), include_builds (bool, default true — stat build "
         "artifacts, needs the Docker socket). "
-        "Node configs come from <config>/esphome/*.yaml (filesystem, always "
-        "available). BUILD ARTIFACTS NEED DOCKER: they live in /data/build/ "
-        "inside the ESPHome add-on's own container — its private volume — not "
-        "under /config, so they are unreachable without 'docker_api: true' + "
-        "Protection mode off. Without it the tool still reports nodes and HA "
-        "mapping, with builds marked unavailable and the reason. "
+        "Everything here is a filesystem + registry read and needs NO special "
+        "access: node configs from <config>/esphome/*.yaml, and artifacts from "
+        "<config>/esphome/.esphome/build/ where current ESPHome versions build. "
+        "The Docker socket adds only the legacy /data/build tree inside the "
+        "add-on's private volume (where older versions built, and where a node "
+        "not rebuilt since still lives); when both hold the same artifact the "
+        "newest wins. Compiling — haops_esphome_build — is the part that does "
+        "need the socket. "
         "Returns: {nodes: [{node, file, platform, board, ha: {device_id, "
         "online, entity_count, ...}, builds: [{artifact, size_bytes, ...}]}], "
         "count, builder, notes}."
@@ -473,14 +554,28 @@ async def haops_esphome_status(
     builds: dict[str, list[dict[str, Any]]] = {}
     builder: dict[str, Any] = {"available": False}
     if include_builds:
+        # Artifacts do NOT require Docker: current ESPHome versions build under
+        # <config>/esphome/.esphome/build/. The socket only adds the legacy
+        # /data/build tree, and only compiling truly needs it — so a missing
+        # socket downgrades coverage rather than removing the feature.
         container, err = await _find_builder(ctx)
-        if container:
-            builder = {"available": True, "container": container}
-            builds = await _artifacts(
-                ctx, container, [str(n["node"]) for n in nodes if n.get("node")]
-            )
-        else:
-            builder = {"available": False, "reason": err}
+        builder = (
+            {"available": True, "container": container}
+            if container
+            else {
+                "available": False,
+                "reason": err,
+                "impact": (
+                    "Compiling (haops_esphome_build) is unavailable. Artifacts "
+                    "built by current ESPHome versions are still reported from "
+                    f"the config dir; only the legacy {_LEGACY_BUILD_DIR} tree "
+                    "is out of reach."
+                ),
+            }
+        )
+        builds = await _artifacts(
+            ctx, container, [str(n["node"]) for n in nodes if n.get("node")]
+        )
 
     for entry in nodes:
         entry["ha"] = mapping.get(_slug(str(entry.get("node") or "")))
@@ -494,7 +589,7 @@ async def haops_esphome_status(
             f"Not adopted in HA (no esphome config entry): {', '.join(map(str, unmapped))}"
         )
     if include_builds and not builder.get("available"):
-        notes.append(str(builder.get("reason")))
+        notes.append(f"{builder.get('impact')} {builder.get('reason')}")
 
     return {
         "nodes": nodes,
@@ -559,13 +654,16 @@ def _fit_verdict(
         "Parameters: node (string, required — node name or yaml filename), "
         "target_free_bytes (int, optional — the target's free program space; "
         "when given, the response includes a fits/doesn't-fit verdict with the "
-        "margin), timeout (int seconds, default 600). "
+        "margin), timeout (int seconds, default 110). "
         "PASS target_free_bytes for a flash-tight device: a NOUS A5T (1 MB) "
         "reported 372 KB free under Tasmota while its ESPHome image is ~483 KB "
         "— that is a doesn't-fit that only shows up as a failed flash otherwise. "
-        "SLOW: a cold build takes minutes. On timeout the compile is ABANDONED, "
-        "not killed — it keeps running in the builder, so simply call again "
-        "later and it will report the finished artifact. "
+        "SLOW: a cold build takes minutes, which is longer than most MCP "
+        "clients wait (commonly ~120s). The default timeout sits UNDER that on "
+        "purpose, so you get a real response — 'still compiling' — instead of a "
+        "dead call. On timeout the compile is ABANDONED, not killed: it keeps "
+        "running in the builder, so call again and it reports the finished "
+        "artifact. Raise timeout only if your client's limit is higher. "
         "Does not touch any device: it writes only to the builder's build "
         "cache. Flashing is a separate, deliberate act (ESPHome UI, or OTA). "
         "Requires the Docker socket ('docker_api: true' + Protection mode off). "
@@ -585,8 +683,12 @@ def _fit_verdict(
         },
         "timeout": {
             "type": "integer",
-            "description": "Seconds to wait for the compile (default 600)",
-            "default": 600,
+            "description": (
+                "Seconds to wait (default 110 — under the usual MCP client "
+                "limit, so a long build returns 'still compiling' rather than "
+                "killing the call)"
+            ),
+            "default": 110,
         },
     },
 )
@@ -594,7 +696,7 @@ async def haops_esphome_build(
     ctx: HaOpsContext,
     node: str,
     target_free_bytes: int | None = None,
-    timeout: int = 600,
+    timeout: int = 110,
 ) -> dict[str, Any]:
     configs = _node_configs(ctx)
     wanted = _slug(node.removesuffix(".yaml").removesuffix(".yml"))
@@ -667,8 +769,9 @@ async def haops_esphome_build(
         response["timed_out"] = True
         response["note"] = (
             f"Compile exceeded {timeout}s and was ABANDONED, not killed — it "
-            "is still running inside the builder. Call again later; the "
-            "artifact list will show the finished firmware."
+            "is still running inside the builder. Call again in a minute or "
+            "two; the artifact list will show the finished firmware. Any "
+            "artifacts listed above are from the PREVIOUS build."
         )
     if ota and not target_free_bytes:
         response["hint"] = (

@@ -60,8 +60,8 @@ All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 
 | Tool | Type | Description |
 |---|---|---|
-| `haops_esphome_status` | Read | Node inventory: each `esphome/*.yaml` mapped to its HA config entry, device, entity count and online state, plus the last build's artifacts and sizes. Nodes/mapping are filesystem+registry; **artifacts need the Docker socket** (they live in `/data/build/` inside the ESPHome add-on's private volume, not under `/config`). Degrades with the reason, not silently. |
-| `haops_esphome_build` | Write | Compile a node by running `esphome compile` inside the ESPHome add-on's container — borrowing its PlatformIO/xtensa toolchain instead of shipping one. Reports artifacts, PlatformIO's flash/RAM usage, and with `target_free_bytes` a fits/doesn't-fit verdict against the device's free program space. Touches no device; writes only the builder's cache. Slow — a timeout abandons (not kills) the compile, so calling again later reports the finished artifact. |
+| `haops_esphome_status` | Read | Node inventory: each `esphome/*.yaml` mapped to its HA config entry, device, entity count and online state, plus the last build's artifacts and sizes. All filesystem+registry — **no special access needed**, including artifacts (current ESPHome builds land in `<config>/esphome/.esphome/build/`). The Docker socket only adds the legacy `/data/build/` tree from older add-on versions; when both hold the same artifact the newest wins. |
+| `haops_esphome_build` | Write | Compile a node by running `esphome compile` inside the ESPHome add-on's container — borrowing its PlatformIO/xtensa toolchain instead of shipping one. Reports artifacts, PlatformIO's flash/RAM usage, and with `target_free_bytes` a fits/doesn't-fit verdict against the device's free program space. Touches no device; writes only the builder's cache. Slow — the default timeout (110s) sits under the usual MCP client limit so a long build returns "still compiling" instead of a dead call; the compile is abandoned, not killed, so calling again reports the finished artifact. |
 
 ## Helper tools (`haops_helper_*`)
 

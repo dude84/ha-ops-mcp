@@ -217,11 +217,18 @@ list. Verified 2026-08-13 against `ghcr.io/esphome/esphome-hassio:2026.7.4`:
 | Container name | `app_<slug>_esphome` (matched on name/image containing `esphome`) |
 | CLI | `/usr/local/bin/esphome` |
 | Node configs | `/config/esphome/*.yaml` — the same path we see |
-| Build output | **`/data/build/<node>/`** — the add-on's private volume, NOT `/config/esphome/.esphome/` |
+| Build output (current) | **`/config/esphome/.esphome/build/<node>/`** — under the config root, so readable with no Docker |
+| Build output (legacy) | `/data/build/<node>/` — the add-on's private volume, Docker-only; survives an upgrade |
 | Artifacts (Arduino/ESP8266) | `.pioenvs/<node>/firmware{,.ota,.factory}.bin` |
 | Artifacts (ESP-IDF/ESP32) | `build/firmware{,.ota,.factory}.bin` |
 | Size report | PlatformIO's `Flash: [== ] xx.x% (used A bytes from B bytes)` on stdout |
 
-The build path is the one that matters: because it is under `/data`, build artifacts are
-unreachable from our container's filesystem and readable only over the Docker socket. Anything
-that wants firmware sizes therefore inherits the Protection-mode opt-in.
+The build path is the one that matters, and it **moved**. Older add-on versions built into the
+add-on's private `/data/build`, unreachable from our filesystem; current versions build under the
+config root, where a plain file read gets the firmware size. Both trees can hold a copy of the same
+artifact — the old one is not cleaned up on upgrade — so `haops_esphome_status` checks both and lets
+the newest mtime win. Reporting a stale artifact right after a fresh compile is worse than
+reporting none, and that is exactly what a `/data`-only reader did.
+
+Consequence: only *compiling* needs the Protection-mode opt-in. Firmware sizes for a
+recently-built node do not.

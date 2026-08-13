@@ -1,3 +1,11 @@
+## 0.60.2
+
+More live-verification fallout, including one real bug in 0.60.0 and a documented "fact" that was simply wrong.
+
+- **`haops_esphome_status` reported stale artifacts.** ESPHome's build path moved: current versions build into `<config>/esphome/.esphome/build/<node>/`, older ones into `/data/build/<node>/` inside the add-on's private volume. 0.60.0 looked only at `/data/build`, and the old tree is not cleaned up on upgrade — so after a successful compile the tool reported the *previous* build's artifacts. Here the sizes happened to be identical, which is exactly how this kind of bug survives review. Both locations are now checked and the newest mtime wins, with a `location` field naming which tree each artifact came from.
+- **Artifacts no longer need Docker.** Because the current build path is under the config root, firmware sizes are a plain file read. The socket now only adds the legacy tree, and only `haops_esphome_build` (compiling) genuinely requires it — so a status call on a Protection-mode-on install gets real data with a scoped `impact` note instead of "unavailable". The claim in 0.60.0's docs and CHANGELOG that build output is unreachable without Docker was wrong, and is corrected in HA_COMPATIBILITY.md.
+- **Default build timeout 600s → 110s.** MCP clients commonly give up at ~120s, so the old default guaranteed the *client* killed the call before the tool could answer — the caller got nothing, even though the compile was still running fine. 110s returns a real "still compiling, call again" response instead. Verified against a live cold build that took 251s. The response also now says that any artifacts listed alongside a timeout are from the previous build.
+
 ## 0.60.1
 
 Two fixes from verifying 0.60.0 against the live instance — both found by reading the tool's own output rather than by a failure.
