@@ -283,26 +283,26 @@ async def _check_registries(ctx: HaOpsContext) -> dict[str, Any]:
     registry means haops_registry_query for that registry won't work
     (though WS fallback may still succeed at runtime for some types).
     """
-    from ha_ops_mcp.tools.registry import _REGISTRIES
+    from ha_ops_mcp.storage_registry import REGISTRY_SPECS
 
     checks: dict[str, Any] = {}
-    for name, spec in _REGISTRIES.items():
-        path = Path(ctx.config.filesystem.config_root) / spec["file"]
+    for name, spec in REGISTRY_SPECS.items():
+        path = Path(ctx.config.filesystem.config_root) / spec.file
         if not path.is_file():
             checks[name] = {
-                "ok": bool(spec.get("ws_command")),
+                "ok": bool(spec.ws_command),
                 "file": str(path),
                 "exists": False,
                 "note": (
-                    f"File missing — will try WS fallback ({spec['ws_command']})"
-                    if spec.get("ws_command")
+                    f"File missing — will try WS fallback ({spec.ws_command})"
+                    if spec.ws_command
                     else "File missing and no WS fallback — registry unavailable"
                 ),
             }
             continue
         try:
             data = json.loads(path.read_text())
-            records = data.get("data", {}).get(spec["data_key"], [])
+            records = data.get("data", {}).get(spec.data_key, [])
             checks[name] = {
                 "ok": isinstance(records, list),
                 "file": str(path),
@@ -315,12 +315,40 @@ async def _check_registries(ctx: HaOpsContext) -> dict[str, Any]:
                 "error": str(e)[:200],
             }
 
+    # haops_device_remove needs the LIVE entry list: supports_remove_device is
+    # a runtime capability of the loaded integration and is absent from
+    # .storage/core.config_entries, so the file cannot answer it.
+    try:
+        from ha_ops_mcp.tools.device import _config_entries_by_id
+        entries = await _config_entries_by_id(ctx)
+        checks["config_entries_live"] = {
+            # The command answering at all is the signal; an instance can
+            # legitimately report zero entries (and the test fixtures do).
+            "ok": True,
+            "command": "config_entries/get",
+            "count": len(entries),
+            "removable_device_entries": sum(
+                1 for e in entries.values() if e.get("supports_remove_device")
+            ),
+        }
+    except Exception as e:
+        checks["config_entries_live"] = {
+            "ok": False,
+            "command": "config_entries/get",
+            "error": str(e)[:200],
+            "note": (
+                "haops_device_remove cannot check per-entry removability "
+                "without this."
+            ),
+        }
+
     all_ok = all(c.get("ok") for c in checks.values())
     return {
         "status": "pass" if all_ok else "partial",
         "tools_affected": [
             "haops_registry_query",
             "haops_device_info",
+            "haops_device_remove",
             "haops_entity_list",
             "haops_entity_audit",
             "haops_entity_find",

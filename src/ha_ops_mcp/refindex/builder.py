@@ -83,11 +83,15 @@ async def build_index(index: RefIndex, ctx: HaOpsContext) -> None:
 async def _index_registries(index: RefIndex, ctx: HaOpsContext) -> None:
     """Build entity/device/area/floor/config_entry nodes + their edges.
 
-    Data source: the existing `_load_registry` helper in
-    `src/ha_ops_mcp/tools/registry.py` which already handles filesystem-first
-    loading with WS fallback. We reuse it unchanged.
+    Data source: `storage_registry.load_registry`, the shared
+    freshness-aware reader — filesystem-first, escalating to the live
+    WebSocket registry when the .storage file predates a write this session
+    made. The index is rebuilt per request, so it inherits that freshness.
     """
-    from ha_ops_mcp.tools.registry import _load_registry
+    from ha_ops_mcp.storage_registry import load_registry
+
+    async def _load_registry(_ctx: HaOpsContext, name: str) -> list[dict[str, Any]]:
+        return (await load_registry(_ctx, name)).records
 
     try:
         devices = await _load_registry(ctx, "devices")

@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import re
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ha_ops_mcp.connections.rest import RestClientError
 from ha_ops_mcp.safety.rollback import UndoEntry, UndoType
 from ha_ops_mcp.server import registry
+from ha_ops_mcp.storage_registry import load_registry
 
 if TYPE_CHECKING:
     from ha_ops_mcp.server import HaOpsContext
@@ -18,32 +17,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def _get_entity_registry(ctx: HaOpsContext) -> list[dict[str, Any]]:
+async def _get_entity_registry(
+    ctx: HaOpsContext, *, fresh: bool = False
+) -> list[dict[str, Any]]:
     """Get entity registry, preferring filesystem, falling back to WebSocket.
+
+    Delegates to the shared freshness-aware loader, so a read that follows a
+    registry write in this session sees live state instead of the not-yet
+    flushed .storage file.
 
     Note: HA removed /api/config/entity_registry from the REST API — it's
     WS-only now (`config/entity_registry/list`).
     """
-    # Tier 1: direct file read (fastest, no HA involvement)
-    storage_path = Path(ctx.config.filesystem.config_root) / ".storage" / "core.entity_registry"
-    try:
-        content = storage_path.read_text()
-        data = json.loads(content)
-        return data["data"]["entities"]  # type: ignore[no-any-return]
-    except (FileNotFoundError, KeyError, json.JSONDecodeError):
-        pass
-
-    # Tier 2: WebSocket fallback (REST endpoint was removed in recent HA versions)
-    try:
-        from ha_ops_mcp.connections.websocket import WebSocketError
-        result: Any = await ctx.ws.send_command("config/entity_registry/list")
-        if isinstance(result, list):
-            return result
-        return []
-    except WebSocketError as e:
-        raise RuntimeError(
-            f"Entity registry unavailable via filesystem or WebSocket: {e}"
-        ) from e
+    read = await load_registry(ctx, "entities", fresh=fresh)
+    return read.records
 
 
 async def _get_states(ctx: HaOpsContext) -> dict[str, dict[str, Any]]:
@@ -990,12 +977,23 @@ _ENTITY_ID_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
         "change key per item. new_entity_id must keep the same domain. "
         "name/area_id explicitly set to null CLEAR the override (fall back to "
         "the device/original name, no area). Omitted keys are left untouched. "
-        "confirm (bool, default false), token (string, if confirming). "
+        "confirm (bool, default false), token (string, if confirming), "
+        "rewrite_references (bool, default false). "
+        "REFERENCES: a registry rename does NOT move the references pointing "
+        "at the old id — the dashboard card renders 'Entity not available' and "
+        "the automation silently stops firing. Pass rewrite_references=true to "
+        "rewrite them in the same operation: the preview then also lists every "
+        "YAML file (with a diff) and every Lovelace dashboard it would change, "
+        "plus a manual_review list for references it refuses to touch (ESPHome "
+        "node configs, HA-managed .storage, templates that build ids at "
+        "runtime). Apply does the registry updates and the rewrites in ONE "
+        "rollback transaction. YAML rewrites need a reload afterwards "
+        "(haops_system_reload). Leave it false and you own the sweep — "
+        "haops_references / dashboard entity_warnings. "
         "NOTE: HA migrates long-term statistics to the new id automatically; "
-        "short-term states history stays under the old id. Renaming an entity "
-        "referenced by automations/dashboards does NOT update those references "
-        "— sweep with haops_references / dashboard entity_warnings after. "
+        "short-term states history stays under the old id. "
         "Returns (apply): {success, renamed: [..], errors: [..], "
+        "references_rewritten: {files, dashboards, errors}, "
         "transaction_id} — transaction_id works with haops_rollback."
     ),
     params={
@@ -1014,6 +1012,13 @@ _ENTITY_ID_RE = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
             "type": "string",
             "description": "Confirmation token from preview step",
         },
+        "rewrite_references": {
+            "type": "boolean",
+            "description": (
+                "Also rewrite YAML + dashboard references to the renamed ids"
+            ),
+            "default": False,
+        },
     },
 )
 async def haops_entity_rename(
@@ -1021,11 +1026,15 @@ async def haops_entity_rename(
     renames: list[dict[str, Any]],
     confirm: bool = False,
     token: str | None = None,
+    rewrite_references: bool = False,
 ) -> dict[str, Any]:
     if not confirm:
         if not renames:
             return {"error": "No renames provided"}
 
+        # Live read: consecutive rename batches are the norm, and the .storage
+        # file lags behind them — a stale read would reject a valid target as
+        # "already exists" (or accept a colliding one).
         entities = await _get_entity_registry(ctx)
         by_id = {e.get("entity_id"): e for e in entities}
 
@@ -1083,15 +1092,60 @@ async def haops_entity_rename(
                 "valid_items": len(items),
             }
 
-        tk = ctx.safety.create_token(
-            action="entity_rename", details={"items": items}
-        )
+        details: dict[str, Any] = {"items": items}
+        response: dict[str, Any] = {}
+
+        if rewrite_references:
+            from ha_ops_mcp.refactor_rename import plan_reference_rewrites
+
+            mapping = {
+                it["entity_id"]: it["new_entity_id"]
+                for it in items
+                if "new_entity_id" in it
+            }
+            plan = await plan_reference_rewrites(ctx, mapping)
+            response["reference_rewrites"] = plan.summary()
+            if not mapping:
+                response["reference_rewrites"]["notes"] = [
+                    "No entity_id changes in this batch, so there is nothing "
+                    "to rewrite (name/area changes don't move references)."
+                ]
+            elif plan.is_empty():
+                response["reference_rewrites"]["notes"].insert(
+                    0, "No references found to the ids being renamed."
+                )
+            # Carry the exact before/after content so apply writes precisely
+            # what the preview showed, with no second scan in between.
+            details["rewrites"] = {
+                "files": [
+                    {
+                        "rel_path": f.rel_path,
+                        "abs_path": f.abs_path,
+                        "old_text": f.old_text,
+                        "new_text": f.new_text,
+                        "occurrences": f.occurrences,
+                    }
+                    for f in plan.files
+                ],
+                "dashboards": [
+                    {
+                        "url_path": d.url_path,
+                        "old_config": d.old_config,
+                        "new_config": d.new_config,
+                        "occurrences": d.occurrences,
+                    }
+                    for d in plan.dashboards
+                ],
+            }
+
+        tk = ctx.safety.create_token(action="entity_rename", details=details)
         preview = [
             {k: v for k, v in it.items() if k != "_old"} for it in items
         ]
         return {
             "preview": preview,
             "count": len(preview),
+            **response,
             "token": tk.id,
             "message": "Review the renames above. Call again with "
             "confirm=true and this token to apply.",
@@ -1150,21 +1204,148 @@ async def haops_entity_rename(
         except WebSocketError as e:
             errors_out.append({"entity_id": eid, "error": str(e)})
 
+    # Reference rewrites ride the same transaction, and run after the registry
+    # updates on purpose: if a rename fails the references still point at an
+    # id that exists. The reverse order would leave cards pointing at nothing.
+    rewrites = token_data.details.get("rewrites")
+    rewritten: dict[str, Any] | None = None
+    if rewrites:
+        rewritten = await _apply_reference_rewrites(ctx, txn, rewrites)
+        if rewritten["errors"]:
+            errors_out.extend(rewritten["errors"])
+
     ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     await ctx.audit.log(
         tool="entity_rename",
-        details={"renamed": renamed, "errors": errors_out},
+        details={
+            "renamed": renamed,
+            "errors": errors_out,
+            **({"references_rewritten": rewritten} if rewritten else {}),
+        },
         success=not errors_out,
         token_id=token,
     )
 
-    return {
+    result: dict[str, Any] = {
         "success": not errors_out,
         "renamed": renamed,
         "errors": errors_out,
         "transaction_id": txn.id,
+    }
+    if rewritten is not None:
+        result["references_rewritten"] = rewritten
+        if rewritten["files"]:
+            result["next_step"] = (
+                "YAML was rewritten on disk — call haops_system_reload for the "
+                "affected targets (automation / script / template) to load it."
+            )
+    return result
+
+
+async def _apply_reference_rewrites(
+    ctx: HaOpsContext,
+    txn: Any,
+    rewrites: dict[str, Any],
+) -> dict[str, Any]:
+    """Write the file + dashboard rewrites a rename preview planned.
+
+    Each target gets a backup and a rollback savepoint carrying its pre-write
+    state, so `haops_rollback` undoes the whole rename — registry and
+    references — in one call.
+
+    Files are written as raw text: the planned content is the original with
+    entity_id tokens substituted, so writing it verbatim keeps comments and
+    formatting byte-identical. Re-emitting through a YAML dumper would not.
+    """
+    from pathlib import Path
+
+    from ha_ops_mcp.connections.websocket import WebSocketError
+
+    files_done: list[dict[str, Any]] = []
+    dashboards_done: list[dict[str, Any]] = []
+    errors: list[dict[str, str]] = []
+
+    for item in rewrites.get("files", []):
+        path = Path(item["abs_path"])
+        try:
+            current = path.read_text()
+        except OSError as e:
+            errors.append({"file": item["rel_path"], "error": str(e)})
+            continue
+        if current != item["old_text"]:
+            errors.append({
+                "file": item["rel_path"],
+                "error": (
+                    "File changed since the preview — not rewritten (refusing "
+                    "to overwrite an edit made in between). Re-run the preview."
+                ),
+            })
+            continue
+        try:
+            if ctx.config.safety.backup_on_write:
+                await ctx.backup.backup_file(path, operation="entity_rename")
+            txn.savepoint(
+                name=f"refs:{path.name}",
+                undo=UndoEntry(
+                    type=UndoType.FILE,
+                    description=f"Restore references in {item['rel_path']}",
+                    data={
+                        "path": item["abs_path"],
+                        "content": item["old_text"],
+                        "was_created": False,
+                        # Restore the captured bytes as-is: the forward edit
+                        # was a token substitution, so anything else (a YAML
+                        # re-emit) would reformat the file on undo.
+                        "verbatim": True,
+                    },
+                ),
+            )
+            path.write_text(item["new_text"])
+            files_done.append({
+                "path": item["rel_path"],
+                "occurrences": item["occurrences"],
+            })
+        except OSError as e:
+            errors.append({"file": item["rel_path"], "error": str(e)})
+
+    for item in rewrites.get("dashboards", []):
+        url_path = item["url_path"]
+        try:
+            await ctx.backup.backup_dashboard(
+                url_path, item["old_config"], operation="entity_rename"
+            )
+            txn.savepoint(
+                name=f"refs:dashboard:{url_path}",
+                undo=UndoEntry(
+                    type=UndoType.DASHBOARD,
+                    description=f"Restore references in dashboard {url_path}",
+                    data={
+                        "dashboard_id": url_path,
+                        "config": item["old_config"],
+                    },
+                ),
+            )
+            kwargs: dict[str, Any] = {"config": item["new_config"]}
+            if url_path != "lovelace":
+                kwargs["url_path"] = url_path
+            await ctx.ws.send_command("lovelace/config/save", **kwargs)
+            dashboards_done.append({
+                "url_path": url_path,
+                "occurrences": item["occurrences"],
+            })
+        except (WebSocketError, OSError) as e:
+            errors.append({"dashboard": url_path, "error": str(e)})
+
+    return {
+        "files": files_done,
+        "dashboards": dashboards_done,
+        "errors": errors,
+        "total_occurrences": sum(
+            sum(t["occurrences"].values())
+            for t in (*files_done, *dashboards_done)
+        ),
     }
 
 

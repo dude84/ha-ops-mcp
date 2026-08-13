@@ -120,54 +120,11 @@ that account is ever pursued.)_
 
 ## Gaps found during the PL plug-fleet rename (2026-08-11/12)
 
-All four surfaced in one working session that renamed ~90 entities across 22
-plugs, so they're evidenced, not speculative. Ranked by how much damage they do
-when absent.
-
-### 1. `haops_entity_rename` cannot rewrite its own references — HIGH
-
-**Approved.** Renaming a registry entry leaves every dashboard card, automation,
-script and template pointing at the dead id. It bit twice in one session:
-
-- a Power-tab chart still on `sensor.…active_power_4`
-- three Climate-tab device-temperature sensors on `…maeu01_device_temperature{,_2,_3}`
-
-Both were caught only *incidentally*, because `haops_dashboard_patch` validates
-entity refs as a side effect and printed `entity_warnings`. Nothing would have
-caught a stale ref in an automation.
-
-Shape: `rewrite_references: true` (default false). Preview lists the rename **and**
-every reference it would rewrite; apply does registry + `haops_batch_apply` over
-dashboards/YAML as one transaction, so a partial rename is impossible. The ref
-index (`haops_references` / `haops_refactor_check`) already knows the edges —
-this is wiring, not new analysis. Report anything it can't rewrite (e.g. a
-templated `states('sensor.x')` built by string concat) rather than silently
-skipping.
-
-### 2. `haops_registry_query` served stale cached data — HIGH (correctness bug)
-
-Returned two Tasmota IR ghost devices that the live registry had **already
-dropped**. Three removal attempts then failed with `Unknown device`, and a direct
-read of `.storage/core.device_registry` confirmed they were gone. The tool caused
-a false report of live devices.
-
-Fix: invalidate the cache on any registry write this process performs, and
-include cache age (or a `source: cache|fresh` field) in the response so a caller
-can tell. A read tool that can be confidently wrong is worse than a slow one.
-
-### 3. No `haops_device_remove` — MEDIUM
-
-Deleting a device is UI-only today. On this build:
-
-- `config_entries/device/remove` → `Unknown command`
-- `tasmota/device/remove` → `Unknown command`
-- `config/device_registry/remove_config_entry` → only unlinks an entry, and
-  returned `Unknown device` for an already-gone device
-
-Blocks a concrete workflow: the Tasmota→ESPHome strip swap needs the old Tasmota
-device deleted to free `switch.plug_office_strip_*` for the ESPHome node.
-Investigate the per-integration path (MQTT/Tasmota discovery removal vs
-`config/device_registry/update` + entry unlink) before designing the tool.
+All five surfaced in one working session that renamed ~90 entities across 22
+plugs, so they're evidenced, not speculative. Gaps 1 (rename can't rewrite its
+own references), 2 (`haops_registry_query` served stale data) and 3 (no
+`haops_device_remove`) shipped in **v0.59.0**; gap 5 shipped in v0.57.0. Gap 4
+is what's left.
 
 ### 4. No ESPHome awareness — MEDIUM
 

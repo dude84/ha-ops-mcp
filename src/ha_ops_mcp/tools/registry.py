@@ -2,16 +2,19 @@
 
 Generic filesystem-first access to HA's .storage/core.* registries.
 Replaces a number of bespoke list tools with a single primitive.
+
+Reads go through `storage_registry.load_registry`, which reports provenance
+and escapes to the live WebSocket registry when the .storage file provably
+predates a write this session made (see that module's docstring).
 """
 
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ha_ops_mcp.server import registry
+from ha_ops_mcp.storage_registry import REGISTRY_SPECS, load_registry
 
 if TYPE_CHECKING:
     from ha_ops_mcp.server import HaOpsContext
@@ -19,85 +22,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# Registry spec: file path (relative to config root), data key, WS fallback command
-# WS fallback is None for registries that have no WS list endpoint.
-_REGISTRIES: dict[str, dict[str, Any]] = {
-    "devices": {
-        "file": ".storage/core.device_registry",
-        "data_key": "devices",
-        "ws_command": "config/device_registry/list",
-        "summary_fields": [
-            "id", "name", "name_by_user", "manufacturer", "model",
-            "sw_version", "hw_version", "area_id", "disabled_by",
-        ],
-    },
-    "entities": {
-        "file": ".storage/core.entity_registry",
-        "data_key": "entities",
-        "ws_command": "config/entity_registry/list",
-        "summary_fields": [
-            "entity_id", "name", "original_name", "platform", "device_id",
-            "area_id", "disabled_by", "hidden_by",
-        ],
-    },
-    "areas": {
-        "file": ".storage/core.area_registry",
-        "data_key": "areas",
-        "ws_command": "config/area_registry/list",
-        "summary_fields": [
-            "id", "name", "floor_id", "icon", "aliases", "labels",
-        ],
-    },
-    "floors": {
-        "file": ".storage/core.floor_registry",
-        "data_key": "floors",
-        "ws_command": "config/floor_registry/list",
-        "summary_fields": ["floor_id", "name", "level", "icon", "aliases"],
-    },
-    "config_entries": {
-        "file": ".storage/core.config_entries",
-        "data_key": "entries",
-        "ws_command": None,
-        "summary_fields": [
-            "entry_id", "domain", "title", "state", "source",
-            "disabled_by", "reason",
-        ],
-    },
+# Default projection per registry. Where each registry lives (file, data key,
+# WS fallback) is declared once in storage_registry.REGISTRY_SPECS.
+_SUMMARY_FIELDS: dict[str, list[str]] = {
+    "devices": [
+        "id", "name", "name_by_user", "manufacturer", "model",
+        "sw_version", "hw_version", "area_id", "disabled_by",
+    ],
+    "entities": [
+        "entity_id", "name", "original_name", "platform", "device_id",
+        "area_id", "disabled_by", "hidden_by",
+    ],
+    "areas": [
+        "id", "name", "floor_id", "icon", "aliases", "labels",
+    ],
+    "floors": ["floor_id", "name", "level", "icon", "aliases"],
+    "config_entries": [
+        "entry_id", "domain", "title", "state", "source",
+        "disabled_by", "reason",
+    ],
 }
-
-
-async def _load_registry(
-    ctx: HaOpsContext, name: str
-) -> list[dict[str, Any]]:
-    """Load a registry, filesystem-first with optional WebSocket fallback."""
-    spec = _REGISTRIES[name]
-    storage_path = Path(ctx.config.filesystem.config_root) / spec["file"]
-
-    try:
-        content = storage_path.read_text()
-        data = json.loads(content)
-        records = data.get("data", {}).get(spec["data_key"], [])
-        if isinstance(records, list):
-            return records
-    except (FileNotFoundError, KeyError, json.JSONDecodeError):
-        pass
-
-    # Fall back to WebSocket if available
-    if spec["ws_command"]:
-        try:
-            from ha_ops_mcp.connections.websocket import WebSocketError
-            result: Any = await ctx.ws.send_command(spec["ws_command"])
-            if isinstance(result, list):
-                return result
-        except WebSocketError as e:
-            raise RuntimeError(
-                f"Registry '{name}' unavailable via filesystem or WebSocket: {e}"
-            ) from e
-
-    raise RuntimeError(
-        f"Registry '{name}' unavailable — file {spec['file']} not found "
-        "and no WebSocket fallback for this registry"
-    )
 
 
 def _record_matches(
@@ -152,8 +96,16 @@ def _project(
         "fields (list of strings — projection, default returns summary), "
         "limit (int, default 100 — max records returned), "
         "offset (int, default 0), "
-        "count_only (bool, default false — skip records, return just total). "
-        "Returns: {registry, total, returned, results, truncated}. "
+        "count_only (bool, default false — skip records, return just total), "
+        "fresh (bool, default false — read HA's live in-memory registry over "
+        "WebSocket instead of the .storage file). "
+        "Returns: {registry, total, returned, results, truncated, provenance}. "
+        "PROVENANCE: HA flushes .storage on a debounce, so the file lags live "
+        "state right after a change. provenance reports {source: file|"
+        "websocket, file_age_seconds, notes} — and a read is auto-escalated to "
+        "WebSocket when the file provably predates a registry write this "
+        "session made, so a mutate-then-read-back never reports removed "
+        "devices as live. Pass fresh=true when you need live state anyway. "
         "Use this to answer 'what devices/entities/areas/floors exist' and "
         "'which integrations are in setup_error state' without shell fallback."
     ),
@@ -185,6 +137,13 @@ def _project(
             "description": "Return only the count",
             "default": False,
         },
+        "fresh": {
+            "type": "boolean",
+            "description": (
+                "Read HA's live registry over WebSocket instead of .storage"
+            ),
+            "default": False,
+        },
     },
 )
 async def haops_registry_query(
@@ -195,15 +154,16 @@ async def haops_registry_query(
     limit: int = 100,
     offset: int = 0,
     count_only: bool = False,
+    fresh: bool = False,
 ) -> dict[str, Any]:
-    if registry not in _REGISTRIES:
+    if registry not in REGISTRY_SPECS:
         return {
             "error": f"Unknown registry '{registry}'",
-            "supported": list(_REGISTRIES.keys()),
+            "supported": list(REGISTRY_SPECS.keys()),
         }
 
-    spec = _REGISTRIES[registry]
-    records = await _load_registry(ctx, registry)
+    read = await load_registry(ctx, registry, fresh=fresh)
+    records = read.records
 
     # Filter
     matched = (
@@ -214,7 +174,12 @@ async def haops_registry_query(
     total = len(matched)
 
     if count_only:
-        return {"registry": registry, "total": total, "count": total}
+        return {
+            "registry": registry,
+            "total": total,
+            "count": total,
+            "provenance": read.provenance(),
+        }
 
     # Paginate
     start = max(0, offset)
@@ -223,7 +188,9 @@ async def haops_registry_query(
     truncated = total > end
 
     # Project
-    results = [_project(r, fields, spec["summary_fields"]) for r in page]
+    results = [
+        _project(r, fields, _SUMMARY_FIELDS[registry]) for r in page
+    ]
 
     return {
         "registry": registry,
@@ -231,4 +198,5 @@ async def haops_registry_query(
         "returned": len(results),
         "results": results,
         "truncated": truncated,
+        "provenance": read.provenance(),
     }

@@ -103,6 +103,9 @@ async def test_tools_check_registries_group(ctx):
     assert registries["status"] == "pass"  # all fixtures present
     assert set(registries["tests"].keys()) == {
         "devices", "entities", "areas", "floors", "config_entries",
+        # Live entry list — haops_device_remove needs supports_remove_device,
+        # which only the running integration reports.
+        "config_entries_live",
     }
     assert "haops_registry_query" in registries["tools_affected"]
     # Each registry reports a count when the file exists

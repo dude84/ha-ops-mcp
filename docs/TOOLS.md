@@ -1,4 +1,4 @@
-# Tools (83)
+# Tools (84)
 
 All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 
@@ -45,15 +45,16 @@ All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 | `haops_entity_audit` | Read | Health report — unavailable, orphaned, stale, duplicate names, area:device ratio outliers. |
 | `haops_entity_remove` | Write | Two-phase entity removal with backup and rollback savepoints. |
 | `haops_entity_toggle` | Write | Two-phase bulk enable/disable (symmetric `disabled_by` flip) with rollback savepoints. |
-| `haops_entity_rename` | Write | Two-phase BULK rename — entity_id, name override, area — validated up front (existence, domain, collisions), rollback savepoints per item. |
+| `haops_entity_rename` | Write | Two-phase BULK rename — entity_id, name override, area — validated up front (existence, domain, collisions), rollback savepoints per item. `rewrite_references=true` also rewrites every YAML + Lovelace reference to the renamed ids in the same transaction (preview shows diffs; unrewritable refs are listed, not skipped silently). |
 | `haops_monitor_entity` | Read | Poll one entity (or attribute) live for a fixed window; returns time series + stats (min/max/mean/stdev, change count). For averaging noisy reads / catching transients. |
 
 ## Registry tools
 
 | Tool | Type | Description |
 |---|---|---|
-| `haops_registry_query` | Read | Generic access to `.storage/core.*` registries: devices, entities, areas, floors, config_entries. Filter, project, paginate. |
+| `haops_registry_query` | Read | Generic access to `.storage/core.*` registries: devices, entities, areas, floors, config_entries. Filter, project, paginate. Reports `provenance` (file vs live, file age) and auto-reads live when the `.storage` file predates a write this session made; `fresh=true` forces live. |
 | `haops_device_info` | Read | Device lookup by ID or name — full record + linked entities with state + area resolution. |
+| `haops_device_remove` | Write | Two-phase device deletion via the config-entry unlink path (what the UI's Delete button does). Preview lists the entities that disappear and `supports_remove_device` per entry, naming the working route when an integration doesn't support it (ZHA → `zha.remove`). **Irreversible** — not rollbackable. |
 
 ## Helper tools (`haops_helper_*`)
 

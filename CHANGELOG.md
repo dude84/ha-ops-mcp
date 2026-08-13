@@ -1,3 +1,32 @@
+## 0.59.0
+
+Three gaps found during the PL plug-fleet rename, closed together. They came from one session that renamed ~90 entities across 22 plugs, so each is evidenced rather than speculative.
+
+**`haops_entity_rename` can now rewrite its own references (`rewrite_references=true`).** A registry rename used to leave every dashboard card, automation, script and template pointing at the dead id — silently. It bit twice in that session, and both times only because `haops_dashboard_patch` happens to validate entity refs as a side effect; nothing would have caught a stale ref in an automation.
+
+- Preview lists the rename **and** every file/dashboard it would change, with a unified diff per file. Apply does registry updates and rewrites in ONE rollback transaction, so `haops_rollback` undoes the whole thing.
+- **Discovery is textual, not graph-based.** The reference index knows which files reference an entity, but only as well as its extractors do, and a missed extraction would mean a silently skipped rewrite — the exact failure being fixed. So the scan covers the file *universe* the index defines and a boundary-anchored regex decides. The index is still used, for the opposite job: naming references that live somewhere we refuse to write.
+- **YAML is rewritten as text, not re-emitted**, so comments, quote style and blank lines stay byte-identical. A YAML round-trip can't promise that. Rollback of these edits restores the captured bytes verbatim for the same reason (new `verbatim` flag on FILE undo entries).
+- Boundary rules that matter: `sensor.old` does not match inside `sensor.old_2`, `sensor.older`, or `weird.sensor.old`; the Jinja attribute form `states.sensor.old.state` gets its own pass since its leading dot is exactly what the main pattern rejects; and simultaneous renames don't chain (a→b plus b→c never turns a into c).
+- Refuses to write a file that changed between preview and apply, rather than clobbering an edit made in between.
+- Reports rather than touches: ESPHome node configs (a text edit there does nothing until recompile + flash), HA-managed `.storage` such as the Energy dashboard's prefs, and ids composed at runtime by a template.
+- Off by default. The rename tool's old behaviour is unchanged when the flag is absent.
+
+**`haops_registry_query` can no longer be confidently wrong.** It once returned two devices the live registry had already dropped; three removal attempts then failed with `Unknown device`. The backlog blamed a stale cache of ours — there wasn't one. The cause is that HA persists `core.*_registry` through a **debounced** `Store` save, so the file lags live state after any change, and the delay restarts on each further change.
+
+- New `storage_registry.py`: reads report `provenance` (`source: file|websocket`, `file_age_seconds`, notes), and a read whose file mtime predates a registry write **this session made** is served from the live WebSocket registry instead. `fresh=true` forces live on demand.
+- The write clock is stamped in the WebSocket client, matching any `config/*_registry/<write>` command — so no tool can forget to mark its own mutation, including registries HA adds later.
+- Entity and device registry readers share the same loader, which also means a rename preview immediately after a rename batch no longer validates against a stale file (it would have rejected a valid target as "already exists").
+
+**New tool: `haops_device_remove`.** Deleting a device was UI-only. It takes the config-entry unlink path — what the UI's Delete button does — and HA drops the device once its last entry is gone.
+
+- Preview lists every entity that will disappear and `supports_remove_device` per config entry. When no entry supports it the tool refuses and **names the route that works** (ZHA → the `zha.remove` service; ESPHome → delete the node's config entry) instead of failing opaquely.
+- States the discovery caveat up front: an MQTT/Tasmota device returns on the next announce unless the retained discovery topic is cleared.
+- Token is bound to the previewed device id, so it can't be redirected at another device. Verification reads the live registry, since the `.storage` file cannot have caught up yet by definition.
+- **Not rollbackable**, and it says so — a device can't be recreated from a savepoint.
+
+`haops_tools_check`'s registries group gained a `config_entries/get` probe, because `supports_remove_device` is a runtime capability of the loaded integration and is absent from `.storage/core.config_entries` — the file cannot answer the question `haops_device_remove` has to ask.
+
 ## 0.58.0
 
 **New tool: `haops_addon_update`** — update add-ons without leaving the session. It reloads the add-on store index first, which is the "Check for updates" click in the UI and the reason a release published moments earlier otherwise reports as already-latest.

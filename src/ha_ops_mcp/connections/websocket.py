@@ -20,6 +20,35 @@ class WebSocketError(Exception):
     """Raised when a WebSocket command fails."""
 
 
+# Registry-write detection. HA flushes .storage/core.* on a debounce, so any
+# successful registry mutation leaves the on-disk copy behind live state for a
+# while. Reads need to know that happened (see storage_registry), and the only
+# place that can't be forgotten is here — every registry write in this server
+# goes through send_command.
+_READ_VERBS = frozenset({"list", "get"})
+
+
+def _note_if_registry_write(msg_type: str) -> None:
+    """Stamp the registry write clock if `msg_type` mutated a core registry.
+
+    Matches `config/<something>_registry/<verb>` for any verb that isn't a
+    read (`list` / `get`) — so update, remove, create, delete and
+    `remove_config_entry` all count, including registries added by future HA
+    versions.
+    """
+    if not msg_type.startswith("config/"):
+        return
+    parts = msg_type.split("/")
+    if len(parts) != 3 or not parts[1].endswith("_registry"):
+        return
+    if parts[2] in _READ_VERBS:
+        return
+
+    from ha_ops_mcp.storage_registry import mark_registry_write
+
+    mark_registry_write(msg_type)
+
+
 class WebSocketClient:
     """Async WebSocket client for the Home Assistant WS API.
 
@@ -214,6 +243,8 @@ class WebSocketClient:
             raise WebSocketError(
                 f"Command {msg_type} failed: {error.get('message', 'unknown')}"
             )
+
+        _note_if_registry_write(msg_type)
 
         ret: dict[str, Any] = result.get("result", result)
         return ret

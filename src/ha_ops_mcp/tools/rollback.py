@@ -141,7 +141,13 @@ async def _execute_undo(
         try:
             pre = await _read_current_file(path)
             content = undo.data["content"]
-            if path.suffix in (".yaml", ".yml"):
+            if undo.data.get("verbatim"):
+                # The savepoint captured the exact previous bytes and the
+                # forward edit was textual (entity-id rewrites), so restoring
+                # raw is exact. A YAML round-trip would re-indent the file
+                # instead — same meaning, gratuitous diff.
+                path.write_text(content)
+            elif path.suffix in (".yaml", ".yml"):
                 from io import StringIO
 
                 from ruamel.yaml import YAML

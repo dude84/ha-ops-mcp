@@ -63,6 +63,8 @@ almost all HA breakage is integration-level and touches none of it.
 | `config/floor_registry/list` | `haops_registry_query` (file is often absent) |
 | `config/auth/list`, `/create`, `/update`, `/delete` | `haops_user_*` |
 | `config/auth_provider/homeassistant/create` | `haops_user_create` |
+| `config/device_registry/remove_config_entry` | `haops_device_remove` |
+| `config_entries/get` | `haops_device_remove` (per-entry `supports_remove_device`) |
 | `config_entries/reload` | `haops_integration_reload` |
 | `lovelace/config`, `lovelace/config/save` | dashboard read/write |
 | `lovelace/dashboards/list`, `lovelace/resources` | `haops_dashboard_list`, `_resources` |
@@ -126,6 +128,22 @@ Two facts to re-check if container tools ever break:
 `/config/.HA_VERSION`
 
 ## Known HA-version-specific behaviour
+
+### `.storage` registry writes are debounced — all versions
+
+HA persists `core.*_registry` through a delayed `Store` save, so the file lags live state after
+any change and the delay restarts on each further change: a burst of renames can hold the flush
+off well past the nominal delay. A filesystem-first read taken right after a mutation therefore
+reports pre-mutation records — the origin of a real bug where `haops_registry_query` listed two
+devices HA had already dropped, and three removal attempts answered `Unknown device`.
+
+Handled in `storage_registry.py`: any successful `config/*_registry/<write>` command stamps a
+process write clock (detected in the WS client, so no tool can forget), and a read whose file
+mtime predates that stamp is served from the live WebSocket registry instead. Reads report
+`provenance` either way. Nothing here is version-specific in the sense of "might be fixed" — the
+debounce is by design; only the *nominal* delay could change, and the mtime comparison does not
+depend on its value.
+
 
 ### ZHA device removal — 2026.7
 
