@@ -104,15 +104,35 @@ def _tolerant_yaml_load(text: str) -> Any:
     return yaml.load(io.StringIO(text))
 
 
+_SUB_RE = re.compile(r"\$\{([a-zA-Z0-9_]+)\}|\$([a-zA-Z0-9_]+)")
+
+# Substitutions nest — a real config has `name: "pl-co2-lcd-${room_id}"` in the
+# substitutions block and `esphome.name: ${name}`, so one pass yields
+# "pl-co2-lcd-${room_id}" and the node is misidentified. Iterate to a fixed
+# point instead, capped so a self-referential substitution can't spin.
+_SUB_MAX_PASSES = 8
+
+
 def _expand_substitutions(value: str, subs: dict[str, Any]) -> str:
-    """Resolve `${var}` / `$var` against a substitutions block."""
+    """Resolve `${var}` / `$var` against a substitutions block, recursively.
+
+    Unresolvable references are left as-is (they may come from a remote
+    package we don't fetch), which keeps the raw text visible instead of
+    silently emptying the field.
+    """
 
     def _one(m: re.Match[str]) -> str:
         key = m.group(1) or m.group(2)
         replacement = subs.get(key)
         return str(replacement) if replacement is not None else m.group(0)
 
-    return re.sub(r"\$\{([a-zA-Z0-9_]+)\}|\$([a-zA-Z0-9_]+)", _one, value)
+    out = value
+    for _ in range(_SUB_MAX_PASSES):
+        expanded = _SUB_RE.sub(_one, out)
+        if expanded == out:
+            break
+        out = expanded
+    return out
 
 
 def _parse_node(path: Path) -> dict[str, Any] | None:
@@ -214,6 +234,20 @@ async def _ha_mapping(
         logger.debug("ESPHome mapping unavailable: %s", e)
         return by_slug
 
+    # A config entry's runtime `state` (loaded / setup_retry / ...) exists only
+    # in HA's memory — the .storage copy has no such field — so reading it from
+    # the file would report null for every node. Ask HA when it will answer.
+    live_states: dict[str, Any] = {}
+    try:
+        from ha_ops_mcp.tools.device import _config_entries_by_id
+
+        live_states = {
+            entry_id: entry.get("state")
+            for entry_id, entry in (await _config_entries_by_id(ctx)).items()
+        }
+    except Exception as e:
+        logger.debug("Live config entry states unavailable: %s", e)
+
     esphome_entries = {
         e.get("entry_id"): e
         for e in entries
@@ -254,7 +288,7 @@ async def _ha_mapping(
         ]
         by_slug[slug] = {
             "config_entry_id": entry_id,
-            "entry_state": entry.get("state"),
+            "entry_state": live_states.get(entry_id) or entry.get("state"),
             "device_id": dev_id,
             "device_name": (
                 (node_dev.get("name_by_user") or node_dev.get("name"))

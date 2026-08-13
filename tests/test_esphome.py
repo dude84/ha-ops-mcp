@@ -388,3 +388,65 @@ async def test_build_rejects_an_unknown_node(ctx, esphome_dir):
 
     assert "No ESPHome node config matches" in result["error"]
     assert result["known_nodes"] == ["pl-office-powerstrip"]
+
+
+# ── Nested substitutions ──────────────────────────────────────────────
+#
+# Found on the live instance: a node whose substitutions block contains
+# `name: "pl-co2-lcd-${room_id}"` while `esphome.name` is `${name}`. A
+# single-pass expansion stops at "pl-co2-lcd-${room_id}", which then fails to
+# match the HA config entry and reports the node as "not adopted in HA".
+
+NESTED_YAML = """\
+substitutions:
+  room: "Livingroom"
+  room_id: "livingroom"
+  name: "pl-co2-lcd-${room_id}"
+  friendly_name: "PL CO2 LCD ${room}"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32-c3-devkitm-1
+"""
+
+
+def test_nested_substitutions_resolve_fully(config_dir):
+    d = config_dir / "esphome"
+    d.mkdir(exist_ok=True)
+    path = d / "pl-co2-lcd-livingroom.yaml"
+    path.write_text(NESTED_YAML)
+
+    node = _parse_node(path)
+
+    assert node is not None
+    assert node["node"] == "pl-co2-lcd-livingroom"
+    assert node["friendly_name"] == "PL CO2 LCD Livingroom"
+
+
+def test_unresolvable_substitution_is_left_visible(config_dir):
+    """A ref from a remote package we don't fetch stays as raw text."""
+    d = config_dir / "esphome"
+    d.mkdir(exist_ok=True)
+    path = d / "remote.yaml"
+    path.write_text("esphome:\n  name: ${from_remote_package}\n")
+
+    node = _parse_node(path)
+
+    assert node is not None
+    assert node["node"] == "${from_remote_package}"
+
+
+def test_self_referential_substitution_does_not_spin(config_dir):
+    d = config_dir / "esphome"
+    d.mkdir(exist_ok=True)
+    path = d / "loop.yaml"
+    path.write_text(
+        'substitutions:\n  a: "${b}"\n  b: "${a}"\n\nesphome:\n  name: ${a}\n'
+    )
+
+    node = _parse_node(path)
+
+    assert node is not None  # terminated rather than hanging

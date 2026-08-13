@@ -1,3 +1,10 @@
+## 0.60.1
+
+Two fixes from verifying 0.60.0 against the live instance — both found by reading the tool's own output rather than by a failure.
+
+- **Nested substitutions now resolve.** A real node has `name: "pl-co2-lcd-${room_id}"` *inside* its substitutions block and `esphome.name: ${name}`, so one expansion pass stopped at `pl-co2-lcd-${room_id}`. Two nodes were consequently reported as "not adopted in HA" when both are adopted — a false negative that looks like a finding. Expansion now iterates to a fixed point, capped at 8 passes so a self-referential substitution terminates instead of spinning. References that can't be resolved (they come from a remote package we don't fetch) are left as visible raw text rather than blanked.
+- **`entry_state` was always null.** A config entry's runtime state (`loaded` / `setup_retry`) exists only in HA's memory; `.storage/core.config_entries` has no such field, so reading it from the file could only ever report nothing. It now asks HA over the WebSocket and falls back to the file, matching how `haops_device_remove` gets `supports_remove_device`. Same lesson as the device-registry split, in the other direction: not everything the API returns is in the file.
+
 ## 0.60.0
 
 **Device registry reads were broken on HA 2026.8 — found before shipping the upgrade.** Probing the live PL instance for the ESPHome work turned up something bigger: the device registry migrated to **storage version 3, minor 2** on 2026-08-05, and the plural `config_entries` list is **gone from storage**, replaced by singular `config_entry_id` / `config_subentry_id` plus `primary_config_entry`, `composite_device_id`, `split_at`.
