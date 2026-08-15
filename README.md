@@ -16,7 +16,7 @@ Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.i
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.8.1** |
+| **Built against** | HA Core **2026.8.2** |
 | **Supported window** | **2026.6 – 2026.8** |
 | **Recorder DB schema** | **53** |
 
@@ -28,6 +28,7 @@ Every release is verified against a live instance with `haops_tools_check` — 1
 
 | ha-ops-mcp | HA Core | DB schema | Result |
 |---|---|---|---|
+| 0.61.1 | 2026.8.2 | 53 | 15/15 groups pass (docker_prune group) |
 | 0.57.1 | 2026.8.1 | 53 | 14/14 groups pass (Docker enabled) |
 | 0.56.0 | 2026.8.1 | 53 | 13/13 groups pass |
 | 0.55.0 | 2026.7.4 | 53 | 13/13 groups pass |

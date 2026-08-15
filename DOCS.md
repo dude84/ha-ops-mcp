@@ -8,11 +8,11 @@ Built for the maintenance and observability work that comes during and after set
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.8.1** |
+| **Built against** | HA Core **2026.8.2** |
 | **Supported window** | **2026.6 – 2026.8** |
 | **Recorder DB schema** | **53** |
 
-Each release is verified against a live instance with `haops_tools_check` (14 read-only groups covering every backend). On a newer HA than the window, the addon still starts — it logs a warning and `haops_system_info` reports a `compatibility` block. HA ships monthly, so "newest verified" goes stale by design: outside the window means **untested**, not broken.
+Each release is verified against a live instance with `haops_tools_check` (15 read-only groups covering every backend). On a newer HA than the window, the addon still starts — it logs a warning and `haops_system_info` reports a `compatibility` block. HA ships monthly, so "newest verified" goes stale by design: outside the window means **untested**, not broken.
 
 If a tool misbehaves after an HA update, open the **Health** tab (or call `haops_tools_check`) — each failing group names the tools it affects. Details and the full HA API surface this addon depends on: [docs/HA_COMPATIBILITY.md](https://github.com/dude84/ha-ops-mcp/blob/main/docs/HA_COMPATIBILITY.md).
 

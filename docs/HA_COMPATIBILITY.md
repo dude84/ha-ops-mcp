@@ -16,7 +16,7 @@ server logs a warning at startup when the live instance falls outside the window
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.8.1** |
+| **Built against** | HA Core **2026.8.2** |
 | **Recorder DB schema** | **53** (unchanged since 2026.5) |
 | **Oldest supported** | **2026.6** |
 | **Newest verified** | **2026.8** |
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.61.1 | 2026.8.2 | 53 | 15/15 pass (docker_prune group) | 2026-08-15 |
 | 0.57.1 | 2026.8.1 | 53 | 14/14 pass (Docker group enabled) | 2026-08-12 |
 | 0.56.0 | 2026.8.1 | 53 | 13/13 pass | 2026-08-11 |
 | 0.55.0 | 2026.7.4 | 53 | 13/13 pass | 2026-08-02 |

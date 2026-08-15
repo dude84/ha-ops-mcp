@@ -1,3 +1,7 @@
+## 0.61.2
+
+**Verified against HA Core 2026.8.2** (today's patch). `haops_tools_check` → `all_pass`, 15/15 groups, 0 broken tools on the live Singapore instance — including the new `docker_prune` group. The 2026.8 device-registry split stays handled (`config_entries/get` → 104 entries, 12 removable), recorder schema still 53, ZHA WS commands alive. `BUILT_AGAINST_HA` advanced 2026.8.1 → 2026.8.2; the supported window is unchanged (2026.6–2026.8). Record-only — no behaviour change.
+
 ## 0.61.1
 
 **`docker_prune_on_start` now defaults ON.** Prevention should be the default, not something you remember to enable. The safety envelope is unchanged and makes default-on correct: it fires **only** when the Docker socket is present (`docker_api` + Protection mode OFF — already a deliberate opt-in), and even then removes only dangling images and unused build cache, never a tagged image or a volume. Any install without the socket skips it entirely. Set `docker_prune_on_start: false` to disable.

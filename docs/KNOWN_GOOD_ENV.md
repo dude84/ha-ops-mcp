@@ -15,6 +15,27 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.61.1` — verified 2026-08-15 (**Singapore HA** — HA 2026.8.2 + docker_prune)
+
+Server side: HA Core **2026.8.2** (today's patch), Supervisor **2026.07.5**, HAOS **18.2** amd64,
+Docker **29.6.2**, MariaDB **11.4.10** schema **53**. Client side: Claude Code **2.1.233**,
+iTerm2 **3.6.11**, macOS **26.5.2** (build 25F84), Bun **1.3.14**, Node **v26.5.0**. Transport
+streamable-http + OAuth, mDNS URL.
+
+- `haops_self_check` → `overall: ok`, `ha_ops_version: 0.61.1`, `docker: ok` (21 containers, 20
+  running).
+- `haops_tools_check` → **`all_pass`, 15/15 groups, 0 broken tools**, including the new
+  `docker_prune` group (`disk_usage` probe: images 8.87 GB, ~0.93 GB build cache reclaimable,
+  0 dangling). Live scale: 1964 states, 3017 registry entities, 246 devices, 104 config entries
+  (12 with `supports_remove_device`), **9,020,651 `states` rows**, refindex 3481 nodes / 5393 edges.
+- **HA 2026.8.2 is API-clean for us** — the 2026.8 device-registry split is handled
+  (`config_entries_live` returns 104 via `config_entries/get`, 12 removable), schema still 53, ZHA
+  WS `reconfigure` probe rejects the bogus IEEE (alive). Window unchanged (2026.6–2026.8); the
+  built-against patch advanced 2026.8.1 → 2026.8.2 in `compat.py`.
+- Prune-on-start (default ON since 0.61.1) is live; the ~0.93 GB reclaimable is build cache tied to
+  the *current* image build, which `/build/prune` won't reclaim without `all=true` — conservative
+  by design, not a miss.
+
 ### `v0.60.2` — verified 2026-08-13 (**Poland HA** — first baseline with the ESPHome tools)
 
 Stack unchanged from the `v0.57.0` row below except macOS and Node: HA **2026.8.1**, Supervisor
