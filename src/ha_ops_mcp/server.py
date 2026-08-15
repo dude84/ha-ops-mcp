@@ -319,6 +319,38 @@ async def _detect_ha_version(ctx: HaOpsContext) -> None:
         )
 
 
+async def _prune_docker_on_start(ctx: HaOpsContext) -> None:
+    """Optionally reclaim dangling images + build cache at startup.
+
+    Opt-in via ``docker.prune_on_start`` (default off). A successful
+    dev-deploy restarts the addon, so on a dev box this self-cleans the image
+    the deploy just orphaned. Best-effort and non-fatal: no socket, Protection
+    mode on, or an Engine error must never block startup.
+    """
+    if not ctx.config.docker.prune_on_start:
+        return
+    if ctx.docker is None or not ctx.docker.available():
+        logger.info(
+            "docker.prune_on_start is set but the Docker socket is unavailable "
+            "(needs docker_api + Protection mode OFF) — skipping startup prune"
+        )
+        return
+    try:
+        images = await ctx.docker.prune_images(dangling_only=True)
+        cache = await ctx.docker.prune_build_cache()
+    except Exception as e:  # noqa: BLE001 — startup must never hard-fail
+        logger.warning("Startup Docker prune failed: %s", e)
+        return
+    reclaimed = images["space_reclaimed"] + cache["space_reclaimed"]
+    logger.info(
+        "Startup Docker prune: %d dangling image(s), %d cache entrie(s), "
+        "%.2f GB reclaimed",
+        images["images_deleted"],
+        cache["caches_deleted"],
+        reclaimed / 1e9,
+    )
+
+
 def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContext]:
     """Create the MCP server and context.
 
@@ -343,6 +375,7 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
                 e,
             )
         await _detect_ha_version(ctx)
+        await _prune_docker_on_start(ctx)
         try:
             yield
         finally:
@@ -441,6 +474,7 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
     import ha_ops_mcp.tools.db  # noqa: F401
     import ha_ops_mcp.tools.debugger  # noqa: F401
     import ha_ops_mcp.tools.device  # noqa: F401
+    import ha_ops_mcp.tools.docker  # noqa: F401
     import ha_ops_mcp.tools.entity  # noqa: F401
     import ha_ops_mcp.tools.ergonomics  # noqa: F401
     import ha_ops_mcp.tools.esphome  # noqa: F401

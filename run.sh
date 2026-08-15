@@ -84,6 +84,16 @@ else
     export HA_OPS_AUDIT_LOG_READS="false"
 fi
 
+# Docker prune-on-start — default false. Export in both directions so a
+# config-set true is honoured and an unset/false value is explicit rather than
+# leaning on config.py's default (same reasoning as audit_log_reads above).
+docker_prune_on_start=$(bashio::config 'docker_prune_on_start')
+if bashio::var.true "${docker_prune_on_start}"; then
+    export HA_OPS_DOCKER_PRUNE_ON_START="true"
+else
+    export HA_OPS_DOCKER_PRUNE_ON_START="false"
+fi
+
 if bashio::var.has_value "${db_url}"; then
     export HA_OPS_DB_URL="${db_url}"
 fi

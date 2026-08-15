@@ -1,5 +1,5 @@
 name: "HA Ops MCP"
-version: "0.60.3"
+version: "0.61.0"
 slug: "ha_ops_mcp"
 description: "MCP server for Home Assistant operations — database management, config editing, dashboards, entity hygiene, and system health"
 url: "https://github.com/dude84/ha-ops-mcp"
@@ -65,6 +65,7 @@ options:
   auth_enabled: true
   auth_issuer_url: ""
   clear_oauth_on_next_boot: false
+  docker_prune_on_start: false
 
 schema:
   ha_token: "str?"
@@ -78,6 +79,7 @@ schema:
   auth_enabled: "bool?"
   auth_issuer_url: "str?"
   clear_oauth_on_next_boot: "bool?"
+  docker_prune_on_start: "bool?"
 
 ingress: true
 ingress_port: 8901

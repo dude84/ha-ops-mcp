@@ -709,6 +709,19 @@ async def _check_docker(ctx: HaOpsContext) -> dict[str, Any]:
             "error": "Could not identify own container to probe exec",
         }
 
+    # disk_usage — read-only probe of the endpoint behind haops_docker_prune.
+    # Reports reclaimable bytes so an oversized host is visible in a health run.
+    try:
+        usage = await ctx.docker.disk_usage()
+        checks["disk_usage"] = {
+            "ok": True,
+            "images_size": usage.get("images_size"),
+            "reclaimable": usage.get("reclaimable"),
+            "dangling_count": usage.get("dangling_count"),
+        }
+    except Exception as e:
+        checks["disk_usage"] = {"ok": False, "error": str(e)[:200]}
+
     all_ok = all(c.get("ok") for c in checks.values())
     return {
         "status": "pass" if all_ok else "partial",
@@ -716,6 +729,7 @@ async def _check_docker(ctx: HaOpsContext) -> dict[str, Any]:
             "haops_container_list",
             "haops_container_logs",
             "haops_container_exec",
+            "haops_docker_prune",
         ],
         "tests": checks,
     }

@@ -197,6 +197,77 @@ class DockerClient:
         stdout, stderr = _demux(body)
         return (stdout + stderr).strip()
 
+    async def disk_usage(self) -> dict[str, Any]:
+        """Summarise Docker's disk-usage report (``GET /system/df``).
+
+        Reduces the raw Engine payload to the two buckets a prune can
+        reclaim — dangling images and unused build cache — plus totals, so a
+        caller can preview a prune without parsing the whole thing. An image
+        is "dangling" when it carries no repo tag (``<none>:<none>``): it is
+        referenced by no name and no running container, so removing it is
+        always safe. Byte counts only; formatting is the caller's job.
+        """
+        raw = await self._request("GET", "/system/df", timeout=30.0) or {}
+        images = raw.get("Images") or []
+        build_cache = raw.get("BuildCache") or []
+
+        def _is_dangling(img: dict[str, Any]) -> bool:
+            tags = img.get("RepoTags")
+            return not tags or tags == ["<none>:<none>"]
+
+        dangling = [i for i in images if _is_dangling(i)]
+        dangling_size = sum(i.get("Size", 0) for i in dangling)
+        bc_reclaimable = sum(c.get("Size", 0) for c in build_cache if not c.get("InUse"))
+
+        return {
+            "images_count": len(images),
+            "images_size": sum(i.get("Size", 0) for i in images),
+            "layers_size": raw.get("LayersSize", 0),
+            "dangling_count": len(dangling),
+            "dangling_size": dangling_size,
+            "build_cache_count": len(build_cache),
+            "build_cache_size": sum(c.get("Size", 0) for c in build_cache),
+            "build_cache_reclaimable": bc_reclaimable,
+            "reclaimable": dangling_size + bc_reclaimable,
+        }
+
+    async def prune_images(self, *, dangling_only: bool = True) -> dict[str, Any]:
+        """Remove unused images (``POST /images/prune``).
+
+        Dangling-only by default: with ``dangling=true`` the Engine removes
+        only untagged ``<none>`` images, so a tagged image an add-on or HA
+        Core relies on can never be caught. ``dangling_only=False`` maps to
+        ``dangling=false``, which also removes *tagged* images not currently
+        used by a container — that can force re-pulls and delete rollback
+        images. We never call it that way, but the flag exists so the
+        dangerous mode is an explicit, greppable choice, not a silent default.
+        """
+        filters = '{"dangling":["true"]}' if dangling_only else '{"dangling":["false"]}'
+        raw = (
+            await self._request(
+                "POST", "/images/prune", params={"filters": filters}, timeout=120.0
+            )
+            or {}
+        )
+        return {
+            "images_deleted": len(raw.get("ImagesDeleted") or []),
+            "space_reclaimed": raw.get("SpaceReclaimed", 0),
+        }
+
+    async def prune_build_cache(self) -> dict[str, Any]:
+        """Remove unused build cache (``POST /build/prune``).
+
+        No ``all`` flag — only cache not referenced by a live image is
+        removed. A no-op on hosts using the legacy builder (HA Supervisor
+        today, where BuildCache is empty), but correct if HA ever moves addon
+        builds to BuildKit.
+        """
+        raw = await self._request("POST", "/build/prune", timeout=120.0) or {}
+        return {
+            "caches_deleted": len(raw.get("CachesDeleted") or []),
+            "space_reclaimed": raw.get("SpaceReclaimed", 0),
+        }
+
     async def exec_run(
         self,
         container: str,

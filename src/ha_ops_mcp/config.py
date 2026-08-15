@@ -113,6 +113,16 @@ class AuthConfig:
 
 
 @dataclass
+class DockerConfig:
+    # Prune dangling images + unused build cache on every addon start.
+    # Default OFF. A successful dev-deploy restarts the addon, so on a dev box
+    # this makes each rebuild self-clean the image it just orphaned. Leave off
+    # elsewhere — auto-deleting images should be a deliberate opt-in.
+    # haops_docker_prune runs the same prune on demand regardless of this flag.
+    prune_on_start: bool = False
+
+
+@dataclass
 class HaOpsConfig:
     ha: HaConfig = field(default_factory=HaConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
@@ -124,6 +134,7 @@ class HaOpsConfig:
     shell_output: ShellOutputConfig = field(default_factory=ShellOutputConfig)
     audit: AuditConfig = field(default_factory=AuditConfig)
     auth: AuthConfig = field(default_factory=AuthConfig)
+    docker: DockerConfig = field(default_factory=DockerConfig)
 
 
 # Mapping from env var suffix to (config section, field name)
@@ -155,6 +166,7 @@ _ENV_MAP: dict[str, tuple[str, str]] = {
     "AUTH_ENABLED": ("auth", "enabled"),
     "AUTH_DATA_DIR": ("auth", "data_dir"),
     "AUTH_ISSUER_URL": ("auth", "issuer_url"),
+    "DOCKER_PRUNE_ON_START": ("docker", "prune_on_start"),
 }
 
 # Env vars that carry list values — comma-separated at the env level.
@@ -250,4 +262,5 @@ def load_config(config_path: Path | None = None) -> HaOpsConfig:
         shell_output=_build_dataclass(ShellOutputConfig, data.get("shell_output")),
         audit=_build_dataclass(AuditConfig, data.get("audit")),
         auth=_build_dataclass(AuthConfig, data.get("auth")),
+        docker=_build_dataclass(DockerConfig, data.get("docker")),
     )

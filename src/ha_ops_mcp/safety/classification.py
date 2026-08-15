@@ -49,6 +49,9 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "registry_query": ("read", "registry"),
     "container_list": ("read", "container"),
     "container_logs": ("read", "container"),
+    # Removes only dangling images + unused build cache; never a tagged image
+    # or a volume, and two-phase confirmed.
+    "docker_prune": ("mutate", "container"),
     "device_info": ("read", "registry"),
     "device_remove": ("mutate", "registry"),
     "esphome_status": ("read", "esphome"),

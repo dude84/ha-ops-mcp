@@ -1,3 +1,14 @@
+## 0.61.0
+
+**New `haops_docker_prune` — reclaim the disk that repeated addon rebuilds leave on the HA host.** Every `dev-deploy` / addon update leaves the host holding artifacts nothing references: dangling `<none>` images from superseded builds and, on BuildKit hosts, unused build cache. Over a dev stretch that grows to many GB.
+
+- **Two-phase, dangling-only.** Preview reports reclaimable bytes (dangling image size + unused build-cache size) and a token; confirm prunes and returns `images_deleted` / `caches_deleted` / `space_reclaimed_bytes`. It only ever removes images referenced by no tag and no container, and cache referenced by no live image — **never a tagged image (HA Core, other add-ons, the current addon), never a volume, never `docker system prune -a`.** The dangerous "prune all unused images" mode exists in `DockerClient` as an explicit `dangling_only=False` flag that no tool path calls.
+- **Opt-in `docker_prune_on_start` (default off).** A successful dev-deploy restarts the addon, so on a dev box turning this on makes each rebuild self-clean the image it just orphaned. Best-effort at startup: no socket / Protection mode on / an Engine error all skip cleanly, never blocking boot.
+- **Health-visible.** `haops_tools_check`'s docker group now includes a read-only `disk_usage` probe, so reclaimable space shows up in a health run.
+- Needs the Docker socket like the other container tools: `docker_api: true` (already declared) **and** Protection mode OFF.
+
+Note: this is prevention, not a fix for existing bloat — Docker's own `system df` on a clean host shows nothing prunable. The `DockerClient` speaks the Engine API directly over the existing unix socket; no `docker` CLI involved.
+
 ## 0.60.3
 
 Honesty fixes in the new ESPHome tool — both cases of reporting a value we hadn't actually established. Neither breaks anything; they make the output trustworthy.
