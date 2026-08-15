@@ -8,9 +8,10 @@ two buckets and nothing else.
 
 Like the container tools this is inert without the Docker socket — see
 ``connections/docker.py`` for why that needs a manifest capability *and*
-Protection mode off. An opt-in ``docker.prune_on_start`` config flag runs the
-same prune automatically at startup; a successful dev-deploy restarts the
-addon, so on a dev box each rebuild self-cleans the image it just orphaned.
+Protection mode off. A ``docker.prune_on_start`` config flag (on by default,
+but only fires when the socket is present) runs the same prune automatically
+at startup; a successful dev-deploy restarts the addon, so each rebuild
+self-cleans the image it just orphaned.
 """
 
 from __future__ import annotations
@@ -44,6 +45,8 @@ if TYPE_CHECKING:
         "Requires the Docker socket: 'docker_api: true' in the manifest AND "
         "Protection mode OFF on the add-on. If it is not enabled the response "
         "explains how to enable it instead of failing opaquely. "
+        "Also runs automatically at addon start (docker_prune_on_start, on by "
+        "default) when the socket is available. "
         "Byte counts are raw — divide by 1e9 for GB. "
         "Parameters: confirm (bool, default false), token (string, required if "
         "confirm=true)."

@@ -229,8 +229,14 @@ async def test_prune_unavailable_without_socket():
 # --------------------------------------------------------------- config ------
 
 
-def test_docker_config_defaults_off():
-    assert DockerConfig().prune_on_start is False
+def test_docker_config_defaults_on():
+    assert DockerConfig().prune_on_start is True
+
+
+def test_docker_prune_on_start_env_can_disable(monkeypatch, tmp_path):
+    monkeypatch.setenv("HA_OPS_DOCKER_PRUNE_ON_START", "false")
+    cfg = load_config(tmp_path / "nonexistent.yaml")
+    assert cfg.docker.prune_on_start is False
 
 
 def test_docker_prune_on_start_env_override(monkeypatch, tmp_path):

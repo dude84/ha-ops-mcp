@@ -1,3 +1,7 @@
+## 0.61.1
+
+**`docker_prune_on_start` now defaults ON.** Prevention should be the default, not something you remember to enable. The safety envelope is unchanged and makes default-on correct: it fires **only** when the Docker socket is present (`docker_api` + Protection mode OFF — already a deliberate opt-in), and even then removes only dangling images and unused build cache, never a tagged image or a volume. Any install without the socket skips it entirely. Set `docker_prune_on_start: false` to disable.
+
 ## 0.61.0
 
 **New `haops_docker_prune` — reclaim the disk that repeated addon rebuilds leave on the HA host.** Every `dev-deploy` / addon update leaves the host holding artifacts nothing references: dangling `<none>` images from superseded builds and, on BuildKit hosts, unused build cache. Over a dev stretch that grows to many GB.

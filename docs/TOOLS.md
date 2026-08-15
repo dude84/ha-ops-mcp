@@ -158,7 +158,7 @@ Stateless typed graph rebuilt per query — registries, structured YAML, dashboa
 | `haops_container_list` | Read | List containers on the HA host. Needs the Docker socket (see below). |
 | `haops_container_logs` | Read | Recent stdout/stderr from another container. Prefer `haops_addon_logs` for add-ons. |
 | `haops_container_exec` | Write | Two-phase command execution **inside another container**. Token is bound to command *and* container. Timeout abandons, not kills. |
-| `haops_docker_prune` | Write | Two-phase reclaim of **dangling images + unused build cache** on the HA host. Never touches tagged/in-use images or volumes; never `system prune -a`. Preview reports reclaimable bytes. Opt-in `docker_prune_on_start` runs it at each addon start. Needs the Docker socket. |
+| `haops_docker_prune` | Write | Two-phase reclaim of **dangling images + unused build cache** on the HA host. Never touches tagged/in-use images or volumes; never `system prune -a`. Preview reports reclaimable bytes. `docker_prune_on_start` (on by default, fires only when the socket is present) runs it at each addon start. Needs the Docker socket. |
 | `haops_addon_list` | Read | List installed add-ons. Requires Supervisor API. |
 | `haops_addon_info` | Read | Add-on details + live resource stats. |
 | `haops_addon_logs` | Read | Add-on log output. |

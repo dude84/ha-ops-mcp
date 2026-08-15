@@ -322,10 +322,11 @@ async def _detect_ha_version(ctx: HaOpsContext) -> None:
 async def _prune_docker_on_start(ctx: HaOpsContext) -> None:
     """Optionally reclaim dangling images + build cache at startup.
 
-    Opt-in via ``docker.prune_on_start`` (default off). A successful
-    dev-deploy restarts the addon, so on a dev box this self-cleans the image
-    the deploy just orphaned. Best-effort and non-fatal: no socket, Protection
-    mode on, or an Engine error must never block startup.
+    Controlled by ``docker.prune_on_start`` (default on). A successful
+    dev-deploy restarts the addon, so this self-cleans the image the deploy
+    just orphaned. Best-effort and non-fatal: no socket, Protection mode on,
+    or an Engine error must never block startup — which is also why default-on
+    is safe, since an install without the socket simply skips here.
     """
     if not ctx.config.docker.prune_on_start:
         return

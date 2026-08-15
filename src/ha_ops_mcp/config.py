@@ -115,11 +115,14 @@ class AuthConfig:
 @dataclass
 class DockerConfig:
     # Prune dangling images + unused build cache on every addon start.
-    # Default OFF. A successful dev-deploy restarts the addon, so on a dev box
-    # this makes each rebuild self-clean the image it just orphaned. Leave off
-    # elsewhere — auto-deleting images should be a deliberate opt-in.
+    # Default ON, but only ever fires when the Docker socket is present
+    # (docker_api + Protection mode OFF) — an install that hasn't opted into
+    # the socket is untouched. A successful dev-deploy restarts the addon, so
+    # each rebuild self-cleans the image it just orphaned. Only DANGLING images
+    # and unused build cache are removed — never a tagged image or a volume —
+    # so it is safe as a default. Set false to disable.
     # haops_docker_prune runs the same prune on demand regardless of this flag.
-    prune_on_start: bool = False
+    prune_on_start: bool = True
 
 
 @dataclass
