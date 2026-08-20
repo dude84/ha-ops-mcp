@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ha_ops_mcp.safety.classification import classify
+from ha_ops_mcp.session import get_current_session
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,9 @@ class AuditLog:
             "success": success,
             "op_class": op_class,
             "area": area,
+            # Which MCP client connection did this — matters once several
+            # clients share the static bearer token (v0.62.0+).
+            "session": get_current_session(),
         }
         if backup_path:
             entry["backup_path"] = backup_path
@@ -129,6 +133,7 @@ class AuditLog:
             "success": True,
             "op_class": op_class,
             "area": area,
+            "session": get_current_session(),
         }
         try:
             self._maybe_rotate()

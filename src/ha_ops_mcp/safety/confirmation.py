@@ -9,10 +9,15 @@ time-based cap adds friction without matching value.
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
+
+from ha_ops_mcp.session import get_current_session
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,6 +27,10 @@ class ConfirmationToken:
     details: dict[str, Any]
     created_at: float
     consumed: bool = False
+    # MCP session key of the previewing client (attribution only — a claim
+    # from a different session is logged, not rejected, because a client
+    # reconnect between preview and confirm legitimately changes the key).
+    session: str = "-"
 
 
 class TokenConsumedError(Exception):
@@ -61,6 +70,7 @@ class SafetyManager:
             action=action,
             details=details,
             created_at=time.time(),
+            session=get_current_session(),
         )
         self._tokens[token.id] = token
         return token
@@ -94,6 +104,17 @@ class SafetyManager:
         if token.consumed:
             raise TokenConsumedError(f"Token {token_id} already consumed")
         token.consumed = True
+        claimer = get_current_session()
+        if token.session != claimer and "-" not in (token.session, claimer):
+            # Attribution warning only — a reconnect between preview and
+            # confirm changes the session key for the same human, so a hard
+            # reject here would break legitimate flows.
+            logger.warning(
+                "Token %s previewed by session %s, claimed by session %s",
+                token_id,
+                token.session,
+                claimer,
+            )
         return token
 
     def validate_token(self, token_id: str) -> ConfirmationToken:

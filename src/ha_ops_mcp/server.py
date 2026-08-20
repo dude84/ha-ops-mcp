@@ -29,6 +29,7 @@ from ha_ops_mcp.safety.confirmation import SafetyManager
 from ha_ops_mcp.safety.path_guard import PathGuard
 from ha_ops_mcp.safety.rollback import RollbackManager
 from ha_ops_mcp.safety.shell_output import ShellOutputStore
+from ha_ops_mcp.session import set_current_session
 
 logger = logging.getLogger(__name__)
 
@@ -595,12 +596,39 @@ def _register_tool(
     We must expose the original handler's parameters (minus ctx) so that
     FastMCP generates the correct parameter schema for MCP clients.
     """
-    # Build a wrapper with the same signature as handler, minus 'ctx'
+    # Build a wrapper with the same signature as handler, minus 'ctx', plus a
+    # FastMCP Context param. The SDK recognises the Context annotation,
+    # injects the per-request context, and excludes the param from the
+    # client-visible schema — giving us session identity for audit/token
+    # attribution without changing any handler signature.
+    from mcp.server.fastmcp import Context as _FastMCPContext
+
     orig_sig = inspect.signature(handler)
     params = [p for pname, p in orig_sig.parameters.items() if pname != "ctx"]
-    new_sig = orig_sig.replace(parameters=params)
+    fctx_param = inspect.Parameter(
+        "fastmcp_ctx",
+        kind=inspect.Parameter.KEYWORD_ONLY,
+        default=None,
+        annotation=_FastMCPContext,
+    )
+    new_sig = orig_sig.replace(parameters=[*params, fctx_param])
 
     async def tool_wrapper(**kwargs: Any) -> Any:
+        fctx = kwargs.pop("fastmcp_ctx", None)
+        session_key = "-"
+        if fctx is not None:
+            try:
+                sess = fctx.request_context.session
+                # id() of the live ServerSession distinguishes concurrent
+                # client connections; client_id (when declared) adds a
+                # human-recognisable prefix. Ephemeral by design.
+                session_key = f"{id(sess) & 0xFFFFFF:06x}"
+                client_id = getattr(fctx, "client_id", None)
+                if client_id:
+                    session_key = f"{client_id}:{session_key}"
+            except Exception:  # noqa: BLE001 - attribution must never break a tool
+                pass
+        set_current_session(session_key)
         result = await handler(ctx, **kwargs)
         # Read-only calls don't self-log; the central wrapper records them
         # to the activity stream so the Timeline can show a full feed.
@@ -624,5 +652,13 @@ def _register_tool(
     # Set signature BEFORE FastMCP's @mcp.tool decorator introspects it
     functools.update_wrapper(tool_wrapper, handler)
     tool_wrapper.__signature__ = new_sig  # type: ignore[attr-defined]
+    # update_wrapper copied the handler's __annotations__, which lack the
+    # injected Context param — add it so annotation-based introspection
+    # (typing.get_type_hints) agrees with the signature.
+    tool_wrapper.__annotations__ = {
+        **getattr(handler, "__annotations__", {}),
+        "fastmcp_ctx": _FastMCPContext,
+    }
+    tool_wrapper.__annotations__.pop("ctx", None)
 
     mcp.tool(name=name, description=description)(tool_wrapper)
