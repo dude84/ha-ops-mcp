@@ -1,3 +1,27 @@
+## 0.63.0
+
+**BREAKING: the `sse` transport is removed.** `streamable-http` is now the only HTTP transport.
+SSE is the MCP spec's legacy transport, and its long-lived streams dropping on Supervisor-proxy
+idle was the root cause of the pre-v0.34.0 "re-auth on every launch" symptom — it has been the
+non-default since v0.34.0 and deprecated since v0.62.2.
+
+- The addon Configuration's `transport` option no longer offers `sse`. An addon updated from
+  ≤0.62.x whose stored options still say `sse` **starts normally on streamable-http** with a
+  warning (stored option values survive a schema change, so failing to boot would be hostile);
+  same fall-forward in the standalone entry point for a stale `config.yaml`. `serve_http()` itself
+  refuses `sse` outright, and a test asserts no module calls `sse_app()` again.
+- **If your MCP client points at `/sse`, re-add it against `/mcp`** — that endpoint is gone.
+
+**OAuth setup is now documented properly.** OAuth stayed experimental but under-explained since
+v0.62.0; the README's Authentication section now lists all five requirements (TLS terminator or a
+localhost tunnel, a certificate-matching hostname resolvable from every client, `auth_issuer_url`
+set to the exact HTTPS origin, `auth_mode: oauth`, and a client URL whose host matches the issuer
+per RFC 8707), the client command, how to verify with `haops_auth_status`, and the operational
+notes (store clearing, DCR caps). Also corrected a stale claim in `docs/INSTALL.md`: it told
+Gemini CLI users that a static Bearer token was "not a workaround" and to set `auth_enabled: false`
+— since v0.62.0 the token is a plain non-expiring header, so Gemini CLI (and any non-DCR client)
+can authenticate normally. Its config example now shows the `headers` block.
+
 ## 0.62.2
 
 **The `sse` transport is deprecated and will be removed in the next minor release.** It is the

@@ -75,7 +75,9 @@ For most users, the **default configuration works without changes**. The addon a
 If you need to customise, the addon's **Configuration** tab exposes these options:
 
 - **Token**: leave blank to use the Supervisor token (recommended). Only set a long-lived access token if you need specific permissions.
-- **Transport**: `streamable-http` (default) or `sse` (legacy).
+- **Transport**: `streamable-http` (the only HTTP transport; `sse` was removed in v0.63.0).
+- **Auth**: `auth_mode` — `token` (default, static Bearer), `oauth` (experimental), `none`; and
+  `auth_token` (blank = auto-generate and prefill here).
 - **Database URL**: leave blank for auto-detect. Set explicitly for MariaDB or PostgreSQL.
 - **Backup directory**: default `/backup/ha-ops-mcp`.
 - **Backup retention**: `max_age_days` (default 30), `max_per_type` (default 100).
@@ -139,42 +141,53 @@ Client registrations and tokens are persisted to `<data_dir>/oauth.json` and sur
 
 ### Claude Code (CLI)
 
-Claude Code uses stdio transport locally — no OAuth needed. For remote connections over streamable-HTTP with auth enabled, Claude Code supports OAuth natively:
+Claude Code uses stdio transport locally — no auth needed. For remote connections over
+streamable-http with the default token auth, pass the token as a header:
 
 ```bash
-claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp
+claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp \
+  --header "Authorization: Bearer <your token>"
 ```
 
-For SSE transport (legacy):
+The token is in the addon **Configuration** tab (`auth_token`); if you left it blank the addon
+generated one and prefilled it there. A raw-IP URL is fine in token mode.
+
+With `auth_mode: oauth` (experimental, HTTPS or localhost only — see the README's Authentication
+section for the full requirements), omit `--header` and Claude Code discovers the OAuth metadata
+and walks you through the flow:
 
 ```bash
-claude mcp add --transport sse ha-ops http://<your-ha-address>:8901/sse
+claude mcp add --transport http ha-ops https://ha-ops.example.com/mcp
 ```
-
-Claude Code will detect the 401, discover the OAuth metadata, and walk you through the auth flow.
 
 ### Gemini CLI
 
-Gemini CLI's MCP client does **not** implement OAuth Dynamic Client Registration, so the Claude Code-style `/mcp` auto-auth flow is unavailable. The only working configuration today is to **disable auth on the addon** and connect anonymously.
+Gemini CLI's MCP client does **not** implement OAuth Dynamic Client Registration. That used to mean
+"disable auth entirely" was the only option — **no longer true since v0.62.0**: the default static
+Bearer token is a plain header, which any client can send. Keep `auth_mode: token` and put the token
+in the config.
 
-1. Open the addon **Configuration** tab, set `auth_enabled: false`, and restart the addon. Confirm the addon is back up before continuing — Gemini CLI will silently fail to register the server if it cannot reach `/mcp`.
-2. Add the following to `~/.gemini/settings.json`, replacing `<ha-ip>` with your Home Assistant host's **IP address** (e.g. `10.0.0.150`). Prefer the IP over `homeassistant.local` — mDNS resolution is not available on every network or every OS, and a hostname that fails to resolve produces a vague registration error:
+Add the following to `~/.gemini/settings.json`, replacing `<ha-ip>` with your Home Assistant host's
+**IP address** (e.g. `10.0.0.150`) and `<your token>` with `auth_token` from the addon
+Configuration. Prefer the IP over `homeassistant.local` — mDNS resolution is not available on every
+network or every OS, and a hostname that fails to resolve produces a vague registration error:
 
 ```json
 {
   "mcpServers": {
     "ha-ops": {
-      "httpUrl": "http://<ha-ip>:8901/mcp"
+      "httpUrl": "http://<ha-ip>:8901/mcp",
+      "headers": {
+        "Authorization": "Bearer <your token>"
+      }
     }
   }
 }
 ```
 
-For SSE (legacy) replace `"httpUrl"` with `"url": "http://<ha-ip>:8901/sse"`.
-
-Verify with `gemini mcp list`.
-
-Why a static Bearer token is **not** a workaround: ha-ops-mcp's OAuth provider issues only short-lived access tokens (30-day sliding window — extends on use, idle sessions still time out) and there is no API to mint a long-lived token. Pasting a one-off token into a header works for an idle window of at most 30 days and then silently starts returning 401 — not a deployable configuration. If you need auth with Gemini CLI, wait for upstream Gemini CLI to add OAuth/DCR support or for ha-ops-mcp to expose a long-lived API key issuance path (not currently on the roadmap).
+Verify with `gemini mcp list`. The token does not expire (unlike the OAuth access tokens, which
+carried a 30-day sliding window), so this is a deployable configuration — `auth_mode: none` is no
+longer necessary for non-OAuth clients.
 
 ## Recommended: client-side review mode for mutations
 

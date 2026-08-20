@@ -70,7 +70,13 @@ export HA_OPS_URL="${ha_url}"
 export HA_OPS_WS_URL="${ws_url}"
 export HA_OPS_TRANSPORT="${transport}"
 if [ "${transport}" = "sse" ]; then
-    bashio::log.warning "The 'sse' transport is DEPRECATED and will be removed in the next minor release. Switch to 'streamable-http' in the addon Configuration and re-add the server in your MCP client with endpoint /mcp."
+    # Removed in v0.63.0. An addon updated from <=0.62.x can still carry
+    # transport: sse in its stored options (the schema no longer offers it,
+    # but existing values survive), so fall forward instead of failing to
+    # start — the server would refuse this transport anyway.
+    bashio::log.warning "The 'sse' transport was removed in v0.63.0 — starting on 'streamable-http' instead. Update your MCP client to endpoint /mcp, and set transport: streamable-http in the addon Configuration to silence this."
+    transport="streamable-http"
+    export HA_OPS_TRANSPORT="streamable-http"
 fi
 export HA_OPS_CONFIG_ROOT="/config"
 export HA_OPS_BACKUP_DIR="${backup_dir}"

@@ -332,7 +332,7 @@ certainly an expired/lost OAuth Bearer token, NOT a params problem.
 Confirm with curl:
 
 ```
-curl -i http://homeassistant.local:8901/sse
+curl -i -X POST http://homeassistant.local:8901/mcp
 # expect: HTTP/1.1 401 Unauthorized
 #         www-authenticate: Bearer error="invalid_token", ...
 ```

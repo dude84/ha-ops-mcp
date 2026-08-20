@@ -1,7 +1,8 @@
 """HTTP transport runner with an explicit dual-stack listener.
 
-Replaces ``FastMCP.run(transport=...)`` for the SSE and streamable-http
-transports so we control the listening socket. uvicorn 0.46's
+Replaces ``FastMCP.run(transport=...)`` for the streamable-http transport
+(the only HTTP transport since v0.63.0) so we control the listening
+socket. uvicorn 0.46's
 ``Config.bind_socket`` creates an ``AF_INET6`` socket and calls ``bind()``
 without setting ``IPV6_V6ONLY``. The kernel sysctl
 ``net.ipv6.bindv6only`` is supposed to govern the default, but on the HA
@@ -40,22 +41,20 @@ def _bind_listener(host: str, port: int) -> socket.socket:
 async def serve_http(
     mcp: FastMCP,
     transport: str,
-    mount_path: str | None = None,
     static_token: str | None = None,
 ) -> None:
     app: Any
-    if transport == "sse":
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "The 'sse' transport is DEPRECATED and will be removed in the "
-            "next minor release — it is the MCP spec's legacy transport and "
-            "its long-lived streams drop on proxy idle (the v0.34.0 re-auth "
-            "saga). Switch to 'streamable-http' (endpoint /mcp)."
-        )
-        app = mcp.sse_app(mount_path)
-    elif transport == "streamable-http":
+    if transport == "streamable-http":
         app = mcp.streamable_http_app()
+    elif transport == "sse":
+        # Removed in v0.63.0. The MCP spec's legacy transport, and its
+        # long-lived streams dropped on Supervisor-proxy idle — the root
+        # cause of the pre-v0.34.0 "re-auth on every launch" symptom.
+        raise ValueError(
+            "The 'sse' transport was removed in v0.63.0. Set "
+            "transport: streamable-http in the addon Configuration and "
+            "re-add the server in your MCP client with endpoint /mcp."
+        )
     else:
         raise ValueError(f"serve_http does not support transport: {transport}")
 

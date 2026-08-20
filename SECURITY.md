@@ -77,8 +77,8 @@ expected to be able to bypass them).
 ## Authentication
 
 - **MCP transport:** a **static pre-shared Bearer token** is enforced by
-  default (since v0.62.0, `auth_mode: token`) on the `sse` / `streamable-http`
-  transports — checked constant-time on every request except the
+  default (since v0.62.0, `auth_mode: token`) on the streamable-http
+  transport — checked constant-time on every request except the
   HA-ingress-authenticated sidebar paths (`/ui`, `/api/ui/*`). The token is
   set in the addon Configuration (`auth_token`, masked field) or
   auto-generated — then prefilled back into the addon Configuration via the

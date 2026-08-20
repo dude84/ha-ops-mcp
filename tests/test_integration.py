@@ -352,7 +352,7 @@ def test_server_starts_with_dual_stack_bind_and_oauth_on(tmp_path: Path):
         f"filesystem:\n  config_root: {tmp_path}\n"
         f"backup:\n  dir: {tmp_path}/backups\n"
         "database:\n  auto_detect: false\n"
-        "server:\n  transport: sse\n  host: '::'\n  port: 8901\n"
+        "server:\n  transport: streamable-http\n  host: '::'\n  port: 8901\n"
         f"auth:\n  enabled: true\n  mode: oauth\n  data_dir: {tmp_path}/data\n"
     )
 
@@ -384,10 +384,9 @@ def test_server_defaults_to_static_token_auth(tmp_path: Path):
     assert (tmp_path / "data" / "static_token").read_text().strip() == ctx.static_token
 
 
-def test_server_starts_with_oauth_disabled_on_sse(tmp_path: Path):
-    """When auth.enabled=false on SSE transport the OAuth block must be
-    skipped entirely — no issuer construction, no provider, no /data
-    dependency."""
+def test_server_starts_with_auth_disabled(tmp_path: Path):
+    """When auth.enabled=false the auth block must be skipped entirely —
+    no issuer construction, no provider, no token, no /data dependency."""
     from ha_ops_mcp.server import create_server
 
     config_file = tmp_path / "config.local.yaml"
@@ -396,7 +395,7 @@ def test_server_starts_with_oauth_disabled_on_sse(tmp_path: Path):
         f"filesystem:\n  config_root: {tmp_path}\n"
         f"backup:\n  dir: {tmp_path}/backups\n"
         "database:\n  auto_detect: false\n"
-        "server:\n  transport: sse\n  host: '::'\n  port: 8901\n"
+        "server:\n  transport: streamable-http\n  host: '::'\n  port: 8901\n"
         "auth:\n  enabled: false\n"
     )
 

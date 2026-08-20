@@ -58,11 +58,12 @@ Leave blank to use the auto-provisioned Supervisor token (recommended). Or paste
 
 ### Transport
 
-- **streamable-http** (default since v0.34.0): the MCP spec's current HTTP transport, port 8901,
-  endpoint `/mcp`. Use this.
-- **sse** — **DEPRECATED, removed in the next minor release.** The MCP spec's legacy transport;
-  its long-lived streams drop on proxy idle (the cause of the pre-v0.34.0 re-auth symptom). Still
-  starts, with a startup warning.
+- **streamable-http** — the only HTTP transport, port 8901, endpoint `/mcp`.
+
+The legacy **sse** transport was **removed in v0.63.0** (its long-lived streams dropped on
+proxy idle, causing the pre-v0.34.0 re-auth symptom). If your addon options still say
+`transport: sse` from an older version, it starts on streamable-http and logs a warning — set
+`streamable-http` here and point your MCP client at the `/mcp` endpoint.
 
 ### Database URL
 
@@ -110,7 +111,7 @@ claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp \
 
 The token is in the addon Configuration (`auth_token`) — if you left it blank, the addon generated
 one and prefilled it there on first start (also persisted at `<backup_dir>/auth/static_token`).
-A raw-IP URL works in token mode. (The `sse` transport is deprecated — see Transport below.)
+A raw-IP URL works in token mode.
 
 Then start Claude Code — the `haops_*` tools will be available.
 

@@ -46,6 +46,17 @@ def main() -> None:
 
     transport = os.environ.get("HA_OPS_TRANSPORT", ctx.config.server.transport)
 
+    if transport == "sse":
+        # Removed in v0.63.0 (MCP's legacy transport; long-lived streams
+        # dropped on proxy idle). Fall forward rather than refusing to boot
+        # on a config left over from <=0.62.x.
+        logging.getLogger(__name__).warning(
+            "The 'sse' transport was removed in v0.63.0 — starting on "
+            "'streamable-http' instead. Point your MCP client at the /mcp "
+            "endpoint and set transport: streamable-http in your config."
+        )
+        transport = "streamable-http"
+
     if transport == "stdio":
         mcp.run(transport="stdio")
     else:

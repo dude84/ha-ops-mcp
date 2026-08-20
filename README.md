@@ -61,8 +61,9 @@ The token comes from the addon Configuration (`auth_token`) or the addon log —
 [Authentication](#authentication). In token mode a raw-IP URL is fine (useful over VPN, where mDNS
 doesn't resolve).
 
-The `sse` transport is **deprecated and will be removed in the next minor release** — it still
-starts (with a warning) for installs mid-migration, but new setups should not use it.
+**The `sse` transport was removed in v0.63.0** (MCP's legacy transport; its long-lived streams
+dropped on Supervisor-proxy idle). An addon carrying `transport: sse` from an older version starts
+on streamable-http with a warning — point your client at `/mcp`.
 
 For standalone (stdio):
 
@@ -101,16 +102,57 @@ compared constant-time; the sidebar panel (`/ui`, `/api/ui/*`) stays on HA ingre
 else on port 8901 requires the Bearer token. Multiple Claude Code instances can share the token and
 connect concurrently.
 
-**OAuth 2.0 (experimental since v0.62.0 — previously the default).** Set `auth_mode: oauth` to
-re-enable it. Only sensible when clients reach the server over **HTTPS** (TLS reverse proxy in
-front of port 8901 + `auth_issuer_url` pointing at the https URL) or from **localhost** (e.g. SSH
-port-forward). The implementation is unchanged from when it was the default:
+#### OAuth 2.0 (experimental since v0.62.0 — previously the default)
 
-OAuth 2.0 with Dynamic Client Registration is enabled for SSE / streamable-HTTP transports. The provider auto-approves authorization requests (single-user admin server, no consent UI) and persists clients + tokens to `<data_dir>/oauth.json`. Default token TTLs: 30-day access token with a sliding window (extends on every successful verification), 30-day refresh token.
+OAuth is still fully implemented: Dynamic Client Registration, auto-approved authorization
+(single-user admin server, no consent UI), clients + tokens persisted to `<data_dir>/oauth.json`,
+30-day access token with a sliding TTL (extends on every successful verification) and 30-day
+refresh token. What changed is that **modern MCP clients will only speak OAuth to an HTTPS
+endpoint**, so it now takes real infrastructure. Use it if you want per-client credentials,
+revocation, and expiry rather than one shared secret.
 
-To clear all stored OAuth state (after a client mismatch or revocation), tick `clear_oauth_on_next_boot` in the addon Configuration and restart — the flag self-resets after firing.
+**Requirements — all of them, or the flow fails client-side before it reaches the addon:**
 
-**Re-auth-every-launch — resolved by switching transport to streamable-HTTP (v0.34.0).** Earlier reports of "Claude Code forces a fresh DCR + authorization-code flow on every launch" were tracked against [anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000). After flipping the addon default from SSE to streamable-HTTP in v0.34.0, the symptom no longer reproduces: same `client_id` reused, same access + refresh tokens persisted across `/clear` and Claude Code restart cycles (`haops_auth_status` confirms TTL decrements at wall-clock rate, no fresh registrations piling up). The root cause was SSE-transport fragility — long-lived `GET /sse` streams dropping on Supervisor-proxy idle, surfacing client-side as forced re-auth — not the DCR-keying theory. If you are still on SSE and seeing this, switch to `transport: streamable-http` in the addon Configuration.
+1. **TLS in front of port 8901.** A reverse proxy (HAProxy, nginx, Caddy, NPM add-on) terminating
+   HTTPS and forwarding to the addon. Self-signed will be rejected by most clients — use a real
+   certificate (Let's Encrypt / DuckDNS add-on, or your own CA properly trusted on the client).
+   *Alternative:* no proxy, but reach the addon over `localhost` — e.g.
+   `ssh -L 8901:localhost:8901 root@<ha-host>` and connect to `http://localhost:8901/mcp`. Loopback
+   is the one exemption from the TLS requirement.
+2. **A stable hostname that matches the certificate**, resolvable from every client machine
+   (split-DNS or `/etc/hosts` if the name is internal-only).
+3. **`auth_issuer_url` set to that exact HTTPS URL** in the addon Configuration — e.g.
+   `https://ha-ops.example.com`. Auto-detection derives an `http://` issuer from HA's
+   `internal_url`, which will not satisfy the client. No trailing path.
+4. **`auth_mode: oauth`** in the addon Configuration.
+5. **The client URL must match the issuer's host exactly.** OAuth resource metadata is pinned to
+   the issuer (RFC 8707), so `https://ha-ops.example.com/mcp` works and a raw-IP or alternate
+   hostname pointing at the same server does not. (Token mode has no such constraint — this is a
+   real cost of choosing OAuth.)
+
+Then, on the client:
+
+```bash
+claude mcp add --transport http ha-ops https://ha-ops.example.com/mcp
+```
+
+No `--header` — the client discovers the OAuth endpoints and runs the flow itself, opening a
+browser once. Verify with `haops_auth_status`: it should report `mode: oauth` plus registered
+clients and token TTLs.
+
+**Operating notes.** To clear all stored OAuth state (client mismatch, revocation, wedged auth),
+tick `clear_oauth_on_next_boot` in the addon Configuration and restart — the flag self-resets after
+firing. There is no MCP tool for this on purpose: clearing the store kills the session making the
+call. Defensive caps (v0.34.1): `MAX_CLIENTS = 100` persisted DCR registrations with
+LRU-by-`client_id_issued_at` eviction (tokens for dropped clients are revoked too), and `issued_at`
+stamped on every access + refresh token for auditing via `haops_auth_status`.
+
+**Historical note — "re-auth on every launch" (resolved in v0.34.0).** Reports of Claude Code
+forcing a fresh DCR + authorization-code flow on every launch were tracked against
+[anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000). The cause
+was the old SSE transport: long-lived `GET /sse` streams dropped on Supervisor-proxy idle, which
+surfaced client-side as forced re-auth. Switching the default to streamable-HTTP fixed it (same
+`client_id` and tokens persist across restarts), and SSE was removed entirely in v0.63.0.
 
 `auth_mode: none` (or the legacy `auth_enabled: false`) remains available for trusted single-host LAN deployments where you want zero auth overhead. Disabling it means anyone reachable on `:8901/mcp` can call every tool including `haops_exec_shell` and DB writes — only acceptable if the LAN trust boundary is strict.
 

@@ -71,7 +71,7 @@ options:
 
 schema:
   ha_token: "str?"
-  transport: "list(streamable-http|sse)"
+  transport: "list(streamable-http)"
   db_url: "str?"
   backup_dir: "str"
   backup_max_age_days: "int(1,3650)"
