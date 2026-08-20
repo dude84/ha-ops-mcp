@@ -75,7 +75,7 @@ For most users, the **default configuration works without changes**. The addon a
 If you need to customise, the addon's **Configuration** tab exposes these options:
 
 - **Token**: leave blank to use the Supervisor token (recommended). Only set a long-lived access token if you need specific permissions.
-- **Transport**: `streamable-http` (the only HTTP transport; `sse` was removed in v0.63.0).
+- **Transport**: not configurable. Always `streamable-http` on port 8901, endpoint `/mcp` — the option was removed in v0.63.1 (one valid value), and `sse` in v0.63.0.
 - **Auth**: `auth_mode` — `token` (default, static Bearer), `oauth` (experimental), `none`; and
   `auth_token` (blank = auto-generate and prefill here).
 - **Database URL**: leave blank for auto-detect. Set explicitly for MariaDB or PostgreSQL.
@@ -85,15 +85,54 @@ If you need to customise, the addon's **Configuration** tab exposes these option
 
 For standalone installs, copy `config.example.local.yaml` to `config.local.yaml`. All values can be overridden with `HA_OPS_*` environment variables.
 
-## OAuth authentication
+## Protection mode (required for the Docker-backed tools)
 
-OAuth is **enabled by default** since v0.27.0 for SSE and streamable-http transports. MCP clients must authenticate before using tools — this prevents unauthenticated access from the LAN.
+HA add-ons run with **Protection mode ON by default**. While it is on, Supervisor strips the
+`docker_api: true` capability this add-on declares, so the manifest by itself grants nothing —
+the checkbox is the opt-in gate.
 
-### Disabling OAuth
+**To enable:**
+
+1. **Settings > Add-ons > HA Ops MCP > Info**
+2. Switch **Protection mode** off
+3. **Restart the add-on**
+
+Step 3 is mandatory. Supervisor evaluates the socket mount when it *creates* the container, so
+toggling protection while the add-on runs has no effect until it is recreated. Confirm with
+`haops_self_check` — the `docker` check should read `ok` with a container count.
+
+### Limitations if you leave Protection mode ON
+
+Leaving it on is a legitimate choice: the socket reaches *every* container on the host, which widens
+the add-on's reach from "all of Home Assistant" to "all containers on the machine". Read
+[SECURITY.md](../SECURITY.md#docker-socket-access-v0570--opt-in-and-a-genuine-step-up) before
+switching it off. What you give up by keeping it on:
+
+| Tool | Behaviour with Protection mode ON |
+|------|-----------------------------------|
+| `haops_container_list` / `_logs` / `_exec` | **Unavailable.** Each returns how to enable it rather than failing opaquely. |
+| `haops_esphome_build` | **Cannot compile** — compiling runs in the ESPHome add-on's container via the socket. |
+| `haops_esphome_status` | **Works.** Build artifacts live under `<config>/esphome/.esphome/build`, so firmware sizes are a plain file read; the response carries a scoped `impact` note about what the missing socket costs. |
+| `haops_docker_prune` | **Unavailable**, and the startup auto-prune (`docker_prune_on_start`, on by default) skips with an INFO log line. Dangling `<none>` images and BuildKit cache left by add-on rebuilds are never reclaimed by Supervisor either — clear them from the host if disk gets tight. |
+| `haops_self_check` | `docker` = `skip` (`tools_unavailable: 3`), never `fail`; `overall` stays `ok`. |
+| `haops_tools_check` | `docker` group = `skip`, so `all_pass` remains reachable on an install that never opts in. |
+
+No other tool is affected. `haops_addon_logs` covers add-on logs through Supervisor with no socket
+needed, so reach for it before `haops_container_logs`.
+
+## OAuth authentication (experimental since v0.62.0)
+
+**The default is static Bearer token auth** (`auth_mode: token`), not OAuth. OAuth was the default
+from v0.27.0 until v0.62.0; it now requires a TLS terminator in front of the add-on to satisfy OAuth
+2.0's transport requirement for token endpoints, which most LAN installs don't have. See the
+[OAuth section in README.md](../README.md#oauth-20-experimental-since-v0620--previously-the-default)
+for the full requirement list. The subsections below describe OAuth mode when you do enable it.
+
+### Disabling auth entirely
 
 If you're on a fully-trusted LAN with no remote access and want to skip auth:
 
-**Addon:** set **auth_enabled** to `false` in the Configuration tab and restart.
+**Addon:** set **auth_enabled** to `false` (or **auth_mode** to `none`) in the Configuration tab and restart.
 
 **Standalone** (`config.local.yaml`):
 
@@ -106,11 +145,11 @@ Or via environment variable: `HA_OPS_AUTH_ENABLED=false`
 
 ### Issuer URL
 
-The issuer URL tells MCP clients where to find the OAuth endpoints. For addon deployments, it is **auto-derived** from HA's internal URL — no configuration needed. If auto-detection picks the wrong hostname, set **auth_issuer_url** in the addon Configuration tab (e.g. `http://homeassistant.local:8901`).
+The issuer URL tells MCP clients where to find the OAuth endpoints. For addon deployments, it is **auto-derived** from HA's internal URL — no configuration needed. If auto-detection picks the wrong hostname, set **auth_issuer_url** in the addon Configuration tab. It must be the exact **HTTPS** origin your client will use (e.g. `https://ha.example.com`); a plain-http issuer is accepted by the server but current MCP clients refuse to send credentials to it.
 
 ### What it does
 
-When enabled on SSE or streamable-http transports, the MCP SDK automatically:
+When enabled on the streamable-http transport, the MCP SDK automatically:
 
 1. Publishes OAuth metadata at `/.well-known/oauth-authorization-server`
 2. Exposes `/authorize`, `/token`, `/register`, `/revoke` endpoints

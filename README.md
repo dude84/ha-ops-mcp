@@ -48,6 +48,33 @@ See [INSTALL.md](https://github.com/dude84/ha-ops-mcp/blob/main/docs/INSTALL.md)
 
 > **Use v0.55.1 or later.** Every earlier release fails to start on a fresh build with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` — the MCP SDK published 2.0.0 on 2026-07-28 and removed that module, and dependencies were previously uncapped. Rolling back to an older tag does not help; v0.55.1 caps every dependency below its next major.
 
+### Protection mode must be OFF for the Docker-backed tools
+
+Home Assistant add-ons run with **Protection mode ON by default**, and Supervisor silently strips the
+manifest's `docker_api: true` while it is on. The declaration alone grants nothing — the checkbox is
+the opt-in gate.
+
+To enable: **Settings > Add-ons > HA Ops MCP > Info**, switch **Protection mode** off, then
+**restart the add-on**. The restart is required, not cosmetic: Supervisor decides whether to mount
+`/run/docker.sock` when it *creates* the container, so toggling protection on a running add-on
+changes nothing until it is recreated.
+
+**If you leave Protection mode on** (a perfectly valid choice — see the trade-off in
+[SECURITY.md](SECURITY.md#docker-socket-access-v0570--opt-in-and-a-genuine-step-up), since the socket
+reaches every container on the host, not just this add-on):
+
+| Tool | Behaviour with Protection mode ON |
+|------|-----------------------------------|
+| `haops_container_list` / `_logs` / `_exec` | **Unavailable.** Return instructions on how to enable, not an opaque error. |
+| `haops_esphome_build` | **Cannot compile.** Compiling borrows the ESPHome add-on's toolchain through the socket. |
+| `haops_esphome_status` | **Works.** Firmware sizes come from `<config>/esphome/.esphome/build` — a plain file read — with a scoped `impact` note. |
+| `haops_docker_prune` | **Unavailable**, and the startup auto-prune (`docker_prune_on_start`) skips. Dangling images and build cache from every add-on rebuild accumulate; reclaim them from the host instead. |
+| `haops_self_check` | `docker` reports `skip` with `tools_unavailable: 3`. `overall` stays `ok`. |
+| `haops_tools_check` | The `docker` group reports `skip`, never `fail` — `all_pass` is still reachable. |
+
+Every other tool is unaffected. For add-on logs specifically, prefer `haops_addon_logs`: it goes
+through Supervisor and needs no socket at all.
+
 ### Connecting an MCP client
 
 The addon exposes a streamable-HTTP endpoint on port 8901 (default). To connect Claude Code:
@@ -61,9 +88,10 @@ The token comes from the addon Configuration (`auth_token`) or the addon log —
 [Authentication](#authentication). In token mode a raw-IP URL is fine (useful over VPN, where mDNS
 doesn't resolve).
 
-**The `sse` transport was removed in v0.63.0** (MCP's legacy transport; its long-lived streams
-dropped on Supervisor-proxy idle). An addon carrying `transport: sse` from an older version starts
-on streamable-http with a warning — point your client at `/mcp`.
+**Transport is not configurable.** streamable-http on `/mcp` is the only one; the addon option was
+removed in v0.63.1 (single valid value) and the legacy `sse` transport in v0.63.0 — its long-lived
+streams dropped on Supervisor-proxy idle. A stored `transport` value from an older install is
+ignored with a log line; point your client at `/mcp`.
 
 For standalone (stdio):
 

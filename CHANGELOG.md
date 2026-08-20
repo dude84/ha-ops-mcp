@@ -1,3 +1,33 @@
+## 0.63.1
+
+**The `transport` option is gone.** After v0.63.0 removed `sse` it was a radio group with a single
+choice — pure noise in the Configuration tab. streamable-http on `/mcp` is now implicit. A stored
+value from an older install is read only to log that it's being ignored. **And the option's
+user-visible description was still telling people to keep `sse` as "the tested path"** — the
+translation file was missed in v0.63.0, so the UI contradicted every other doc.
+
+**`translations/en.yaml` was several releases stale in general** — it described `auth_enabled` as an
+OAuth browser flow (static Bearer token has been the default since v0.62.0), gave the wrong
+`backup_dir` default, and had no entry at all for `auth_mode`, `auth_token`,
+`clear_oauth_on_next_boot`, `docker_prune_on_start`, `audit_log_reads` or the two backup-retention
+options, so those rendered in the addon UI with bare key names and no help text. All present and
+current now.
+
+**Protection mode is documented where people actually look.** Turning Protection mode off (and
+restarting the add-on) is what grants the Docker socket, but README and `docs/INSTALL.md` — the two
+docs a new install reads — had a parenthetical and nothing respectively. Both now carry the enable
+steps, the mandatory restart and *why* it's mandatory (Supervisor evaluates the mount at container
+creation), plus a table of exactly what degrades if you leave protection on: the three
+`haops_container_*` tools unavailable, `haops_esphome_build` unable to compile while
+`haops_esphome_status` keeps working from the filesystem, `haops_docker_prune` and the startup
+auto-prune skipped with nothing else reclaiming dangling images or BuildKit cache, and `docker`
+reporting `skip` (never `fail`) in `haops_self_check` / `haops_tools_check` so `all_pass` stays
+reachable. Same table added to `DOCS.md`.
+
+Also corrected two stale lines in `docs/INSTALL.md`'s OAuth section: it still claimed OAuth was
+enabled by default (static Bearer token has been the default since v0.62.0) and still described
+"SSE or streamable-http" plus a plain-http issuer example.
+
 ## 0.63.0
 
 **BREAKING: the `sse` transport is removed.** `streamable-http` is now the only HTTP transport.

@@ -6,6 +6,7 @@
 
 declare ha_token
 declare transport
+declare stored_transport
 declare db_url
 declare backup_dir
 declare backup_max_age_days
@@ -19,7 +20,6 @@ declare refindex_dynamic_entity_patterns
 
 # Read addon options
 ha_token=$(bashio::config 'ha_token')
-transport=$(bashio::config 'transport')
 db_url=$(bashio::config 'db_url')
 backup_dir=$(bashio::config 'backup_dir')
 backup_max_age_days=$(bashio::config 'backup_max_age_days')
@@ -68,16 +68,19 @@ fi
 export HA_OPS_TOKEN="${ha_token}"
 export HA_OPS_URL="${ha_url}"
 export HA_OPS_WS_URL="${ws_url}"
-export HA_OPS_TRANSPORT="${transport}"
-if [ "${transport}" = "sse" ]; then
-    # Removed in v0.63.0. An addon updated from <=0.62.x can still carry
-    # transport: sse in its stored options (the schema no longer offers it,
-    # but existing values survive), so fall forward instead of failing to
-    # start — the server would refuse this transport anyway.
-    bashio::log.warning "The 'sse' transport was removed in v0.63.0 — starting on 'streamable-http' instead. Update your MCP client to endpoint /mcp, and set transport: streamable-http in the addon Configuration to silence this."
-    transport="streamable-http"
-    export HA_OPS_TRANSPORT="streamable-http"
+# Transport is not an addon option any more (v0.63.1): streamable-http is the
+# only one the addon can serve, so a single-choice picker was noise. An install
+# updated from an older version may still carry a stored `transport` value —
+# Supervisor drops keys the schema no longer declares, but read it anyway so a
+# leftover `sse` produces a pointer to /mcp instead of silence.
+if bashio::config.exists 'transport'; then
+    stored_transport=$(bashio::config 'transport')
+    if [ "${stored_transport}" != "streamable-http" ]; then
+        bashio::log.warning "Ignoring stored transport '${stored_transport}' — it was removed as an option in v0.63.1 and 'sse' itself in v0.63.0. Serving streamable-http; point your MCP client at endpoint /mcp."
+    fi
 fi
+transport="streamable-http"
+export HA_OPS_TRANSPORT="streamable-http"
 export HA_OPS_CONFIG_ROOT="/config"
 export HA_OPS_BACKUP_DIR="${backup_dir}"
 export HA_OPS_BACKUP_MAX_AGE_DAYS="${backup_max_age_days}"

@@ -62,18 +62,35 @@ def test_sse_app_is_never_referenced_in_source() -> None:
     assert offenders == []
 
 
-def test_addon_schema_no_longer_offers_sse() -> None:
+def test_addon_no_longer_exposes_a_transport_option() -> None:
+    """v0.63.1 dropped the option entirely — one choice is not a choice.
+
+    Default and schema entry must both be gone, and no `sse` may survive
+    anywhere in the manifest (ports_description included).
+    """
     cfg = (
         Path(__file__).resolve().parent.parent / "config.yaml"
     ).read_text(encoding="utf-8")
-    assert 'transport: "list(streamable-http)"' in cfg
-    assert "streamable-http|sse" not in cfg
+    assert "transport:" not in cfg
+    assert "sse" not in cfg.lower()
 
 
-def test_run_sh_falls_forward_from_sse() -> None:
-    """A stored `transport: sse` option must not stop the addon booting."""
+def test_translations_have_no_transport_entry() -> None:
+    """The user-visible description told people to keep `sse` — it must go."""
+    translations = (
+        Path(__file__).resolve().parent.parent / "translations" / "en.yaml"
+    ).read_text(encoding="utf-8")
+    assert "transport" not in translations
+    assert "sse" not in translations.lower()
+
+
+def test_run_sh_pins_streamable_http() -> None:
+    """A stored `transport` value must not stop the addon booting."""
     run_sh = (
         Path(__file__).resolve().parent.parent / "run.sh"
     ).read_text(encoding="utf-8")
     assert 'transport="streamable-http"' in run_sh
     assert 'export HA_OPS_TRANSPORT="streamable-http"' in run_sh
+    # No bashio::config read may decide the transport any more — reading a
+    # leftover value into `stored_transport` to warn about it is fine.
+    assert "\ntransport=$(bashio::config 'transport')" not in run_sh

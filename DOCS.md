@@ -58,12 +58,11 @@ Leave blank to use the auto-provisioned Supervisor token (recommended). Or paste
 
 ### Transport
 
-- **streamable-http** — the only HTTP transport, port 8901, endpoint `/mcp`.
-
-The legacy **sse** transport was **removed in v0.63.0** (its long-lived streams dropped on
-proxy idle, causing the pre-v0.34.0 re-auth symptom). If your addon options still say
-`transport: sse` from an older version, it starts on streamable-http and logs a warning — set
-`streamable-http` here and point your MCP client at the `/mcp` endpoint.
+**streamable-http on port 8901, endpoint `/mcp`.** Not configurable — the `transport` option was
+removed in v0.63.1 because it had exactly one valid value. The legacy **sse** transport went in
+v0.63.0 (its long-lived streams dropped on proxy idle, which caused the pre-v0.34.0 re-auth
+symptom). If an older install left a stored `transport` value behind, it is ignored and logged;
+point your MCP client at `/mcp`.
 
 ### Database URL
 
@@ -94,9 +93,22 @@ This is a deliberate capability expansion: combined with shell access, the addon
 1. `docker_api: true` in the add-on manifest — already declared since v0.57.0.
 2. **Protection mode OFF** — Settings → Add-ons → HA Ops MCP → Info tab, then restart the add-on.
 
-Supervisor silently strips `docker_api` while Protection mode is on, and it is on by default, so step 2 is what actually grants access. Until you do it the three tools are inert and return instructions instead of an opaque error. `haops_tools_check` reports the `docker` group as `skip` (not `fail`) in that state, so an install that never opts in still reaches `all_pass`.
+Supervisor silently strips `docker_api` while Protection mode is on, and it is on by default, so step 2 is what actually grants access. **The restart is mandatory** — Supervisor decides on the socket mount when it *creates* the container, so flipping protection on a running add-on changes nothing until it is recreated. Verify with `haops_self_check`: the `docker` check should read `ok` with a container count.
 
 Before switching protection off, read the trade-off in [SECURITY.md](SECURITY.md#docker-socket-access-v0570--opt-in-and-a-genuine-step-up): the socket reaches every container on the machine, which widens the add-on's reach from "all of Home Assistant" to "all containers".
+
+**What you lose by leaving Protection mode on:**
+
+| Tool | Behaviour with Protection mode ON |
+|------|-----------------------------------|
+| `haops_container_list` / `_logs` / `_exec` | **Unavailable** — each returns how to enable it, not an opaque error. |
+| `haops_esphome_build` | **Cannot compile** — compiling runs in the ESPHome add-on's container. |
+| `haops_esphome_status` | **Works** — firmware sizes are a file read under `<config>/esphome/.esphome/build`, plus a scoped `impact` note. |
+| `haops_docker_prune` | **Unavailable**, and `docker_prune_on_start` skips. Nothing else reclaims dangling images or BuildKit cache — Supervisor prunes old add-on images on update but never the build cache. |
+| `haops_self_check` | `docker` = `skip` with `tools_unavailable: 3`; `overall` stays `ok`. |
+| `haops_tools_check` | `docker` group = `skip`, not `fail`, so an install that never opts in still reaches `all_pass`. |
+
+Every other tool is unaffected.
 
 Note `haops_container_exec` **abandons** a command that hits its timeout — the Docker API has no cancel, so the process keeps running inside the target container. The response says so. Don't start unbounded work with it. For add-on logs, prefer `haops_addon_logs`: it goes through Supervisor and needs none of this.
 

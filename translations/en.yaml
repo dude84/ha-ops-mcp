@@ -5,13 +5,6 @@ configuration:
       Long-lived access token for HA. Leave empty to reuse the Supervisor
       token (recommended) — the addon will authenticate as the Supervisor
       and route API calls through the Supervisor proxy automatically.
-  transport:
-    name: MCP transport
-    description: >-
-      How MCP clients connect to this server. Keep "sse" (Server-Sent
-      Events over HTTP) — it's the tested path through HA ingress.
-      "streamable-http" is the newer MCP HTTP transport; it should work
-      but hasn't been validated end-to-end here.
   db_url:
     name: Recorder database URL
     description: >-
@@ -23,10 +16,26 @@ configuration:
     name: Backup directory
     description: >-
       Where ha-ops-mcp writes its own persistent backups (config file
-      snapshots before edits, pre-mutation DB row dumps, manifest log)
-      — NOT HA's own full-system backups. Must live under /config,
-      /backup, or /share so the container can write to it. Default
-      /config/ha-ops-backups is fine for most users.
+      snapshots before edits, pre-mutation DB row dumps, manifest log,
+      and the auto-generated auth token) — NOT HA's own full-system
+      backups. Must live under /config, /backup, or /share so the
+      container can write to it. Default /backup/ha-ops-mcp is fine.
+  backup_max_age_days:
+    name: Backup retention (days)
+    description: >-
+      Backups older than this are pruned on startup. Default 30. The
+      manifest log is append-only and never pruned.
+  backup_max_per_type:
+    name: Backup retention (count per type)
+    description: >-
+      Keep at most this many backups of each type (config, dashboard,
+      entity, db). Default 100.
+  audit_log_reads:
+    name: Audit read-only tool calls
+    description: >-
+      Log every tool call, not just mutations, to
+      audit/operations.jsonl. On by default — useful for seeing what a
+      model actually did. Mutations are always audited regardless.
   log_level:
     name: Log level
     description: >-
@@ -34,16 +43,45 @@ configuration:
       "debug" adds per-tool-call tracing (useful when diagnosing an
       MCP tool that's misbehaving).
   auth_enabled:
-    name: OAuth authentication
+    name: Require MCP authentication
     description: >-
-      Require MCP clients to authenticate via OAuth 2.0 before using
-      tools. Recommended — without it, anyone on your LAN can reach
-      the SSE port. On first connect the MCP client opens a browser
-      for a one-time approval; tokens auto-refresh silently for 30 days.
+      Require MCP clients to authenticate before using tools. Keep this
+      on — without it, anyone who can reach port 8901 on your LAN can
+      call every tool, including shell and DB writes.
+  auth_mode:
+    name: Authentication mode
+    description: >-
+      "token" (default) is a static pre-shared Bearer token: clients
+      send Authorization: Bearer <token> and a raw-IP URL works.
+      "oauth" is experimental — it needs a TLS terminator in front of
+      this addon, because MCP clients refuse to send credentials to a
+      plain-http token endpoint. "none" disables auth entirely.
+  auth_token:
+    name: Bearer token
+    description: >-
+      The static token clients must send in token mode. Leave empty on
+      first start and the addon generates one, prefills it here, and
+      persists a copy at <backup_dir>/auth/static_token. Treat it like
+      a password — it grants full control of Home Assistant.
   auth_issuer_url:
-    name: OAuth issuer URL
+    name: OAuth issuer URL (oauth mode only)
     description: >-
-      The URL that MCP clients use to reach this addon (e.g.
-      http://homeassistant.local:8901). Leave empty to auto-detect
-      from HA's internal URL — only set this if auto-detection picks
-      the wrong hostname.
+      The exact HTTPS origin MCP clients use to reach this addon (e.g.
+      https://ha.example.com). Leave empty to auto-detect from HA's
+      internal URL. Only used in oauth mode, and the client's URL host
+      must match it.
+  clear_oauth_on_next_boot:
+    name: Clear OAuth store on next start
+    description: >-
+      One-shot admin action: wipes registered OAuth clients and tokens
+      on the next start, then resets itself. Use it if OAuth clients
+      get into a bad state. Every OAuth client must re-authorize after.
+  docker_prune_on_start:
+    name: Reclaim Docker disk on start
+    description: >-
+      On start, remove dangling (untagged) images and unused BuildKit
+      cache left behind by addon rebuilds — nothing else on the host
+      reclaims the build cache. Never touches a tagged image or a
+      volume. Requires the Docker socket, so it is skipped unless
+      Protection mode is OFF (Info tab) and the addon was restarted
+      after switching it.
