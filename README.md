@@ -75,16 +75,17 @@ claude mcp add ha-ops -- /path/to/.venv/bin/ha-ops-mcp --config /path/to/config.
 
 ### Authentication
 
-**Default since v0.62.0: static Bearer token.** OAuth was the default until Anthropic forced our
-hand: a **silent, unannounced breaking change** in Claude Code (~v2.1.234–2.1.237, Aug 17–20 2026)
-made its MCP client **refuse OAuth token requests to plain-`http` endpoints** (only
-`localhost`/`127.0.0.1`/`::1` are exempt). Any fresh OAuth flow against
-`http://<your-ha-address>:8901` now fails with `Refusing to send credentials to non-https token
-endpoint`; already-authorized clients coast on cached tokens until a forced re-auth breaks them
-too. The change shipped **with no changelog entry**, and upstream considers it intentional and
-won't revert ([claude-code#3320](https://github.com/anthropics/claude-code/issues/3320), closed
-not-planned). There is no client-side override. Since the typical home-lab deployment of this
-addon is exactly "plain HTTP on a trusted LAN", OAuth stopped being a viable default.
+**Default since v0.62.0: static Bearer token.** OAuth was the default until Claude Code
+(~v2.1.234+, Aug 2026) began enforcing OAuth 2.0's TLS requirement for token endpoints
+(RFC 6749 §3.2): its MCP client no longer sends OAuth token requests to plain-`http` endpoints
+(only `localhost`/`127.0.0.1`/`::1` are exempt). A fresh OAuth flow against
+`http://<your-ha-address>:8901` fails with `Refusing to send credentials to non-https token
+endpoint`; already-authorized clients keep working on cached tokens until a full re-auth. This is
+intended behavior upstream
+([claude-code#3320](https://github.com/anthropics/claude-code/issues/3320)), with no exemption for
+trusted LANs — and since the typical home-lab deployment of this addon is exactly "plain HTTP on a
+trusted LAN", we adapted to conform: a static Bearer token supplied as a header involves no OAuth
+credential exchange, so it meets the requirement and became the default.
 
 **How token auth works:** set `auth_token` in the addon Configuration (masked password field), or
 leave it blank — the addon generates one and **prefills it back into the Configuration tab**

@@ -1,13 +1,14 @@
 """Static pre-shared Bearer token auth for the HTTP transports.
 
-Default auth mode since v0.62.0. Claude Code ~v2.1.234 (Aug 2026) silently
-started refusing OAuth token requests to non-HTTPS endpoints (localhost
-exempt; upstream won't-fix, claude-code#3320), which broke fresh OAuth setups
-against the addon's plain-HTTP LAN endpoint. A static token sent as
-``Authorization: Bearer <token>`` suppresses the client's OAuth discovery
-entirely, works over plain HTTP and raw-IP URLs, and needs no per-project
-re-authorization — so it replaced OAuth as the default; OAuth remains
-available as an experimental mode for HTTPS/localhost deployments.
+Default auth mode since v0.62.0. Claude Code ~v2.1.234 (Aug 2026) enforces
+OAuth 2.0's TLS requirement for token endpoints (RFC 6749 §3.2; localhost
+exempt; claude-code#3320) — fresh OAuth setups against the addon's
+plain-HTTP LAN endpoint can't meet it. A static token sent as
+``Authorization: Bearer <token>`` conforms (no OAuth credential exchange
+happens), suppresses the client's OAuth discovery entirely, works over plain
+HTTP and raw-IP URLs, and needs no per-project re-authorization — so it
+replaced OAuth as the default; OAuth remains available as an experimental
+mode for HTTPS/localhost deployments.
 
 The middleware protects every route EXCEPT the sidebar-panel surface
 (``/ui`` and ``/api/ui/*``): the panel is served through HA ingress on the

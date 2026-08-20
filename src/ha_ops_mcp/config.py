@@ -103,9 +103,9 @@ class AuditConfig:
 class AuthConfig:
     enabled: bool = True
     # "token" (default): static pre-shared Bearer token — the only mode new
-    # Claude Code versions can use over plain HTTP on a LAN, since ~v2.1.234
-    # (Aug 2026) silently refuses OAuth token requests to non-HTTPS endpoints
-    # (localhost exempt; upstream won't-fix, claude-code#3320). Clients send
+    # Claude Code versions can use over plain HTTP on a LAN: since ~v2.1.234
+    # (Aug 2026) the client enforces OAuth 2.0's TLS requirement for token
+    # endpoints (localhost exempt; claude-code#3320). Clients send
     # `Authorization: Bearer <token>`, which suppresses OAuth discovery
     # entirely and also lifts the hostname/resource-matching restriction.
     # "oauth": the previous default, now EXPERIMENTAL — works only for clients

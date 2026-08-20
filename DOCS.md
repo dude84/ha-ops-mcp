@@ -112,11 +112,12 @@ A raw-IP URL works in token mode. (Legacy SSE transport: `--transport sse` and e
 Then start Claude Code — the `haops_*` tools will be available.
 
 > **Why a token and not OAuth?** OAuth was the default until Aug 2026, when Claude Code
-> ~v2.1.234+ silently started refusing OAuth token requests to plain-`http` endpoints
-> (`Refusing to send credentials to non-https token endpoint`; only localhost exempt; no override,
-> [claude-code#3320](https://github.com/anthropics/claude-code/issues/3320) closed not-planned).
-> That broke every new OAuth setup on a plain-HTTP LAN — the typical deployment of this addon —
-> so v0.62.0 switched the default to a static Bearer token. OAuth remains available as an
+> ~v2.1.234+ began enforcing OAuth 2.0's TLS requirement for token endpoints
+> (`Refusing to send credentials to non-https token endpoint`; only localhost exempt; intended
+> behavior upstream, [claude-code#3320](https://github.com/anthropics/claude-code/issues/3320)).
+> New OAuth setups on a plain-HTTP LAN — the typical deployment of this addon — can't meet that
+> requirement, so v0.62.0 switched the default to a static Bearer token, which conforms (a
+> pre-supplied header involves no OAuth credential exchange). OAuth remains available as an
 > **experimental** mode (`auth_mode: oauth`) for HTTPS/localhost deployments.
 
 ## Tools

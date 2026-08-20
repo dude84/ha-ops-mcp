@@ -10,14 +10,15 @@ boundary as before: addon options and addon logs are both Supervisor-admin-gated
 
 ## 0.62.0
 
-**BREAKING: static Bearer token replaces OAuth as the default auth mode — Anthropic forced our
-hand.** Claude Code ~v2.1.234–2.1.237 (Aug 17–20 2026) silently — no changelog entry — started
-refusing OAuth token requests to plain-`http` endpoints (only localhost exempt; upstream
-won't-fix, [claude-code#3320](https://github.com/anthropics/claude-code/issues/3320)). Every
-fresh OAuth flow against `http://<host>:8901` now fails client-side with `Refusing to send
-credentials to non-https token endpoint`; existing clients coast on cached tokens until a forced
-re-auth kills them too. Plain HTTP on a trusted LAN is this addon's typical deployment, so OAuth
-stopped being a viable default.
+**BREAKING: static Bearer token replaces OAuth as the default auth mode — adapting to Claude
+Code's OAuth 2.0 TLS enforcement.** Claude Code ~v2.1.234+ (Aug 2026) began enforcing the OAuth
+2.0 requirement (RFC 6749 §3.2) that token endpoints use TLS: it no longer sends OAuth token
+requests to plain-`http` endpoints (localhost exempt; intended behavior upstream,
+[claude-code#3320](https://github.com/anthropics/claude-code/issues/3320)). A fresh OAuth flow
+against `http://<host>:8901` fails client-side with `Refusing to send credentials to non-https
+token endpoint`; existing clients keep working on cached tokens until a full re-auth. Plain HTTP
+on a trusted LAN is this addon's typical deployment, so the default moved to a mechanism that
+conforms: a pre-supplied Bearer header involves no OAuth credential exchange.
 
 - **`auth_mode: token` (new default).** Set `auth_token` in the addon Configuration (masked
   password field) or leave blank to auto-generate — persisted to `<backup_dir>/auth/static_token`

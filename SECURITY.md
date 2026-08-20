@@ -95,9 +95,9 @@ expected to be able to bypass them).
   registrations + tokens persist to `<backup_dir>/auth/oauth.json` (a mapped
   volume that survives addon reinstall and is **not** swept into HA
   snapshots). Demoted from default because Claude Code ~v2.1.234 (Aug 2026)
-  silently refuses fresh OAuth flows to non-HTTPS endpoints
-  (claude-code#3320, closed not-planned) — viable only behind TLS or from
-  localhost. `stdio` transport is a local process and relies on local trust.
+  enforces OAuth 2.0's TLS requirement for token endpoints (claude-code#3320)
+  — viable only behind TLS or from localhost. `stdio` transport is a local
+  process and relies on local trust.
 - **HA access:** `ha_token` is either a Supervisor token (default, via the
   Supervisor proxy) or a user **long-lived access token**. Supervisor API calls
   always use `SUPERVISOR_TOKEN` regardless. Tokens are never logged;

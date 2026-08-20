@@ -410,8 +410,8 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
                 await ctx.db.close()
 
     # MCP auth. Default mode is "token" (static pre-shared Bearer) since
-    # v0.62.0 — Claude Code ~v2.1.234 silently broke fresh OAuth flows to
-    # plain-HTTP endpoints (see auth/static_token.py). "oauth" remains as an
+    # v0.62.0 — Claude Code ~v2.1.234 enforces OAuth 2.0's TLS requirement
+    # for token endpoints (see auth/static_token.py). "oauth" remains as an
     # EXPERIMENTAL mode for HTTPS/localhost deployments; "none" disables auth.
     auth_provider = None
     auth_settings = None

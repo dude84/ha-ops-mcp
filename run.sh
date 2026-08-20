@@ -99,8 +99,8 @@ if bashio::var.has_value "${db_url}"; then
 fi
 
 # MCP auth. Default mode is "token" (static pre-shared Bearer) since v0.62.0
-# — Claude Code ~v2.1.234 (Aug 2026) silently broke fresh OAuth flows to
-# plain-HTTP endpoints, so OAuth is now an EXPERIMENTAL mode (HTTPS/localhost
+# — Claude Code ~v2.1.234 (Aug 2026) enforces OAuth 2.0's TLS requirement for
+# token endpoints, so OAuth is now an EXPERIMENTAL mode (HTTPS/localhost
 # only). Always export flags in both directions so config.py defaults never
 # win over an explicit addon setting.
 auth_enabled=$(bashio::config 'auth_enabled')

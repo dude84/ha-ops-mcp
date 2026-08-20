@@ -67,11 +67,12 @@ Fresh OAuth flows (new project, new server entry, cleared token store) fail with
 Refusing to send credentials to non-https token endpoint 'http://homeassistant.local:8901/token'.
 OAuth token requests MUST use TLS (localhost / 127.0.0.1 / ::1 are exempt).
 ```
-Introduced **silently** in Claude Code ~v2.1.234–2.1.237 (Aug 17–20, 2026; not changelogged —
-likely a bundled MCP SDK hardening). Upstream stance: intentional and permanent
-(claude-code issue #3320 "OAuth2 requirement for http servers, even in local environments" —
-closed, not planned). It is the client-side twin of the SDK HTTPS requirement this addon already
-patches server-side at startup.
+Introduced in Claude Code ~v2.1.234–2.1.237 (Aug 17–20, 2026; not mentioned in its release
+notes — likely a bundled MCP SDK update). The client now enforces OAuth 2.0's TLS requirement
+for token endpoints (RFC 6749 §3.2); upstream treats this as intended behavior (claude-code
+issue #3320 "OAuth2 requirement for http servers, even in local environments" — closed, not
+planned). It is the client-side twin of the SDK HTTPS requirement this addon already patches
+server-side at startup.
 
 Consequences:
 - **Already-authorized entries keep working** on cached tokens (Claude Code MCP OAuth creds are
