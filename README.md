@@ -70,6 +70,21 @@ claude mcp add ha-ops -- /path/to/.venv/bin/ha-ops-mcp --config /path/to/config.
 
 ### Authentication
 
+> **⚠️ Breaking change from Anthropic (silent, ~Aug 17–20 2026, Claude Code ~v2.1.234–2.1.237):**
+> Claude Code's MCP client now **refuses OAuth token requests to plain-`http` endpoints** (only
+> `localhost`/`127.0.0.1`/`::1` are exempt). Any **fresh** OAuth flow against
+> `http://<your-ha-address>:8901` fails with
+> `Refusing to send credentials to non-https token endpoint`. Already-authorized entries keep
+> working on cached tokens — until a full re-auth is forced, at which point they break too.
+> The change shipped **without a changelog entry**; upstream considers it intentional and won't
+> revert ([claude-code#3320](https://github.com/anthropics/claude-code/issues/3320), closed
+> not-planned). There is **no client-side override**. Current options: put a TLS reverse proxy in
+> front of port 8901 and set `auth.issuer_url` to the https URL; connect from `localhost` (e.g.
+> SSH port-forward `ssh -L 8901:localhost:8901 ...`, then use `http://localhost:8901/mcp`); or
+> `auth_enabled: false` (read the trust caveat below). A static pre-shared-token auth mode
+> (client sends `--header "Authorization: Bearer ..."`, which bypasses OAuth discovery entirely)
+> is planned. Details: [`docs/CONNECTIVITY_TROUBLESHOOTING.md` §3](https://github.com/dude84/ha-ops-mcp/blob/main/docs/CONNECTIVITY_TROUBLESHOOTING.md).
+
 OAuth 2.0 with Dynamic Client Registration is enabled by default for SSE / streamable-HTTP transports. The provider auto-approves authorization requests (single-user admin server, no consent UI) and persists clients + tokens to `<data_dir>/oauth.json`. Default token TTLs: 30-day access token with a sliding window (extends on every successful verification), 30-day refresh token.
 
 To clear all stored OAuth state (after a client mismatch or revocation), tick `clear_oauth_on_next_boot` in the addon Configuration and restart — the flag self-resets after firing.

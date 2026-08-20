@@ -88,10 +88,21 @@ Note `haops_container_exec` **abandons** a command that hits its timeout — the
 ### Claude Code
 
 ```bash
-claude mcp add --transport sse ha-ops http://<your-ha-address>:8901/sse
+claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp
 ```
 
+(For the legacy SSE transport: `--transport sse` and endpoint `/sse`.)
+
 Then start Claude Code — the `haops_*` tools will be available.
+
+> **⚠️ Known issue (Aug 2026):** Claude Code ~v2.1.234+ silently refuses OAuth token requests to
+> plain-`http` endpoints (`Refusing to send credentials to non-https token endpoint`; only
+> localhost is exempt), which breaks **new** OAuth setups against `http://<host>:8901`. Existing
+> authorized clients keep working on cached tokens. No client-side override exists
+> ([claude-code#3320](https://github.com/anthropics/claude-code/issues/3320), closed not-planned).
+> Workarounds: TLS reverse proxy in front of port 8901 (+ `auth.issuer_url`), SSH port-forward and
+> connect via `http://localhost:8901/mcp`, or `auth_enabled: false` on a strictly trusted LAN.
+> See the README's Authentication section and `docs/CONNECTIVITY_TROUBLESHOOTING.md` §3.
 
 ## Tools
 
