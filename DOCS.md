@@ -46,9 +46,10 @@ Leave blank to use the auto-provisioned Supervisor token (recommended). Or paste
 ### Authentication (`auth_mode`, `auth_token`)
 
 - **`token`** (default): static pre-shared Bearer token. Set `auth_token` yourself, or leave it
-  blank to auto-generate — the token is printed once in the addon log and persisted under
-  `<backup_dir>/auth/`. Clients send it as an `Authorization: Bearer` header. Multiple MCP clients
-  can share it and connect concurrently.
+  blank to auto-generate — the generated token is **prefilled back into this Configuration tab**
+  (`auth_token`) on the next start, and also persisted under `<backup_dir>/auth/`. Clients send it
+  as an `Authorization: Bearer` header. Multiple MCP clients can share it and connect
+  concurrently.
 - **`oauth`** (experimental): the pre-v0.62.0 default — OAuth 2.0 with Dynamic Client
   Registration. Only viable when clients reach the addon over HTTPS or from localhost (Claude
   Code refuses plain-HTTP OAuth since ~v2.1.234).
@@ -105,8 +106,8 @@ claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp \
 ```
 
 The token is in the addon Configuration (`auth_token`) — if you left it blank, the addon generated
-one and printed it in the addon log (also persisted at `<backup_dir>/auth/static_token`). A raw-IP
-URL works in token mode. (Legacy SSE transport: `--transport sse` and endpoint `/sse`.)
+one and prefilled it there on first start (also persisted at `<backup_dir>/auth/static_token`).
+A raw-IP URL works in token mode. (Legacy SSE transport: `--transport sse` and endpoint `/sse`.)
 
 Then start Claude Code — the `haops_*` tools will be available.
 

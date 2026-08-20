@@ -113,6 +113,40 @@ fi
 auth_token=$(bashio::config 'auth_token')
 if bashio::var.has_value "${auth_token}"; then
     export HA_OPS_AUTH_TOKEN="${auth_token}"
+elif [ "${HA_OPS_AUTH_MODE}" = "token" ] && bashio::var.true "${auth_enabled}"; then
+    # auth_token left blank: resolve the persisted token (or generate one)
+    # and PREFILL it into the addon options via the Supervisor self-options
+    # API, so the token is visible/editable in the Configuration tab instead
+    # of only in a log line that scrolls away. Same self-options pattern as
+    # the clear_oauth_on_next_boot reset below.
+    token_file="${backup_dir}/auth/static_token"
+    mkdir -p "${backup_dir}/auth"
+    if [ -s "${token_file}" ]; then
+        auth_token=$(tr -d '[:space:]' < "${token_file}")
+    else
+        auth_token=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')
+        printf '%s\n' "${auth_token}" > "${token_file}"
+        chmod 600 "${token_file}"
+        bashio::log.notice "Generated MCP Bearer token."
+    fi
+    export HA_OPS_AUTH_TOKEN="${auth_token}"
+    if current_opts=$(curl -fsS \
+        -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+        http://supervisor/addons/self/info \
+        | jq -c '.data.options' 2>/dev/null) && [ -n "${current_opts}" ]; then
+        new_opts=$(echo "${current_opts}" | jq -c --arg t "${auth_token}" '. + {"auth_token": $t}')
+        if curl -fsS -X POST \
+            -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"options\": ${new_opts}}" \
+            http://supervisor/addons/self/options >/dev/null 2>&1; then
+            bashio::log.info "  Bearer token prefilled into addon Configuration (auth_token)"
+        else
+            bashio::log.warning "  Could not prefill auth_token via Supervisor — token stays in ${token_file} and the log"
+        fi
+    else
+        bashio::log.warning "  Could not read addon options — token stays in ${token_file}"
+    fi
 fi
 if bashio::var.true "${auth_enabled}"; then
     export HA_OPS_AUTH_ENABLED="true"

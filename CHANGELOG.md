@@ -1,3 +1,13 @@
+## 0.62.1
+
+**Auto-generated Bearer token is now prefilled into the addon Configuration.** When `auth_token`
+is blank in token mode, `run.sh` resolves the persisted token (or generates one), then writes it
+back into the addon options via the Supervisor self-options API — same pattern as the
+`clear_oauth_on_next_boot` self-reset. You copy the token from the Configuration tab's masked
+field instead of fishing it out of a log line that scrolls away. Falls back gracefully (token
+stays in `<backup_dir>/auth/static_token` + log) when the Supervisor call fails. Same trust
+boundary as before: addon options and addon logs are both Supervisor-admin-gated.
+
 ## 0.62.0
 
 **BREAKING: static Bearer token replaces OAuth as the default auth mode — Anthropic forced our

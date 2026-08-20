@@ -81,8 +81,10 @@ expected to be able to bypass them).
   transports — checked constant-time on every request except the
   HA-ingress-authenticated sidebar paths (`/ui`, `/api/ui/*`). The token is
   set in the addon Configuration (`auth_token`, masked field) or
-  auto-generated and persisted to `<backup_dir>/auth/static_token` (0600,
-  printed once to the addon log at generation). Threat model: equivalent to
+  auto-generated — then prefilled back into the addon Configuration via the
+  Supervisor self-options API and persisted to `<backup_dir>/auth/static_token`
+  (0600). Addon options are Supervisor-admin-gated, the same trust boundary
+  as the addon log that previously carried the token. Threat model: equivalent to
   OAuth's Bearer tokens on the same plain-HTTP LAN transport — both travel
   in cleartext on the wire; neither protects against an attacker who can
   sniff the LAN segment. Use a TLS reverse proxy if that is in your threat

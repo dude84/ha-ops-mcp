@@ -87,8 +87,10 @@ not-planned). There is no client-side override. Since the typical home-lab deplo
 addon is exactly "plain HTTP on a trusted LAN", OAuth stopped being a viable default.
 
 **How token auth works:** set `auth_token` in the addon Configuration (masked password field), or
-leave it blank — the addon generates one, persists it to `<backup_dir>/auth/static_token` (0600),
-and prints it **once** to the addon log at generation. Connect with:
+leave it blank — the addon generates one and **prefills it back into the Configuration tab**
+(`auth_token`) via the Supervisor API, so you read it from the addon Configuration, not from a log
+line that scrolls away. (It's also persisted to `<backup_dir>/auth/static_token`, 0600.) Connect
+with:
 
 ```bash
 claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp \
