@@ -43,6 +43,28 @@ async def _seed(mgr: BackupManager, source: Path, n: int) -> None:
 
 
 @pytest.mark.asyncio
+async def test_rapid_backups_do_not_collide(fresh_backup_dir: Path, tmp_path: Path):
+    """Regression: backup filenames had second resolution and entry ids
+    ms-epoch resolution — two backups of the same file within one second
+    (concurrent applies) silently overwrote each other. Both must be unique."""
+    mgr = BackupManager(fresh_backup_dir)
+    src = tmp_path / "target.yaml"
+
+    entries = []
+    for i in range(5):
+        src.write_text(f"version {i}\n")
+        entries.append(await mgr.backup_file(src, operation=f"rapid_{i}"))
+
+    ids = [e.id for e in entries]
+    paths = [e.backup_path for e in entries]
+    assert len(set(ids)) == 5, f"duplicate entry ids: {ids}"
+    assert len(set(paths)) == 5, f"backup files overwrote each other: {paths}"
+    # Every backup file exists on disk with its own content.
+    for i, p in enumerate(paths):
+        assert Path(p).read_text() == f"version {i}\n"
+
+
+@pytest.mark.asyncio
 async def test_prune_by_age_drops_old_entries(fresh_backup_dir: Path, tmp_path: Path):
     mgr = BackupManager(fresh_backup_dir, max_age_days=7, max_per_type=1000)
     src = tmp_path / "target.yaml"

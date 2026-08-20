@@ -84,3 +84,52 @@ async def test_refactor_check_no_impact_key(ctx):
     """v0.10: impact analyzer removed; response no longer carries `impact`."""
     res = await haops_refactor_check(ctx, node_id="sensor.temperature")
     assert "impact" not in res
+
+
+# ── Cross-call cache invalidation ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_index_rebuilt_after_config_change(ctx, config_dir):
+    """Regression: ctx is a global singleton, so an index cached on
+    ctx.request_index by one tool call must not be served stale to the
+    next — config edits between calls have to show up."""
+    res = await haops_references(ctx, node="sensor.temperature")
+    before = {e["source"] for e in res["incoming"]}
+    assert "automation:auto_second" not in before
+
+    automations = config_dir / "automations.yaml"
+    automations.write_text(
+        automations.read_text()
+        + "- id: 'auto_second'\n"
+        "  alias: Second Automation\n"
+        "  trigger:\n"
+        "    - platform: state\n"
+        "      entity_id: sensor.temperature\n"
+        "  action: []\n"
+    )
+
+    res = await haops_references(ctx, node="sensor.temperature")
+    after = {e["source"] for e in res["incoming"]}
+    assert "automation:auto_second" in after
+
+
+@pytest.mark.asyncio
+async def test_refactor_check_sees_config_change(ctx, config_dir):
+    """Same invalidation guarantee for haops_refactor_check."""
+    await haops_references(ctx, node="sensor.temperature")  # warms the cache
+
+    (config_dir / "scripts.yaml").write_text(
+        "night_report:\n"
+        "  alias: Night Report\n"
+        "  sequence:\n"
+        "    - service: notify.notify\n"
+        "      data:\n"
+        "        message: hello\n"
+        "      target:\n"
+        "        entity_id: sensor.temperature\n"
+    )
+
+    res = await haops_refactor_check(ctx, node_id="sensor.temperature")
+    sources = {loc["source_node"] for loc in res["locations"]}
+    assert "script:night_report" in sources

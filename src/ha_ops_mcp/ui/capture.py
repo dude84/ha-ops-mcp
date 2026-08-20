@@ -21,10 +21,18 @@ tests). Callers should guard with `browser_available()`.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from dataclasses import dataclass
 from typing import Any
+
+# Serialize captures: each one launches a full headless Chromium (hundreds of
+# MB RSS inside the addon container), so N concurrent captures means N
+# Chromium processes and an OOM-killed addon. This is a memory guard, not a
+# thread-safety concern — the event loop is single-threaded, we just refuse
+# to have more than one browser alive at a time.
+_CAPTURE_SEMAPHORE = asyncio.Semaphore(1)
 
 # Chromium flags for running headless as root inside a container.
 _LAUNCH_ARGS = [
@@ -225,7 +233,7 @@ async def screenshot(req: CaptureRequest) -> dict[str, Any]:
     """Capture a PNG of a dashboard view. Returns bytes + metadata."""
     from playwright.async_api import async_playwright
 
-    async with async_playwright() as p:
+    async with _CAPTURE_SEMAPHORE, async_playwright() as p:
         browser, context, page, console, nav_ms, url = await _open_page(p, req)
         try:
             png = await page.screenshot(full_page=req.full_page, type="png")
@@ -248,7 +256,7 @@ async def perf(req: CaptureRequest) -> dict[str, Any]:
     """Capture load-performance metrics for a dashboard view (raw, unscored)."""
     from playwright.async_api import async_playwright
 
-    async with async_playwright() as p:
+    async with _CAPTURE_SEMAPHORE, async_playwright() as p:
         browser, context, page, console, nav_ms, url = await _open_page(p, req)
         try:
             metrics = await page.evaluate(_PERF_READ_SCRIPT)
@@ -329,7 +337,7 @@ async def interact(
     from playwright.async_api import async_playwright
 
     seq = actions if actions else _default_actions()
-    async with async_playwright() as p:
+    async with _CAPTURE_SEMAPHORE, async_playwright() as p:
         browser, context, page, console, nav_ms, url = await _open_page(p, req)
         try:
             # Baseline: long-tasks accrued during load, so we can attribute the
@@ -363,7 +371,7 @@ async def trace(req: CaptureRequest, out_path: str) -> dict[str, Any]:
     """Record a Playwright trace zip of a dashboard view load to `out_path`."""
     from playwright.async_api import async_playwright
 
-    async with async_playwright() as p:
+    async with _CAPTURE_SEMAPHORE, async_playwright() as p:
         browser = await p.chromium.launch(args=_LAUNCH_ARGS)
         context = await browser.new_context(
             viewport={"width": req.viewport_width, "height": req.viewport_height},

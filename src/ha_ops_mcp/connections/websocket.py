@@ -122,6 +122,19 @@ class WebSocketClient:
 
         logger.info("WebSocket authenticated, HA version: %s", msg.get("ha_version"))
 
+    def _fail_pending(self, reason: str) -> None:
+        """Fail every in-flight command future with a WebSocketError.
+
+        Called when the connection is lost or torn down: the responses for
+        those message IDs will never arrive, so leaving the futures pending
+        would stall each waiting send_command() until its full timeout.
+        """
+        pending = list(self._pending.values())
+        self._pending.clear()
+        for fut in pending:
+            if not fut.done():
+                fut.set_exception(WebSocketError(reason))
+
     async def _listen(self) -> None:
         """Background listener that routes responses to pending futures."""
         assert self._conn is not None
@@ -134,7 +147,13 @@ class WebSocketClient:
         except websockets.ConnectionClosed:
             logger.warning("WebSocket connection closed")
         except asyncio.CancelledError:
-            return
+            # Cancelled by __aexit__ or a reconnect — responses on the old
+            # socket will never arrive, so don't leave waiters hanging.
+            self._fail_pending("WebSocket connection was reset")
+            raise
+        # Reached on clean close (iterator exhausted) or ConnectionClosed:
+        # either way, in-flight commands can never get their response.
+        self._fail_pending("WebSocket connection closed before response arrived")
 
     def _is_conn_alive(self) -> bool:
         """Check if the WebSocket connection is open and usable."""
@@ -175,6 +194,10 @@ class WebSocketClient:
                     await self._conn.close()
             self._conn = None
             self._listener_task = None
+            # The listener normally fails pending futures on its way out,
+            # but belt-and-braces: anything still pending at this point
+            # belongs to the dead connection and will never resolve.
+            self._fail_pending("WebSocket connection was reset during reconnect")
             # Reconnect
             self._conn = await websockets.connect(self._url)
             await self._authenticate()

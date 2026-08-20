@@ -389,6 +389,12 @@ async def plan_reference_rewrites(
     if not mapping:
         return plan
 
+    # Entry point of the rename-planning flow: drop any ref index cached by
+    # a previous request (ctx is global) so `_index_refs_outside` analyses
+    # the config as it stands now, not as it was when some earlier
+    # haops_references call built the graph.
+    ctx.request_index = None
+
     rw = Rewriter(mapping)
     root = ctx.path_guard.config_root
     covered: set[str] = set()

@@ -18,12 +18,24 @@ import logging
 import os
 import shutil
 import time
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _backup_stamp() -> str:
+    """Timestamp + short random suffix for backup filenames.
+
+    The timestamp alone has second resolution, so two backups of the same
+    source within one second (exactly the concurrent-apply case) would
+    silently overwrite each other. The uuid suffix makes each name unique.
+    """
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    return f"{ts}.{uuid.uuid4().hex[:8]}"
 
 
 # Historical default used before v0.18.0. If the configured backup_dir has
@@ -85,7 +97,7 @@ class BackupManager:
 
     async def backup_file(self, source_path: Path, operation: str) -> BackupEntry:
         """Copy a file to backups/config/ with timestamp."""
-        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        ts = _backup_stamp()
         dest = self._dir / "config" / f"{source_path.name}.{ts}.bak"
         shutil.copy2(source_path, dest)
         entry = self._make_entry(
@@ -103,7 +115,7 @@ class BackupManager:
         self, dashboard_id: str, config: dict[str, Any], operation: str
     ) -> BackupEntry:
         """Snapshot a dashboard config as JSON."""
-        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        ts = _backup_stamp()
         dest = self._dir / "dashboards" / f"{dashboard_id}.{ts}.json"
         content = json.dumps(config, indent=2)
         dest.write_text(content)
@@ -122,7 +134,7 @@ class BackupManager:
         self, entities: list[dict[str, Any]], operation: str
     ) -> BackupEntry:
         """Save entity registry entries as JSONL."""
-        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        ts = _backup_stamp()
         dest = self._dir / "entities" / f"entities.{ts}.jsonl"
         lines = [json.dumps(e) for e in entities]
         content = "\n".join(lines) + "\n"
@@ -142,7 +154,7 @@ class BackupManager:
         self, table: str, rows: list[dict[str, Any]], operation: str
     ) -> BackupEntry:
         """Dump rows as JSON for small DB operations."""
-        ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        ts = _backup_stamp()
         dest = self._dir / "db" / f"{table}.{ts}.jsonl"
         lines = [json.dumps(r) for r in rows]
         content = "\n".join(lines) + "\n"
@@ -365,7 +377,10 @@ class BackupManager:
 
     def _make_entry(self, **kwargs: Any) -> BackupEntry:
         ts = datetime.now(UTC).isoformat()
-        entry_id = f"{kwargs['type']}_{int(time.time() * 1000)}"
+        # ms-epoch alone collides for two backups within the same
+        # millisecond (concurrent applies) — ids must be unique because
+        # prune and revert look entries up by id.
+        entry_id = f"{kwargs['type']}_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
         return BackupEntry(id=entry_id, timestamp=ts, **kwargs)
 
     async def _append_manifest(self, entry: BackupEntry) -> None:
