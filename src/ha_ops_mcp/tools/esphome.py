@@ -739,18 +739,44 @@ async def haops_esphome_build(
     # same relative path it has for us.
     command = f"esphome compile /config/{_NODE_DIR}/{yaml_name}"
 
-    try:
-        result = await ctx.docker.exec_run(  # type: ignore[union-attr]
-            container, ["sh", "-c", command], timeout=float(timeout)
+    # Two concurrent compiles in the same build dir corrupt each other's
+    # artifacts, so refuse immediately instead of queueing — a queued build
+    # would silently double the caller's wait and likely time out anyway.
+    # NOTE: lock.locked() → acquire is a benign race — a competing call
+    # could slip in between the check and the acquire, in which case we
+    # queue behind exactly one build instead of refusing. That still never
+    # runs two compiles at once, which is the property that matters.
+    # NOTE: this guards concurrent MCP calls only. A compile ABANDONED by
+    # the timeout path below keeps running inside the builder after the
+    # lock is released — that pre-existing race is documented in the tool
+    # description ("call again and it reports the finished artifact").
+    build_lock = ctx.mutation_lock(f"esphome:{node_name}")
+    if build_lock.locked():
+        return {
+            "error": (
+                f"Build already in progress for node '{node_name}' — "
+                "not starting a second compile in the same build dir "
+                "(it would corrupt the artifacts). Wait for the running "
+                "build and call again."
+            ),
+            "node": node_name,
+        }
+
+    async with build_lock:
+        try:
+            result = await ctx.docker.exec_run(  # type: ignore[union-attr]
+                container, ["sh", "-c", command], timeout=float(timeout)
+            )
+        except Exception as e:
+            return {"error": f"Compile failed to start: {str(e)[:300]}"}
+
+        output = (result.get("stdout") or "") + (result.get("stderr") or "")
+        timed_out = bool(result.get("timed_out"))
+        exit_code = result.get("exit_code")
+
+        artifacts = (await _artifacts(ctx, container, [node_name])).get(
+            node_name, []
         )
-    except Exception as e:
-        return {"error": f"Compile failed to start: {str(e)[:300]}"}
-
-    output = (result.get("stdout") or "") + (result.get("stderr") or "")
-    timed_out = bool(result.get("timed_out"))
-    exit_code = result.get("exit_code")
-
-    artifacts = (await _artifacts(ctx, container, [node_name])).get(node_name, [])
     ota = next(
         (a for a in artifacts if a["artifact"] == "firmware.ota.bin"),
         next((a for a in artifacts if a["artifact"] == "firmware.bin"), None),

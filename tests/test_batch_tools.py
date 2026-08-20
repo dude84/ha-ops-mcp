@@ -289,3 +289,91 @@ async def test_batch_preview_refuses_on_bad_patch_context(ctx):
     assert "error" in result
     assert "items[1]" in result["error"]
     assert "token" not in result
+
+
+# ── staleness recheck at apply time (audit fix #2) ────────────────────────
+
+@pytest.mark.asyncio
+async def test_batch_apply_stale_item_fails_and_rolls_back_priors(ctx):
+    """An item whose file changed after preview fails the batch; items
+    already applied are restored (existing atomic per-item semantics)."""
+    (ctx.path_guard.config_root / "automations.yaml").write_text(
+        "automation:\n  - id: '1'\n    alias: Foo\n"
+    )
+    patch_text = (
+        "--- a/automations.yaml\n"
+        "+++ b/automations.yaml\n"
+        "@@ -1,3 +1,3 @@\n"
+        " automation:\n"
+        "   - id: '1'\n"
+        "-    alias: Foo\n"
+        "+    alias: Foo Renamed\n"
+    )
+
+    preview = await haops_batch_preview(ctx, items=[
+        {"tool": "config_create", "path": "batch_new.yaml",
+         "content": "key: value\n"},
+        {"tool": "config_patch", "path": "automations.yaml",
+         "patch": patch_text},
+    ])
+    assert "token" in preview
+
+    # Out-of-band edit lands between preview and apply
+    stale_content = "automation:\n  - id: '1'\n    alias: Edited Elsewhere\n"
+    (ctx.path_guard.config_root / "automations.yaml").write_text(stale_content)
+
+    result = await haops_batch_apply(ctx, token=preview["token"])
+
+    assert result["success"] is False
+    assert result["failed_at"]["tool"] == "config_patch"
+    assert result["failed_at"]["target"].endswith("automations.yaml")
+    assert "changed on disk since preview" in result["failed_at"]["error"]
+    # The stale target was NOT overwritten — the out-of-band edit survives
+    assert (
+        ctx.path_guard.config_root / "automations.yaml"
+    ).read_text() == stale_content
+    # Item 1 was applied first, then rolled back (created file deleted)
+    assert not (ctx.path_guard.config_root / "batch_new.yaml").exists()
+    assert len(result["rolled_back"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_batch_apply_create_refuses_when_file_appeared(ctx):
+    preview = await haops_batch_preview(ctx, items=[
+        {"tool": "config_create", "path": "batch_appeared.yaml",
+         "content": "mine: 1\n"},
+    ])
+    assert "token" in preview
+
+    target = ctx.path_guard.config_root / "batch_appeared.yaml"
+    target.write_text("theirs: 2\n")
+
+    result = await haops_batch_apply(ctx, token=preview["token"])
+
+    assert result["success"] is False
+    assert "created since preview" in result["failed_at"]["error"]
+    assert target.read_text() == "theirs: 2\n"
+
+
+@pytest.mark.asyncio
+async def test_batch_apply_stale_dashboard_item_fails(ctx, dashboard_storage):
+    preview = await haops_batch_preview(ctx, items=[
+        {"tool": "dashboard_patch", "dashboard_id": "lovelace",
+         "patch": [{"op": "replace", "path": "/title", "value": "Renamed"}]},
+    ])
+    assert "token" in preview
+
+    # Intervening edit to the live dashboard after the preview
+    storage_file = dashboard_storage / "lovelace"
+    drifted = json.loads(storage_file.read_text())
+    drifted["data"]["config"]["title"] = "Edited Elsewhere"
+    storage_file.write_text(json.dumps(drifted))
+
+    ctx.ws.send_command = AsyncMock(
+        side_effect=AssertionError("save must not be called on drift")
+    )
+    result = await haops_batch_apply(ctx, token=preview["token"])
+
+    assert result["success"] is False
+    assert "changed" in result["failed_at"]["error"]
+    assert "since preview" in result["failed_at"]["error"]

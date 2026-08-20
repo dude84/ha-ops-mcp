@@ -1057,51 +1057,58 @@ async def haops_dashboard_apply(
     # dashboard not yet persisted), proceed conservatively. A failed read
     # should not block a legitimate apply — the same way _get_dashboard_config
     # callers elsewhere tolerate a missing config rather than hard-failing.
-    current_config = await _get_dashboard_config(ctx, dashboard_id)
-    if current_config is not None and current_config != old_config:
-        return {
-            "error": (
-                "Dashboard changed since preview — not applying "
-                "(would clobber the newer edit)"
-            ),
-            "hint": (
-                "Re-read with haops_dashboard_get and re-run the preview "
-                "to get a fresh token."
-            ),
-        }
+    #
+    # The recheck→backup→save span is serialized per dashboard: without the
+    # lock, two concurrent applies could both pass the drift guard (both see
+    # the pre-save config) and then save in sequence — the second silently
+    # clobbering the first. With the lock, the second apply re-fetches after
+    # the first save landed and refuses on drift.
+    async with ctx.mutation_lock(f"dashboard:{dashboard_id}"):
+        current_config = await _get_dashboard_config(ctx, dashboard_id)
+        if current_config is not None and current_config != old_config:
+            return {
+                "error": (
+                    "Dashboard changed since preview — not applying "
+                    "(would clobber the newer edit)"
+                ),
+                "hint": (
+                    "Re-read with haops_dashboard_get and re-run the preview "
+                    "to get a fresh token."
+                ),
+            }
 
-    # Rollback savepoint
-    txn = ctx.rollback.begin("dashboard_apply")
-    txn.savepoint(
-        name=f"dashboard:{dashboard_id}",
-        undo=UndoEntry(
-            type=UndoType.DASHBOARD,
-            description=f"Revert dashboard '{dashboard_id}' to previous config",
-            data={
-                "dashboard_id": dashboard_id,
-                "config": old_config,
-            },
-        ),
-    )
-
-    # Persistent backup
-    backup_path: str | None = None
-    if ctx.config.safety.backup_on_write and old_config:
-        entry = await ctx.backup.backup_dashboard(
-            dashboard_id, old_config, operation="dashboard_apply"
+        # Rollback savepoint
+        txn = ctx.rollback.begin("dashboard_apply")
+        txn.savepoint(
+            name=f"dashboard:{dashboard_id}",
+            undo=UndoEntry(
+                type=UndoType.DASHBOARD,
+                description=f"Revert dashboard '{dashboard_id}' to previous config",
+                data={
+                    "dashboard_id": dashboard_id,
+                    "config": old_config,
+                },
+            ),
         )
-        backup_path = entry.backup_path
 
-    # Apply via WebSocket
-    try:
-        kwargs: dict[str, Any] = {"config": new_config}
-        if dashboard_id != "lovelace":
-            kwargs["url_path"] = dashboard_id
-        await ctx.ws.send_command("lovelace/config/save", **kwargs)
-    except WebSocketError as e:
-        return {"error": f"Failed to save dashboard: {e}"}
+        # Persistent backup
+        backup_path: str | None = None
+        if ctx.config.safety.backup_on_write and old_config:
+            entry = await ctx.backup.backup_dashboard(
+                dashboard_id, old_config, operation="dashboard_apply"
+            )
+            backup_path = entry.backup_path
 
-    ctx.rollback.commit(txn.id)
+        # Apply via WebSocket
+        try:
+            kwargs: dict[str, Any] = {"config": new_config}
+            if dashboard_id != "lovelace":
+                kwargs["url_path"] = dashboard_id
+            await ctx.ws.send_command("lovelace/config/save", **kwargs)
+        except WebSocketError as e:
+            return {"error": f"Failed to save dashboard: {e}"}
+
+        ctx.rollback.commit(txn.id)
 
     # Store old+new config so the Timeline UI can recompute the JSON diff.
     # transaction_id lets the Timeline Revert button locate the in-session

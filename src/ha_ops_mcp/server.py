@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import functools
 import inspect
 import logging
 from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -102,6 +103,24 @@ class HaOpsContext:
     # entrypoints, consumed by downstream helpers via
     # `ha_ops_mcp.refindex.get_or_build_index(ctx)`.
     request_index: Any = None
+    # Per-resource mutation locks — serialize check-then-write spans so two
+    # concurrent applies can't both pass their staleness recheck and clobber
+    # each other. Key convention: "file:{resolved_path}",
+    # "dashboard:{url_path}", "esphome:{node}".
+    _mutation_locks: dict[str, asyncio.Lock] = field(default_factory=dict)
+
+    def mutation_lock(self, key: str) -> asyncio.Lock:
+        """Get-or-create the mutation lock for a resource key.
+
+        The plain dict get-or-create is safe without its own lock: asyncio
+        is single-threaded and these dict ops run within one event-loop
+        tick (no await between lookup and insert).
+        """
+        lock = self._mutation_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._mutation_locks[key] = lock
+        return lock
 
 
 def _auto_detect_db_url(config_root: Path) -> str:

@@ -590,3 +590,46 @@ async def test_skipping_builds_reports_unchecked_not_unavailable(
 
     assert result["builder"] == {"checked": False}
     assert "available" not in result["builder"]
+
+
+# ── build lock (audit fix #9: concurrent compiles corrupt artifacts) ──
+
+
+@pytest.mark.asyncio
+async def test_build_refuses_while_a_build_is_in_progress(
+    ctx, esphome_dir, mock_ws
+):
+    """A second build for the same node while one is compiling is refused
+    immediately (structured error), not queued behind the running one."""
+    import asyncio
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_exec(container, cmd, **kwargs):
+        script = cmd[-1]
+        if "esphome compile" in script:
+            started.set()
+            await release.wait()
+            return {
+                "exit_code": 0,
+                "stdout": COMPILE_LOG,
+                "stderr": "",
+                "timed_out": False,
+            }
+        return {"exit_code": 0, "stdout": STAT_LINE, "stderr": ""}
+
+    ctx.docker = _docker(slow_exec)
+
+    first = asyncio.create_task(
+        haops_esphome_build(ctx, node="pl-office-powerstrip")
+    )
+    await started.wait()  # the first build is now inside `esphome compile`
+
+    second = await haops_esphome_build(ctx, node="pl-office-powerstrip")
+    assert "already in progress" in second["error"]
+    assert second["node"] == "pl-office-powerstrip"
+
+    release.set()
+    first_result = await first
+    assert first_result["success"] is True

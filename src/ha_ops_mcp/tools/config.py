@@ -14,7 +14,7 @@ from ha_ops_mcp.utils.diff import (
     render_diff,
     unified_diff,
 )
-from ha_ops_mcp.utils.yaml import make_yaml, write_yaml
+from ha_ops_mcp.utils.yaml import atomic_write_text, make_yaml, write_yaml
 
 if TYPE_CHECKING:
     from ha_ops_mcp.server import HaOpsContext
@@ -660,36 +660,75 @@ async def haops_config_apply(ctx: HaOpsContext, token: str) -> dict[str, Any]:
     new_content: str = details["new_content"]
     old_content: str = details["old_content"]
 
-    # Start rollback transaction and record savepoint
-    txn = ctx.rollback.begin("config_apply")
-    txn.savepoint(
-        name=f"write:{resolved.name}",
-        undo=UndoEntry(
-            type=UndoType.FILE,
-            description=f"Revert {resolved.name} to previous content",
-            data={"path": str(resolved), "content": old_content},
-        ),
-    )
+    # Serialize the recheck→backup→write span per file so two concurrent
+    # applies can't both pass the staleness check and clobber each other.
+    async with ctx.mutation_lock(f"file:{resolved}"):
+        # Staleness recheck: the preview captured old_content — if the file
+        # on disk no longer matches (another session, the HA UI, or a text
+        # editor wrote it since), applying would silently discard that
+        # newer edit. Refuse fail-closed; the token was already claimed
+        # (consumed) at entry, so the caller re-runs the preview.
+        # A config_create token carries old_content == "" and expects the
+        # file to still be absent — a file that appeared since preview is
+        # the same clobber risk.
+        if resolved.exists():
+            current_content = resolved.read_text()
+            if current_content != old_content:
+                return {
+                    "error": (
+                        f"File changed on disk since preview: {resolved.name} — "
+                        "not applying (would clobber the newer content)"
+                    ),
+                    "path": str(resolved),
+                    "hint": (
+                        "The token was already consumed. Re-run "
+                        "haops_config_patch (or haops_config_create) against "
+                        "the current file to get a fresh preview + token."
+                    ),
+                }
+        elif old_content != "":
+            return {
+                "error": (
+                    f"File deleted since preview: {resolved.name} — "
+                    "not applying"
+                ),
+                "path": str(resolved),
+                "hint": (
+                    "The token was already consumed. Re-run the preview "
+                    "against the current state to get a fresh token."
+                ),
+            }
 
-    # Persistent backup for config files (these are important)
-    backup_path: str | None = None
-    if ctx.config.safety.backup_on_write and resolved.exists():
-        entry = await ctx.backup.backup_file(resolved, operation="config_apply")
-        backup_path = entry.backup_path
+        # Start rollback transaction and record savepoint
+        txn = ctx.rollback.begin("config_apply")
+        txn.savepoint(
+            name=f"write:{resolved.name}",
+            undo=UndoEntry(
+                type=UndoType.FILE,
+                description=f"Revert {resolved.name} to previous content",
+                data={"path": str(resolved), "content": old_content},
+            ),
+        )
 
-    # Write the file
-    if resolved.suffix in (".yaml", ".yml"):
-        from io import StringIO
+        # Persistent backup for config files (these are important)
+        backup_path: str | None = None
+        if ctx.config.safety.backup_on_write and resolved.exists():
+            entry = await ctx.backup.backup_file(resolved, operation="config_apply")
+            backup_path = entry.backup_path
 
-        from ruamel.yaml import YAML
-        yaml = YAML()
-        yaml.preserve_quotes = True
-        data = yaml.load(StringIO(new_content))
-        write_yaml(resolved, data, yaml)
-    else:
-        resolved.write_text(new_content)
+        # Write the file (atomically — see utils/yaml.atomic_write_text)
+        if resolved.suffix in (".yaml", ".yml"):
+            from io import StringIO
 
-    ctx.rollback.commit(txn.id)
+            from ruamel.yaml import YAML
+            yaml = YAML()
+            yaml.preserve_quotes = True
+            data = yaml.load(StringIO(new_content))
+            write_yaml(resolved, data, yaml)
+        else:
+            atomic_write_text(resolved, new_content)
+
+        ctx.rollback.commit(txn.id)
 
     # Store old+new content so the Timeline UI can recompute the diff
     # post-hoc. Without this, _recompute_audit_diff (ui/routes.py) has no

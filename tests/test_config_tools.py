@@ -603,3 +603,175 @@ async def test_config_patch_rejects_neither(ctx):
     result = await haops_config_patch(ctx, path="configuration.yaml")
     assert "error" in result
     assert "required" in result["error"]
+
+
+# ── staleness recheck at apply time (audit fix #2) ──
+
+
+@pytest.mark.asyncio
+async def test_config_apply_refuses_when_file_changed_since_preview(ctx):
+    """Preview → out-of-band edit → apply refuses and does NOT overwrite."""
+    target = ctx.path_guard.config_root / "configuration.yaml"
+    original = target.read_text()
+    patched = original.replace("name: Test Home", "name: Applied Name")
+    patch = unified_diff(original, patched, "configuration.yaml")
+
+    preview = await haops_config_patch(
+        ctx, path="configuration.yaml", patch=patch
+    )
+    token = preview["token"]
+
+    # Out-of-band edit after the preview (another session / editor / HA UI)
+    edited = original + "# edited elsewhere\n"
+    target.write_text(edited)
+
+    apply_result = await haops_config_apply(ctx, token=token)
+
+    assert "error" in apply_result
+    assert "changed on disk since preview" in apply_result["error"]
+    assert "preview" in apply_result["hint"]
+    # The out-of-band edit survives — nothing was written
+    assert target.read_text() == edited
+
+
+@pytest.mark.asyncio
+async def test_config_apply_refuses_create_when_file_appeared(ctx):
+    """A config_create token must not clobber a file created since preview."""
+    preview = await haops_config_create(
+        ctx, path="appeared.yaml", content="mine: 1\n"
+    )
+    token = preview["token"]
+
+    target = ctx.path_guard.config_root / "appeared.yaml"
+    target.write_text("theirs: 2\n")
+
+    apply_result = await haops_config_apply(ctx, token=token)
+
+    assert "error" in apply_result
+    assert "changed on disk since preview" in apply_result["error"]
+    assert target.read_text() == "theirs: 2\n"
+
+
+@pytest.mark.asyncio
+async def test_config_apply_refuses_when_file_deleted_since_preview(ctx):
+    target = ctx.path_guard.config_root / "configuration.yaml"
+    original = target.read_text()
+    patched = original.replace("name: Test Home", "name: Applied Name")
+    patch = unified_diff(original, patched, "configuration.yaml")
+
+    preview = await haops_config_patch(
+        ctx, path="configuration.yaml", patch=patch
+    )
+    target.unlink()
+
+    apply_result = await haops_config_apply(ctx, token=preview["token"])
+
+    assert "error" in apply_result
+    assert "deleted since preview" in apply_result["error"]
+    assert not target.exists()
+
+
+@pytest.mark.asyncio
+async def test_config_apply_two_session_lost_update_regression(ctx):
+    """preview A → preview B → apply B → apply A: A is refused, B survives.
+
+    This is the silent-lost-update scenario: without the apply-time
+    staleness recheck, apply A would overwrite B's landed change with
+    content derived from a stale base.
+    """
+    target = ctx.path_guard.config_root / "configuration.yaml"
+    original = target.read_text()
+
+    a_content = original.replace("name: Test Home", "name: Session A")
+    b_content = original.replace("name: Test Home", "name: Session B")
+
+    preview_a = await haops_config_patch(
+        ctx, path="configuration.yaml",
+        patch=unified_diff(original, a_content, "configuration.yaml"),
+    )
+    preview_b = await haops_config_patch(
+        ctx, path="configuration.yaml",
+        patch=unified_diff(original, b_content, "configuration.yaml"),
+    )
+
+    apply_b = await haops_config_apply(ctx, token=preview_b["token"])
+    assert apply_b["success"] is True
+
+    apply_a = await haops_config_apply(ctx, token=preview_a["token"])
+    assert "error" in apply_a
+    assert "changed on disk since preview" in apply_a["error"]
+
+    final = target.read_text()
+    assert "Session B" in final
+    assert "Session A" not in final
+
+
+# ── write_yaml atomicity (utils/yaml.py, audit fix #4b) ──
+
+
+def test_write_yaml_swaps_via_os_replace_in_same_dir(tmp_path, monkeypatch):
+    """write_yaml must land via tmp-file + os.replace, never truncate-in-place."""
+    import os
+    from pathlib import Path
+
+    from ha_ops_mcp.utils.yaml import write_yaml
+
+    calls: list[tuple[str, str]] = []
+    real_replace = os.replace
+
+    def spy(src, dst):
+        calls.append((str(src), str(dst)))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr("ha_ops_mcp.utils.yaml.os.replace", spy)
+
+    target = tmp_path / "atomic.yaml"
+    write_yaml(target, {"a": 1})
+
+    assert len(calls) == 1
+    src, dst = calls[0]
+    assert dst == str(target)
+    # tmp file must live in the target's own directory (same filesystem —
+    # required for the rename to be atomic)
+    assert Path(src).parent == tmp_path
+    assert target.read_text() == "a: 1\n"
+
+
+def test_write_yaml_preserves_existing_permissions(tmp_path):
+    import os
+    import stat
+
+    from ha_ops_mcp.utils.yaml import write_yaml
+
+    target = tmp_path / "perms.yaml"
+    target.write_text("a: 0\n")
+    os.chmod(target, 0o600)
+
+    write_yaml(target, {"a": 1})
+
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert target.read_text() == "a: 1\n"
+
+
+def test_write_yaml_failure_leaves_original_intact(tmp_path):
+    """A mid-serialization failure must not touch the target or leak tmp files."""
+    from ruamel.yaml.representer import RepresenterError
+
+    from ha_ops_mcp.utils.yaml import write_yaml
+
+    target = tmp_path / "intact.yaml"
+    target.write_text("a: 0\n")
+
+    with pytest.raises(RepresenterError):
+        write_yaml(target, object())  # ruamel can't represent a bare object
+
+    assert target.read_text() == "a: 0\n"
+    assert list(tmp_path.iterdir()) == [target]
+
+
+def test_atomic_write_text_creates_new_file(tmp_path):
+    from ha_ops_mcp.utils.yaml import atomic_write_text
+
+    target = tmp_path / "new.txt"
+    atomic_write_text(target, "hello\n")
+    assert target.read_text() == "hello\n"

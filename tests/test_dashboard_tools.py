@@ -520,3 +520,58 @@ async def test_dashboard_patch_rejects_missing_dashboard(ctx, dashboard_storage)
     )
     assert "error" in result
     assert "not found" in result["error"].lower()
+
+
+# ── concurrent double-apply (audit fix #3: TOCTOU on the drift guard) ──
+
+
+@pytest.mark.asyncio
+async def test_dashboard_concurrent_double_apply_one_wins(
+    ctx, dashboard_storage
+):
+    """Two sessions preview against the same base, then apply concurrently.
+
+    Without the per-dashboard mutation lock both applies pass the drift
+    re-fetch (each sees the pre-save config) and both save — the second
+    silently clobbering the first. With the lock, the loser re-fetches
+    after the winner's save landed and refuses on drift.
+    """
+    import asyncio
+
+    cfg_a = {"title": "Session A", "views": []}
+    cfg_b = {"title": "Session B", "views": []}
+    tok_a = (await haops_dashboard_diff(
+        ctx, dashboard_id="lovelace", new_config=cfg_a
+    ))["token"]
+    tok_b = (await haops_dashboard_diff(
+        ctx, dashboard_id="lovelace", new_config=cfg_b
+    ))["token"]
+
+    storage_file = dashboard_storage / "lovelace"
+
+    async def fake_save(msg_type, **kwargs):
+        # Yield first — widens the window in which an unlocked second apply
+        # would sneak past its own drift check — then persist like real HA.
+        await asyncio.sleep(0.01)
+        data = json.loads(storage_file.read_text())
+        data["data"]["config"] = kwargs["config"]
+        storage_file.write_text(json.dumps(data))
+        return {}
+
+    ctx.ws.send_command = AsyncMock(side_effect=fake_save)
+
+    res_a, res_b = await asyncio.gather(
+        haops_dashboard_apply(ctx, token=tok_a),
+        haops_dashboard_apply(ctx, token=tok_b),
+    )
+
+    successes = [r for r in (res_a, res_b) if r.get("success")]
+    refusals = [r for r in (res_a, res_b) if "error" in r]
+    assert len(successes) == 1
+    assert len(refusals) == 1
+    assert "changed since preview" in refusals[0]["error"]
+    # Exactly one save reached HA
+    ctx.ws.send_command.assert_awaited_once()
+    # The winner's config is what survives on disk
+    final = json.loads(storage_file.read_text())["data"]["config"]
+    assert final["title"] in ("Session A", "Session B")

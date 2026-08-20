@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
+import os
+import stat
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -28,8 +32,43 @@ def read_yaml(path: Path) -> tuple[Any, YAML]:
     return data, yaml
 
 
+def atomic_write_text(path: Path, content: str) -> None:
+    """Write text to ``path`` atomically (tmp file + os.replace).
+
+    HA (and its file-watching integrations) can read a config file at any
+    moment — an in-place truncate-and-write briefly exposes a half-written
+    file. Writing to a temp file in the same directory and renaming over
+    the target makes the swap atomic on POSIX. Preserves the original
+    file's permission bits when the file already exists.
+
+    Args:
+        path: Target file path.
+        content: Full file content to write.
+    """
+    mode: int | None = None
+    with contextlib.suppress(OSError):
+        mode = stat.S_IMODE(path.stat().st_mode)
+
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(content)
+        if mode is not None:
+            os.chmod(tmp_name, mode)
+        os.replace(tmp_name, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_name)
+        raise
+
+
 def write_yaml(path: Path, data: Any, yaml: YAML | None = None) -> None:
     """Write YAML data back to a file, preserving comments if possible.
+
+    The write is atomic: serialized to a string first, then swapped into
+    place via :func:`atomic_write_text` so readers never see a partial file.
 
     Args:
         path: Target file path.
@@ -38,8 +77,7 @@ def write_yaml(path: Path, data: Any, yaml: YAML | None = None) -> None:
     """
     if yaml is None:
         yaml = make_yaml()
-    with open(path, "w") as f:
-        yaml.dump(data, f)
+    atomic_write_text(path, yaml_to_string(data, yaml))
 
 
 def yaml_to_string(data: Any, yaml: YAML | None = None) -> str:

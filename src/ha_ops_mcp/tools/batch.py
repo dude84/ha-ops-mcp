@@ -36,7 +36,7 @@ from ha_ops_mcp.utils.diff import (
     render_diff,
     unified_diff,
 )
-from ha_ops_mcp.utils.yaml import write_yaml
+from ha_ops_mcp.utils.yaml import atomic_write_text, write_yaml
 
 if TYPE_CHECKING:
     from ha_ops_mcp.server import HaOpsContext
@@ -359,7 +359,7 @@ async def _write_config(path: Path, content: str) -> None:
         data = yaml.load(io.StringIO(content))
         write_yaml(path, data, yaml)
     else:
-        path.write_text(content)
+        atomic_write_text(path, content)
 
 
 async def _rollback_item(
@@ -397,7 +397,7 @@ async def _rollback_item(
         try:
             dest = Path(executed["path"])
             src = Path(backup_path).read_text()
-            dest.write_text(src)
+            atomic_write_text(dest, src)
             return {"target": target, "restored_from": backup_path}
         except OSError as e:
             return {"target": target, "restore_failed": str(e)}
@@ -472,12 +472,30 @@ async def haops_batch_apply(
         tool = item["tool"]
         try:
             if tool == "config_patch":
-                backup_entry = None
-                if ctx.config.safety.backup_on_write:
-                    backup_entry = await ctx.backup.backup_file(
-                        Path(item["path"]), operation="batch_apply"
+                # Serialize recheck→backup→write per file (same lock the
+                # single-item haops_config_apply takes — item["path"] is
+                # the resolved path from preview).
+                async with ctx.mutation_lock(f"file:{item['path']}"):
+                    # Staleness recheck: preview captured old_content — if
+                    # the file no longer matches, applying would clobber
+                    # the newer edit. Raise into the mid-batch failure
+                    # path: this item fails, prior items roll back.
+                    target_path = Path(item["path"])
+                    current = (
+                        target_path.read_text() if target_path.exists() else None
                     )
-                await _write_config(Path(item["path"]), item["new_content"])
+                    if current != item["old_content"]:
+                        raise RuntimeError(
+                            f"file changed on disk since preview: "
+                            f"{item['path']} — re-run haops_batch_preview "
+                            "for a fresh token"
+                        )
+                    backup_entry = None
+                    if ctx.config.safety.backup_on_write:
+                        backup_entry = await ctx.backup.backup_file(
+                            target_path, operation="batch_apply"
+                        )
+                    await _write_config(target_path, item["new_content"])
                 txn.savepoint(
                     name=f"write:{Path(item['path']).name}",
                     undo=UndoEntry(
@@ -497,7 +515,16 @@ async def haops_batch_apply(
 
             elif tool == "config_create":
                 # No backup — the file didn't exist. Rollback deletes.
-                await _write_config(Path(item["path"]), item["new_content"])
+                async with ctx.mutation_lock(f"file:{item['path']}"):
+                    # Existence recheck: a file that appeared since preview
+                    # would be silently overwritten otherwise.
+                    if Path(item["path"]).exists():
+                        raise RuntimeError(
+                            f"file was created since preview: "
+                            f"{item['path']} — re-run haops_batch_preview "
+                            "for a fresh token"
+                        )
+                    await _write_config(Path(item["path"]), item["new_content"])
                 txn.savepoint(
                     name=f"create:{Path(item['path']).name}",
                     undo=UndoEntry(
@@ -513,21 +540,40 @@ async def haops_batch_apply(
                 executed.append({**item, "backup_path": None})
 
             elif tool == "dashboard_patch":
-                backup_entry = None
-                if ctx.config.safety.backup_on_write and item["old_config"]:
-                    backup_entry = await ctx.backup.backup_dashboard(
-                        item["dashboard_id"],
-                        item["old_config"],
-                        operation="batch_apply",
+                async with ctx.mutation_lock(
+                    f"dashboard:{item['dashboard_id']}"
+                ):
+                    # Drift recheck (same guard as haops_dashboard_apply):
+                    # tolerate a failed re-fetch (None), refuse on mismatch.
+                    current_config = await _get_dashboard_config(
+                        ctx, item["dashboard_id"]
                     )
-                from ha_ops_mcp.connections.websocket import WebSocketError
-                try:
-                    kwargs: dict[str, Any] = {"config": item["new_config"]}
-                    if item["dashboard_id"] != "lovelace":
-                        kwargs["url_path"] = item["dashboard_id"]
-                    await ctx.ws.send_command("lovelace/config/save", **kwargs)
-                except WebSocketError as e:
-                    raise RuntimeError(f"dashboard save failed: {e}") from e
+                    if (
+                        current_config is not None
+                        and current_config != item["old_config"]
+                    ):
+                        raise RuntimeError(
+                            f"dashboard '{item['dashboard_id']}' changed "
+                            "since preview — re-run haops_batch_preview "
+                            "for a fresh token"
+                        )
+                    backup_entry = None
+                    if ctx.config.safety.backup_on_write and item["old_config"]:
+                        backup_entry = await ctx.backup.backup_dashboard(
+                            item["dashboard_id"],
+                            item["old_config"],
+                            operation="batch_apply",
+                        )
+                    from ha_ops_mcp.connections.websocket import WebSocketError
+                    try:
+                        kwargs: dict[str, Any] = {"config": item["new_config"]}
+                        if item["dashboard_id"] != "lovelace":
+                            kwargs["url_path"] = item["dashboard_id"]
+                        await ctx.ws.send_command(
+                            "lovelace/config/save", **kwargs
+                        )
+                    except WebSocketError as e:
+                        raise RuntimeError(f"dashboard save failed: {e}") from e
                 txn.savepoint(
                     name=f"dashboard:{item['dashboard_id']}",
                     undo=UndoEntry(
