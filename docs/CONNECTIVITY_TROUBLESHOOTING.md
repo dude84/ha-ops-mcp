@@ -60,6 +60,32 @@ claude mcp add --transport http ha-ops http://homeassistant.local:8901/mcp
 
 ---
 
+## #3 — `Refusing to send credentials to non-https token endpoint` → Claude Code TLS guard (2026-08)
+
+Fresh OAuth flows (new project, new server entry, cleared token store) fail with:
+```
+Refusing to send credentials to non-https token endpoint 'http://homeassistant.local:8901/token'.
+OAuth token requests MUST use TLS (localhost / 127.0.0.1 / ::1 are exempt).
+```
+Introduced **silently** in Claude Code ~v2.1.234–2.1.237 (Aug 17–20, 2026; not changelogged —
+likely a bundled MCP SDK hardening). Upstream stance: intentional and permanent
+(claude-code issue #3320 "OAuth2 requirement for http servers, even in local environments" —
+closed, not planned). It is the client-side twin of the SDK HTTPS requirement this addon already
+patches server-side at startup.
+
+Consequences:
+- **Already-authorized entries keep working** on cached tokens (Claude Code MCP OAuth creds are
+  scoped per project for local-scope servers) — but any *fresh* OAuth dance to a non-localhost
+  plain-http endpoint is dead. Expect existing entries to break whenever a full re-auth is forced.
+- There is **no client-side override** (no env var / settings key / flag).
+- Escape hatches: (a) static bearer header on the client
+  (`claude mcp add --transport http ... --header "Authorization: Bearer ..."`) — suppresses OAuth
+  discovery entirely, which also lifts the #2 hostname restriction (IP URLs become usable) —
+  requires the addon to support static-token auth; or (b) put a TLS reverse proxy in front of
+  port 8901 and set `auth.issuer_url` to the https URL.
+
+---
+
 ## Don't chase these (red herrings)
 
 - **HA core update** — verify with `curl` first; if curl reaches the endpoint, HA is not the cause.
