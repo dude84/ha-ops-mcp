@@ -1038,7 +1038,7 @@ async def haops_dashboard_apply(
     ctx: HaOpsContext, token: str
 ) -> dict[str, Any]:
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -1049,8 +1049,9 @@ async def haops_dashboard_apply(
 
     # Stale-token drift guard: re-fetch the live dashboard and compare it to the
     # config captured at preview time. If the dashboard was edited in between,
-    # applying would silently clobber that intervening change. Refuse and leave
-    # the token unconsumed so the user can re-preview.
+    # applying would silently clobber that intervening change. Refuse — the
+    # token was already claimed (consumed) at entry, so the caller re-runs the
+    # preview for a fresh token (fail-closed; the hint below says exactly that).
     #
     # Edge case: if the re-fetch returns None (transient read failure, or
     # dashboard not yet persisted), proceed conservatively. A failed read
@@ -1100,7 +1101,6 @@ async def haops_dashboard_apply(
     except WebSocketError as e:
         return {"error": f"Failed to save dashboard: {e}"}
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     # Store old+new config so the Timeline UI can recompute the JSON diff.

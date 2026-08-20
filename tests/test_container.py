@@ -166,6 +166,13 @@ class _FakeSafety:
         self.consumed.append(token_id)
         self.tokens.pop(token_id, None)
 
+    def claim_token(self, token_id: str):
+        if token_id not in self.tokens:
+            raise ValueError("Invalid or already-used token")
+        tk = self.tokens.pop(token_id)
+        self.consumed.append(token_id)
+        return tk
+
 
 class _FakeAudit:
     def __init__(self) -> None:

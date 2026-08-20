@@ -110,8 +110,13 @@ async def test_dashboard_apply_refuses_on_drift(ctx, dashboard_storage):
     assert "error" in apply_result
     assert "changed since preview" in apply_result["error"]
     assert "hint" in apply_result
-    # Token NOT consumed — still valid so the user can re-preview.
-    assert ctx.safety.validate_token(token) is not None
+    # Fail-closed: the token was claimed (consumed) at apply entry, so the
+    # drift refusal does NOT re-arm it — the hint tells the user to
+    # re-preview for a fresh token.
+    from ha_ops_mcp.safety.confirmation import TokenConsumedError
+
+    with pytest.raises(TokenConsumedError):
+        ctx.safety.validate_token(token)
 
 
 @pytest.mark.asyncio

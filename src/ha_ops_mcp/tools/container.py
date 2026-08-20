@@ -307,7 +307,7 @@ async def haops_container_exec(
         return {"error": "confirm=true requires a token"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:  # noqa: BLE001 — surfaced to the caller as a message
         return {"error": str(e)}
 
@@ -335,8 +335,6 @@ async def haops_container_exec(
         return {"error": str(e), "docker_available": False}
     except DockerError as e:
         return {"error": str(e), "container": container}
-
-    ctx.safety.consume_token(token)
 
     await ctx.audit.log(
         tool="container_exec",

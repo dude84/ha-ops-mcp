@@ -146,7 +146,7 @@ async def haops_db_execute(
         return {"error": "confirm=true requires a token from the preview step"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -168,7 +168,6 @@ async def haops_db_execute(
     except Exception as e:
         return {"error": f"Execution failed: {e}"}
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     await ctx.audit.log(

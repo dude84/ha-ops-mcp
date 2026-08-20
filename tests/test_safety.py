@@ -1,5 +1,6 @@
 """Tests for safety layer — tokens, path guard, rollback."""
 
+import asyncio
 import time
 from pathlib import Path
 
@@ -73,6 +74,81 @@ class TestSafetyManager:
         t2 = sm.create_token("second", {})
         tokens = sm.list_tokens()
         assert [t.id for t in tokens] == [t2.id, t1.id]
+
+
+class TestClaimToken:
+    def test_claim_valid_token(self):
+        sm = SafetyManager()
+        token = sm.create_token("test_action", {"key": "value"})
+        claimed = sm.claim_token(token.id)
+        assert claimed.action == "test_action"
+        assert claimed.details == {"key": "value"}
+        assert claimed.consumed is True
+
+    def test_double_claim_raises(self):
+        sm = SafetyManager()
+        token = sm.create_token("test", {})
+        sm.claim_token(token.id)
+        with pytest.raises(TokenConsumedError):
+            sm.claim_token(token.id)
+
+    def test_claim_unknown_token(self):
+        sm = SafetyManager()
+        with pytest.raises(TokenNotFoundError):
+            sm.claim_token("nonexistent")
+
+    def test_claim_blocks_validate_and_consume(self):
+        sm = SafetyManager()
+        token = sm.create_token("test", {})
+        sm.claim_token(token.id)
+        with pytest.raises(TokenConsumedError):
+            sm.validate_token(token.id)
+        with pytest.raises(TokenConsumedError):
+            sm.consume_token(token.id)
+
+    def test_wrong_action_check_after_claim_stays_consumed(self):
+        """Apply tools check the claimed token's action AFTER claiming.
+
+        A mismatch is a caller bug (wrong token passed to the wrong apply
+        tool); the token stays consumed — fail-closed, re-preview to retry.
+        """
+        sm = SafetyManager()
+        token = sm.create_token("config_apply", {})
+        claimed = sm.claim_token(token.id)
+        # The apply tool would refuse here on action mismatch...
+        assert claimed.action != "docker_prune"
+        # ...and the token must NOT be re-armed by that refusal.
+        with pytest.raises(TokenConsumedError):
+            sm.claim_token(token.id)
+
+    @pytest.mark.asyncio
+    async def test_concurrent_claims_run_mutation_exactly_once(self):
+        """Race regression: two apply-style coroutines share one token.
+
+        Each claims at entry, then awaits (simulating backup/file/DB I/O),
+        then mutates. The claim is atomic within the synchronous call, so
+        exactly one mutation runs; the loser surfaces a clean error dict.
+        """
+        sm = SafetyManager()
+        token = sm.create_token("apply", {})
+        runs = {"count": 0}
+
+        async def apply() -> dict[str, str | bool]:
+            try:
+                sm.claim_token(token.id)
+            except (TokenConsumedError, TokenNotFoundError) as e:
+                return {"error": str(e)}
+            await asyncio.sleep(0.01)  # simulated backup/write awaits
+            runs["count"] += 1
+            return {"success": True}
+
+        results = await asyncio.gather(apply(), apply())
+        assert runs["count"] == 1
+        successes = [r for r in results if r.get("success")]
+        errors = [r for r in results if "error" in r]
+        assert len(successes) == 1
+        assert len(errors) == 1
+        assert "already consumed" in str(errors[0]["error"])
 
 
 # ── Path guard ──

@@ -345,13 +345,11 @@ async def haops_addon_restart(
         return {"error": "confirm=true requires a token"}
 
     try:
-        ctx.safety.validate_token(token)
+        ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
     result = await _supervisor_post(ctx, f"/addons/{slug}/restart")
-
-    ctx.safety.consume_token(token)
 
     await ctx.audit.log(
         tool="addon_restart",
@@ -528,7 +526,7 @@ async def haops_addon_update(
         return {"error": "confirm=true requires a token"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:  # noqa: BLE001 — returned to the caller as a message
         return {"error": str(e)}
 
@@ -547,7 +545,6 @@ async def haops_addon_update(
         },
         token_id=token,
     )
-    ctx.safety.consume_token(token)
 
     if is_self:
         # Audit is written BEFORE firing: once Supervisor stops us there is no

@@ -293,7 +293,7 @@ async def haops_helper_create(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -340,7 +340,6 @@ async def haops_helper_create(
         except WebSocketError as e:
             rename_error = str(e)
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     audit_details: dict[str, Any] = {
@@ -493,7 +492,7 @@ async def haops_helper_update(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -552,7 +551,6 @@ async def haops_helper_update(
         except WebSocketError as e:
             rename_error = str(e)
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     audit_details: dict[str, Any] = {
@@ -667,7 +665,7 @@ async def haops_helper_delete(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -711,7 +709,6 @@ async def haops_helper_delete(
         except WebSocketError as e:
             errors.append({"entity_id": eid, "error": str(e)})
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     await ctx.audit.log(

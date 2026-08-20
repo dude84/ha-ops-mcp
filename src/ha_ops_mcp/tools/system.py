@@ -477,7 +477,7 @@ async def haops_system_restart(
         return {"error": "confirm=true requires a token"}
 
     try:
-        ctx.safety.validate_token(token)
+        ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -502,8 +502,6 @@ async def haops_system_restart(
         # container. asyncio.TimeoutError surfaces the same thing when
         # aiohttp's total-timeout fires before the response lands.
         restart_initiated = True
-
-    ctx.safety.consume_token(token)
 
     await ctx.audit.log(
         tool="system_restart",
@@ -619,7 +617,7 @@ async def haops_system_core(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
     action = token_data.details.get("core_action", action)
@@ -645,7 +643,6 @@ async def haops_system_core(
         steps.append({"step": "core_restart", "result": res})
         ok, initiated = _core_post_outcome(res)
 
-    ctx.safety.consume_token(token)
     await ctx.audit.log(
         tool="system_core",
         details={"action": action, "initiated_async": initiated, "steps": steps},

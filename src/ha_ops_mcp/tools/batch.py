@@ -446,7 +446,7 @@ async def haops_batch_apply(
     ctx: HaOpsContext, token: str
 ) -> dict[str, Any]:
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -555,10 +555,6 @@ async def haops_batch_apply(
 
             ctx.rollback.discard(txn.id)
 
-            # Consume token regardless — single-use semantics. The failed
-            # token must not be replayable.
-            ctx.safety.consume_token(token)
-
             await ctx.audit.log(
                 tool="batch_apply",
                 details={
@@ -592,7 +588,6 @@ async def haops_batch_apply(
 
     # Success path — one audit entry for the whole batch, carrying each
     # per-item old/new so Phase 3's Timeline can render per-target diffs.
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
     await ctx.audit.log(
         tool="batch_apply",

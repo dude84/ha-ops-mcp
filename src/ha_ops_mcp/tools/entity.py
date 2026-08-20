@@ -740,7 +740,7 @@ async def haops_entity_remove(
         return {"error": "confirm=true requires a token"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -777,7 +777,6 @@ async def haops_entity_remove(
         except WebSocketError as e:
             errors.append({"entity_id": eid, "error": str(e)})
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     await ctx.audit.log(
@@ -896,7 +895,7 @@ async def haops_entity_toggle(
         return {"error": "confirm=true requires a token"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -934,7 +933,6 @@ async def haops_entity_toggle(
         except WebSocketError as e:
             errors.append({"entity_id": eid, "error": str(e)})
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     await ctx.audit.log(
@@ -1155,7 +1153,7 @@ async def haops_entity_rename(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -1214,7 +1212,6 @@ async def haops_entity_rename(
         if rewritten["errors"]:
             errors_out.extend(rewritten["errors"])
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     await ctx.audit.log(

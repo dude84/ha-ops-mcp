@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from ha_ops_mcp.tools.db import haops_db_execute, haops_db_purge, haops_db_statistics
@@ -158,3 +160,37 @@ async def test_db_statistics_info_no_entity_id(ctx):
 async def test_db_statistics_unknown_command(ctx):
     result = await haops_db_statistics(ctx, command="bogus")
     assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_db_execute_concurrent_double_confirm_runs_once(ctx):
+    """Race regression: two concurrent applies sharing one token must
+    execute the SQL exactly once.
+
+    claim_token() marks the token consumed atomically at apply entry —
+    before the first await — so the losing coroutine gets a structured
+    error dict instead of double-executing the statement.
+    """
+    sql = (
+        "INSERT INTO recorder_runs (start, created) "
+        "VALUES (1712695555.0, 1712695555.0)"
+    )
+    preview = await haops_db_execute(ctx, sql=sql)
+    token = preview["token"]
+
+    results = await asyncio.gather(
+        haops_db_execute(ctx, sql=sql, confirm=True, token=token),
+        haops_db_execute(ctx, sql=sql, confirm=True, token=token),
+    )
+
+    successes = [r for r in results if r.get("success")]
+    errors = [r for r in results if "error" in r]
+    assert len(successes) == 1
+    assert len(errors) == 1
+    assert "already consumed" in errors[0]["error"]
+
+    # The SQL effect happened exactly once.
+    res = await ctx.db.query(
+        "SELECT COUNT(*) AS n FROM recorder_runs WHERE start = 1712695555.0"
+    )
+    assert res.rows[0]["n"] == 1

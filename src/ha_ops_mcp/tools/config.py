@@ -648,9 +648,10 @@ async def haops_config_create(
 async def haops_config_apply(ctx: HaOpsContext, token: str) -> dict[str, Any]:
     from pathlib import Path
 
-    # Validate and consume token
+    # Atomically claim (validate + consume) the token before any await —
+    # a concurrent apply with the same token loses here instead of racing.
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -688,7 +689,6 @@ async def haops_config_apply(ctx: HaOpsContext, token: str) -> dict[str, Any]:
     else:
         resolved.write_text(new_content)
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     # Store old+new content so the Timeline UI can recompute the diff

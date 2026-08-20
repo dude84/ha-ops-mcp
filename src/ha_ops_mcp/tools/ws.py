@@ -120,7 +120,7 @@ async def haops_ws_command(
         if token is None:
             return {"error": "confirm=true requires a token"}
         try:
-            token_data = ctx.safety.validate_token(token)
+            token_data = ctx.safety.claim_token(token)
         except Exception as e:
             return {"error": str(e)}
         command_type = token_data.details.get("command_type", command_type)
@@ -140,8 +140,6 @@ async def haops_ws_command(
         # bad payload keys (e.g. reserved 'id'/'type' collision)
         return {"error": f"Invalid payload for {command_type}: {e}"}
 
-    if not read_only and token is not None:
-        ctx.safety.consume_token(token)
     await ctx.audit.log(
         tool="ws_command",
         details={"command_type": command_type, "payload": payload},

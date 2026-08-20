@@ -388,7 +388,7 @@ async def haops_zha_reconfigure_device(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
     ieee = token_data.details.get("ieee", ieee)
@@ -403,7 +403,6 @@ async def haops_zha_reconfigure_device(
         )
         return {"error": f"Reconfigure failed: {e}"}
 
-    ctx.safety.consume_token(token)
     await ctx.audit.log(
         tool="zha_reconfigure_device",
         details={"ieee": ieee, "name": name}, token_id=token,

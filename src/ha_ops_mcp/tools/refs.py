@@ -87,6 +87,10 @@ def _edge_to_dict(e: Edge) -> dict[str, Any]:
     },
 )
 async def haops_references(ctx: HaOpsContext, node: str) -> dict[str, Any]:
+    # Handler entry: drop any index cached by a previous request so this
+    # call sees the current filesystem/registry state (ctx is global, not
+    # per-request — a stale cache here would survive config edits/renames).
+    ctx.request_index = None
     index = await get_or_build_index(ctx)
     nid = _resolve_node_id(node)
     meta = index.node(nid)
@@ -140,6 +144,9 @@ async def haops_refactor_check(
     node_id: str,
     new_id: str = "",
 ) -> dict[str, Any]:
+    # Handler entry: invalidate the cross-request index cache (see
+    # haops_references) so refactor previews reflect current config.
+    ctx.request_index = None
     index = await get_or_build_index(ctx)
     nid = _resolve_node_id(node_id)
     if index.node(nid) is None:

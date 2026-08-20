@@ -398,7 +398,7 @@ async def haops_device_remove(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -441,8 +441,6 @@ async def haops_device_remove(
             unlinked.append(entry_id)
         except WebSocketError as e:
             errors.append({"entry_id": entry_id, "error": str(e)})
-
-    ctx.safety.consume_token(token)
 
     # Verify against live state, not the .storage file — HA has not flushed it
     # yet at this point by definition.

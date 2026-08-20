@@ -228,7 +228,7 @@ async def _revert_config(
         return {"error": "confirm=true requires a token"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -249,7 +249,6 @@ async def _revert_config(
 
     src.write_text(revert_content)
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     await ctx.audit.log(
@@ -313,7 +312,7 @@ async def _revert_dashboard(
         return {"error": "confirm=true requires a token"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -340,7 +339,6 @@ async def _revert_dashboard(
     except WebSocketError as e:
         return {"error": f"Failed to restore dashboard: {e}"}
 
-    ctx.safety.consume_token(token)
     ctx.rollback.commit(txn.id)
 
     await ctx.audit.log(
@@ -453,7 +451,7 @@ async def haops_backup_prune(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -467,7 +465,6 @@ async def haops_backup_prune(
         type_filter=d.get("type", "all"),
         clear_all=d.get("clear_all", False),
     )
-    ctx.safety.consume_token(token)
 
     await ctx.audit.log(
         tool="backup_prune",

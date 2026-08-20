@@ -210,7 +210,7 @@ async def haops_entities_assign_area(
     if not token:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -231,7 +231,6 @@ async def haops_entities_assign_area(
         except WebSocketError as e:
             errors.append({"entity_id": eid, "error": str(e)})
 
-    ctx.safety.consume_token(token)
     await ctx.audit.log(
         tool="entities_assign_area",
         details={
@@ -321,7 +320,7 @@ async def haops_entity_customize(
     if not token:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -337,7 +336,6 @@ async def haops_entity_customize(
     except WebSocketError as e:
         return {"error": f"Update failed: {e}"}
 
-    ctx.safety.consume_token(token)
     await ctx.audit.log(
         tool="entity_customize",
         details={"entity_id": target_eid, "changes": target_changes},

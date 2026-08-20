@@ -103,7 +103,7 @@ async def haops_docker_prune(
         return {"error": "confirm=true requires a token"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:  # noqa: BLE001 — surfaced to the caller as a message
         return {"error": str(e)}
 
@@ -119,8 +119,6 @@ async def haops_docker_prune(
         return {"error": str(e), "docker_available": False}
     except DockerError as e:
         return {"error": str(e)}
-
-    ctx.safety.consume_token(token)
 
     reclaimed = images["space_reclaimed"] + cache["space_reclaimed"]
     await ctx.audit.log(

@@ -370,7 +370,7 @@ async def haops_rollback(
         return {"error": "confirm=true requires a token"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -389,8 +389,6 @@ async def haops_rollback(
     restored: list[dict[str, Any]] = []
     for undo in undos:
         restored.append(await _execute_undo(ctx, undo))
-
-    ctx.safety.consume_token(token)
 
     still_dirty = [r for r in restored if "restore_failed" in r]
 

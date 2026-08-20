@@ -88,7 +88,7 @@ async def haops_exec_shell(
         return {"error": "confirm=true requires a token"}
 
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -126,7 +126,6 @@ async def haops_exec_shell(
     except Exception as e:
         return {"error": f"Execution failed: {e}"}
 
-    ctx.safety.consume_token(token)
     duration_ms = round((time.monotonic() - t0) * 1000, 1)
 
     stdout_text = stdout.decode(errors="replace").rstrip()

@@ -233,7 +233,7 @@ async def haops_user_create(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -277,8 +277,6 @@ async def haops_user_create(
             )
         except WebSocketError as e:
             password_error = str(e)
-
-    ctx.safety.consume_token(token)
 
     audit_details: dict[str, Any] = {
         "user_id": user_id,
@@ -448,7 +446,7 @@ async def haops_user_update(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -471,8 +469,6 @@ async def haops_user_update(
             error=str(e),
         )
         return {"error": f"WS config/auth/update failed: {e}"}
-
-    ctx.safety.consume_token(token)
 
     await ctx.audit.log(
         tool="user_update",
@@ -568,7 +564,7 @@ async def haops_user_delete(
     if token is None:
         return {"error": "confirm=true requires a token"}
     try:
-        token_data = ctx.safety.validate_token(token)
+        token_data = ctx.safety.claim_token(token)
     except Exception as e:
         return {"error": str(e)}
 
@@ -594,8 +590,6 @@ async def haops_user_delete(
             error=str(e),
         )
         return {"error": f"WS config/auth/delete failed: {e}"}
-
-    ctx.safety.consume_token(token)
 
     await ctx.audit.log(
         tool="user_delete",

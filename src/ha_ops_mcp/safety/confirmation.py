@@ -65,8 +65,43 @@ class SafetyManager:
         self._tokens[token.id] = token
         return token
 
+    def claim_token(self, token_id: str) -> ConfirmationToken:
+        """Atomically validate AND consume a token in one synchronous step.
+
+        Call this BEFORE the first await of the mutation. The existence/
+        consumed check and the consumed-mark happen in the same synchronous
+        call — no await between them — so two concurrent apply calls racing
+        on the same token cannot both pass: the loser raises
+        TokenConsumedError instead of running the mutation a second time.
+
+        A failed mutation does NOT re-arm the token — re-run the preview to
+        mint a fresh one. That is intentional (fail-closed): re-arming would
+        reopen the double-execution window this method exists to close.
+
+        Args:
+            token_id: Token id returned by the preview phase.
+
+        Returns:
+            The claimed ConfirmationToken (now marked consumed).
+
+        Raises:
+            TokenNotFoundError: Token doesn't exist.
+            TokenConsumedError: Token was already claimed/consumed.
+        """
+        token = self._tokens.get(token_id)
+        if token is None:
+            raise TokenNotFoundError(f"Token {token_id} not found")
+        if token.consumed:
+            raise TokenConsumedError(f"Token {token_id} already consumed")
+        token.consumed = True
+        return token
+
     def validate_token(self, token_id: str) -> ConfirmationToken:
         """Validate that a token exists and hasn't been used.
+
+        Deprecated for apply phases: validate-then-consume leaves a window
+        between check and mark in which a concurrent apply with the same
+        token also passes. Use claim_token() at apply entry instead.
 
         Raises:
             TokenNotFoundError: Token doesn't exist.
@@ -80,7 +115,12 @@ class SafetyManager:
         return token
 
     def consume_token(self, token_id: str) -> None:
-        """Mark a token as consumed after the operation completes."""
+        """Mark a token as consumed after the operation completes.
+
+        Deprecated for apply phases: use claim_token() at apply entry
+        instead of validate_token()...consume_token(), which is racy across
+        awaits.
+        """
         token = self.validate_token(token_id)
         token.consumed = True
 
