@@ -61,11 +61,8 @@ The token comes from the addon Configuration (`auth_token`) or the addon log —
 [Authentication](#authentication). In token mode a raw-IP URL is fine (useful over VPN, where mDNS
 doesn't resolve).
 
-For SSE transport (legacy, set `transport: sse` in addon Configuration):
-
-```bash
-claude mcp add --transport sse ha-ops http://<your-ha-address>:8901/sse
-```
+The `sse` transport is **deprecated and will be removed in the next minor release** — it still
+starts (with a warning) for installs mid-migration, but new setups should not use it.
 
 For standalone (stdio):
 

@@ -69,6 +69,9 @@ export HA_OPS_TOKEN="${ha_token}"
 export HA_OPS_URL="${ha_url}"
 export HA_OPS_WS_URL="${ws_url}"
 export HA_OPS_TRANSPORT="${transport}"
+if [ "${transport}" = "sse" ]; then
+    bashio::log.warning "The 'sse' transport is DEPRECATED and will be removed in the next minor release. Switch to 'streamable-http' in the addon Configuration and re-add the server in your MCP client with endpoint /mcp."
+fi
 export HA_OPS_CONFIG_ROOT="/config"
 export HA_OPS_BACKUP_DIR="${backup_dir}"
 export HA_OPS_BACKUP_MAX_AGE_DAYS="${backup_max_age_days}"

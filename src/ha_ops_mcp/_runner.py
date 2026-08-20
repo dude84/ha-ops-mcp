@@ -45,6 +45,14 @@ async def serve_http(
 ) -> None:
     app: Any
     if transport == "sse":
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "The 'sse' transport is DEPRECATED and will be removed in the "
+            "next minor release — it is the MCP spec's legacy transport and "
+            "its long-lived streams drop on proxy idle (the v0.34.0 re-auth "
+            "saga). Switch to 'streamable-http' (endpoint /mcp)."
+        )
         app = mcp.sse_app(mount_path)
     elif transport == "streamable-http":
         app = mcp.streamable_http_app()

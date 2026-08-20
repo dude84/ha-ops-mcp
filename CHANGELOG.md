@@ -1,3 +1,14 @@
+## 0.62.2
+
+**The `sse` transport is deprecated and will be removed in the next minor release.** It is the
+MCP spec's legacy transport (replaced by streamable-http in the 2025-03 spec revision), and its
+long-lived streams dropping on proxy idle was the root cause of the pre-v0.34.0 re-auth symptom.
+It still starts, with a deprecation warning in both the addon log and the server log; the addon
+default has been streamable-http since v0.34.0. If you're on `transport: sse`, switch to
+`streamable-http` in the addon Configuration and re-add the server in your MCP client with
+endpoint `/mcp`. Docs updated (the DOCS.md transport section still described sse as the
+recommended default — stale since v0.34.0).
+
 ## 0.62.1
 
 **Auto-generated Bearer token is now prefilled into the addon Configuration.** When `auth_token`
