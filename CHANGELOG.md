@@ -1,3 +1,51 @@
+## 0.62.0
+
+**BREAKING: static Bearer token replaces OAuth as the default auth mode — Anthropic forced our
+hand.** Claude Code ~v2.1.234–2.1.237 (Aug 17–20 2026) silently — no changelog entry — started
+refusing OAuth token requests to plain-`http` endpoints (only localhost exempt; upstream
+won't-fix, [claude-code#3320](https://github.com/anthropics/claude-code/issues/3320)). Every
+fresh OAuth flow against `http://<host>:8901` now fails client-side with `Refusing to send
+credentials to non-https token endpoint`; existing clients coast on cached tokens until a forced
+re-auth kills them too. Plain HTTP on a trusted LAN is this addon's typical deployment, so OAuth
+stopped being a viable default.
+
+- **`auth_mode: token` (new default).** Set `auth_token` in the addon Configuration (masked
+  password field) or leave blank to auto-generate — persisted to `<backup_dir>/auth/static_token`
+  (0600) and printed **once** to the addon log at generation. Connect:
+  `claude mcp add --transport http ha-ops http://<host>:8901/mcp --header "Authorization: Bearer <token>"`.
+  The header suppresses OAuth discovery entirely, which also lifts the hostname/resource-matching
+  restriction — **raw-IP URLs now work** (VPN use). Enforced by a pure-ASGI constant-time
+  middleware outside the MCP SDK auth stack; the sidebar panel (`/ui`, `/api/ui/*`) stays on HA
+  ingress auth.
+- **`auth_mode: oauth` is now EXPERIMENTAL** (default v0.27.0–v0.61.x, implementation unchanged).
+  Only viable behind a TLS reverse proxy (+ `auth_issuer_url`) or from localhost.
+- **Migration:** after updating, existing OAuth-connected clients get 401s. Grab the token from
+  the addon Configuration/log and re-add the server with the `--header` flag (or set
+  `auth_mode: oauth` to keep the old behaviour where TLS/localhost makes it possible).
+
+**Multi-client concurrency hardening.** A shared static token makes several simultaneous Claude
+Code sessions routine, so the races a single-client deployment never hit were found and closed
+(full audit in the commit history):
+
+- **Atomic confirmation-token claim.** Apply tools previously validated the token, awaited
+  (backup/write), then consumed it — two concurrent applies with one token could both pass
+  validation and run the mutation twice (duplicate SQL, duplicate shell commands). New
+  `claim_token()` validates and consumes in one synchronous step; 29 apply sites across 18 tool
+  files migrated. A failed mutation no longer re-arms the token — re-preview.
+- **Staleness recheck on config writes.** `haops_config_apply` / `haops_batch_apply` now re-read
+  the target under a per-file lock and refuse when it no longer matches the previewed content —
+  previously a concurrent session's write was silently clobbered. Dashboard applies hold a
+  per-dashboard lock across their drift recheck (was check-then-act across an await).
+- **Atomic file writes** (tmp + `os.replace`) so HA never reads a half-written YAML.
+- **Session attribution.** Audit/activity entries and confirmation tokens now carry a short
+  per-connection session key — with one shared bearer token, "which client did this" stays
+  answerable. Cross-session token claims log a warning.
+- Smaller fixes: WS disconnect now fails in-flight commands immediately (was: every concurrent
+  caller stalled to its 30s timeout); reference-index cache invalidated per request (was stale
+  after any config edit — a live bug even single-client); backup filenames/ids collision-proof
+  under same-second concurrent backups; ESPHome builds hold a per-node lock; Playwright captures
+  capped to one concurrent Chromium.
+
 ## 0.61.2
 
 **Verified against HA Core 2026.8.2** (today's patch). `haops_tools_check` → `all_pass`, 15/15 groups, 0 broken tools on the live Singapore instance — including the new `docker_prune` group. The 2026.8 device-registry split stays handled (`config_entries/get` → 104 entries, 12 removable), recorder schema still 53, ZHA WS commands alive. `BUILT_AGAINST_HA` advanced 2026.8.1 → 2026.8.2; the supported window is unchanged (2026.6–2026.8). Record-only — no behaviour change.
