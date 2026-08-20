@@ -76,13 +76,26 @@ expected to be able to bypass them).
 
 ## Authentication
 
-- **MCP transport:** OAuth is **enabled by default** (since v0.27.0) on the
-  `sse` / `streamable-http` transports — Bearer-token enforced on every tool
-  call. Single-admin server: authorization requests are auto-approved (no
-  consent UI). Client registrations + tokens persist to
-  `<backup_dir>/auth/oauth.json` (a mapped volume that survives addon
-  reinstall and is **not** swept into HA snapshots). `stdio` transport is a
-  local process and relies on local trust.
+- **MCP transport:** a **static pre-shared Bearer token** is enforced by
+  default (since v0.62.0, `auth_mode: token`) on the `sse` / `streamable-http`
+  transports — checked constant-time on every request except the
+  HA-ingress-authenticated sidebar paths (`/ui`, `/api/ui/*`). The token is
+  set in the addon Configuration (`auth_token`, masked field) or
+  auto-generated and persisted to `<backup_dir>/auth/static_token` (0600,
+  printed once to the addon log at generation). Threat model: equivalent to
+  OAuth's Bearer tokens on the same plain-HTTP LAN transport — both travel
+  in cleartext on the wire; neither protects against an attacker who can
+  sniff the LAN segment. Use a TLS reverse proxy if that is in your threat
+  model.
+- **OAuth (experimental since v0.62.0, default v0.27.0–v0.61.x):**
+  `auth_mode: oauth` — Bearer-token enforced on every tool call, single-admin
+  server, authorization requests auto-approved (no consent UI). Client
+  registrations + tokens persist to `<backup_dir>/auth/oauth.json` (a mapped
+  volume that survives addon reinstall and is **not** swept into HA
+  snapshots). Demoted from default because Claude Code ~v2.1.234 (Aug 2026)
+  silently refuses fresh OAuth flows to non-HTTPS endpoints
+  (claude-code#3320, closed not-planned) — viable only behind TLS or from
+  localhost. `stdio` transport is a local process and relies on local trust.
 - **HA access:** `ha_token` is either a Supervisor token (default, via the
   Supervisor proxy) or a user **long-lived access token**. Supervisor API calls
   always use `SUPERVISOR_TOKEN` regardless. Tokens are never logged;

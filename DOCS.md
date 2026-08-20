@@ -43,6 +43,18 @@ Every mutating operation creates backups and logs to an append-only audit trail.
 
 Leave blank to use the auto-provisioned Supervisor token (recommended). Or paste a long-lived access token if you need specific permissions.
 
+### Authentication (`auth_mode`, `auth_token`)
+
+- **`token`** (default): static pre-shared Bearer token. Set `auth_token` yourself, or leave it
+  blank to auto-generate — the token is printed once in the addon log and persisted under
+  `<backup_dir>/auth/`. Clients send it as an `Authorization: Bearer` header. Multiple MCP clients
+  can share it and connect concurrently.
+- **`oauth`** (experimental): the pre-v0.62.0 default — OAuth 2.0 with Dynamic Client
+  Registration. Only viable when clients reach the addon over HTTPS or from localhost (Claude
+  Code refuses plain-HTTP OAuth since ~v2.1.234).
+- **`none`**: no MCP auth. Anyone reachable on port 8901 can call every tool, including shell and
+  DB writes — only for strictly trusted networks.
+
 ### Transport
 
 - **sse** (default): Server-Sent Events on port 8901. Recommended for the addon.
@@ -88,21 +100,23 @@ Note `haops_container_exec` **abandons** a command that hits its timeout — the
 ### Claude Code
 
 ```bash
-claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp
+claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp \
+  --header "Authorization: Bearer <your token>"
 ```
 
-(For the legacy SSE transport: `--transport sse` and endpoint `/sse`.)
+The token is in the addon Configuration (`auth_token`) — if you left it blank, the addon generated
+one and printed it in the addon log (also persisted at `<backup_dir>/auth/static_token`). A raw-IP
+URL works in token mode. (Legacy SSE transport: `--transport sse` and endpoint `/sse`.)
 
 Then start Claude Code — the `haops_*` tools will be available.
 
-> **⚠️ Known issue (Aug 2026):** Claude Code ~v2.1.234+ silently refuses OAuth token requests to
-> plain-`http` endpoints (`Refusing to send credentials to non-https token endpoint`; only
-> localhost is exempt), which breaks **new** OAuth setups against `http://<host>:8901`. Existing
-> authorized clients keep working on cached tokens. No client-side override exists
-> ([claude-code#3320](https://github.com/anthropics/claude-code/issues/3320), closed not-planned).
-> Workarounds: TLS reverse proxy in front of port 8901 (+ `auth.issuer_url`), SSH port-forward and
-> connect via `http://localhost:8901/mcp`, or `auth_enabled: false` on a strictly trusted LAN.
-> See the README's Authentication section and `docs/CONNECTIVITY_TROUBLESHOOTING.md` §3.
+> **Why a token and not OAuth?** OAuth was the default until Aug 2026, when Claude Code
+> ~v2.1.234+ silently started refusing OAuth token requests to plain-`http` endpoints
+> (`Refusing to send credentials to non-https token endpoint`; only localhost exempt; no override,
+> [claude-code#3320](https://github.com/anthropics/claude-code/issues/3320) closed not-planned).
+> That broke every new OAuth setup on a plain-HTTP LAN — the typical deployment of this addon —
+> so v0.62.0 switched the default to a static Bearer token. OAuth remains available as an
+> **experimental** mode (`auth_mode: oauth`) for HTTPS/localhost deployments.
 
 ## Tools
 

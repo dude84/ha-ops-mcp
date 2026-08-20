@@ -78,11 +78,13 @@ Consequences:
   scoped per project for local-scope servers) — but any *fresh* OAuth dance to a non-localhost
   plain-http endpoint is dead. Expect existing entries to break whenever a full re-auth is forced.
 - There is **no client-side override** (no env var / settings key / flag).
-- Escape hatches: (a) static bearer header on the client
-  (`claude mcp add --transport http ... --header "Authorization: Bearer ..."`) — suppresses OAuth
-  discovery entirely, which also lifts the #2 hostname restriction (IP URLs become usable) —
-  requires the addon to support static-token auth; or (b) put a TLS reverse proxy in front of
-  port 8901 and set `auth.issuer_url` to the https URL.
+- **Resolution (v0.62.0):** static Bearer token is now the DEFAULT auth mode (`auth_mode: token`,
+  `auth_token` in the addon Configuration or auto-generated + printed once in the addon log).
+  Clients connect with `claude mcp add --transport http ... --header "Authorization: Bearer ..."`
+  — the header suppresses OAuth discovery entirely, which also lifts the #2 hostname restriction
+  (raw-IP URLs become usable, e.g. over VPN). OAuth is retained as an EXPERIMENTAL mode
+  (`auth_mode: oauth`) for deployments with a TLS reverse proxy in front of port 8901
+  (+ `auth_issuer_url` set to the https URL) or localhost access.
 
 ---
 

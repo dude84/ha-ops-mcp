@@ -53,8 +53,13 @@ See [INSTALL.md](https://github.com/dude84/ha-ops-mcp/blob/main/docs/INSTALL.md)
 The addon exposes a streamable-HTTP endpoint on port 8901 (default). To connect Claude Code:
 
 ```bash
-claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp
+claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp \
+  --header "Authorization: Bearer <your token>"
 ```
+
+The token comes from the addon Configuration (`auth_token`) or the addon log — see
+[Authentication](#authentication). In token mode a raw-IP URL is fine (useful over VPN, where mDNS
+doesn't resolve).
 
 For SSE transport (legacy, set `transport: sse` in addon Configuration):
 
@@ -70,28 +75,44 @@ claude mcp add ha-ops -- /path/to/.venv/bin/ha-ops-mcp --config /path/to/config.
 
 ### Authentication
 
-> **⚠️ Breaking change from Anthropic (silent, ~Aug 17–20 2026, Claude Code ~v2.1.234–2.1.237):**
-> Claude Code's MCP client now **refuses OAuth token requests to plain-`http` endpoints** (only
-> `localhost`/`127.0.0.1`/`::1` are exempt). Any **fresh** OAuth flow against
-> `http://<your-ha-address>:8901` fails with
-> `Refusing to send credentials to non-https token endpoint`. Already-authorized entries keep
-> working on cached tokens — until a full re-auth is forced, at which point they break too.
-> The change shipped **without a changelog entry**; upstream considers it intentional and won't
-> revert ([claude-code#3320](https://github.com/anthropics/claude-code/issues/3320), closed
-> not-planned). There is **no client-side override**. Current options: put a TLS reverse proxy in
-> front of port 8901 and set `auth.issuer_url` to the https URL; connect from `localhost` (e.g.
-> SSH port-forward `ssh -L 8901:localhost:8901 ...`, then use `http://localhost:8901/mcp`); or
-> `auth_enabled: false` (read the trust caveat below). A static pre-shared-token auth mode
-> (client sends `--header "Authorization: Bearer ..."`, which bypasses OAuth discovery entirely)
-> is planned. Details: [`docs/CONNECTIVITY_TROUBLESHOOTING.md` §3](https://github.com/dude84/ha-ops-mcp/blob/main/docs/CONNECTIVITY_TROUBLESHOOTING.md).
+**Default since v0.62.0: static Bearer token.** OAuth was the default until Anthropic forced our
+hand: a **silent, unannounced breaking change** in Claude Code (~v2.1.234–2.1.237, Aug 17–20 2026)
+made its MCP client **refuse OAuth token requests to plain-`http` endpoints** (only
+`localhost`/`127.0.0.1`/`::1` are exempt). Any fresh OAuth flow against
+`http://<your-ha-address>:8901` now fails with `Refusing to send credentials to non-https token
+endpoint`; already-authorized clients coast on cached tokens until a forced re-auth breaks them
+too. The change shipped **with no changelog entry**, and upstream considers it intentional and
+won't revert ([claude-code#3320](https://github.com/anthropics/claude-code/issues/3320), closed
+not-planned). There is no client-side override. Since the typical home-lab deployment of this
+addon is exactly "plain HTTP on a trusted LAN", OAuth stopped being a viable default.
 
-OAuth 2.0 with Dynamic Client Registration is enabled by default for SSE / streamable-HTTP transports. The provider auto-approves authorization requests (single-user admin server, no consent UI) and persists clients + tokens to `<data_dir>/oauth.json`. Default token TTLs: 30-day access token with a sliding window (extends on every successful verification), 30-day refresh token.
+**How token auth works:** set `auth_token` in the addon Configuration (masked password field), or
+leave it blank — the addon generates one, persists it to `<backup_dir>/auth/static_token` (0600),
+and prints it **once** to the addon log at generation. Connect with:
+
+```bash
+claude mcp add --transport http ha-ops http://<your-ha-address>:8901/mcp \
+  --header "Authorization: Bearer <your token>"
+```
+
+Sending the header suppresses the client's OAuth discovery entirely, which also lifts the
+hostname/resource-matching restriction — raw-IP URLs (VPN use) work fine in token mode. Tokens are
+compared constant-time; the sidebar panel (`/ui`, `/api/ui/*`) stays on HA ingress auth, everything
+else on port 8901 requires the Bearer token. Multiple Claude Code instances can share the token and
+connect concurrently.
+
+**OAuth 2.0 (experimental since v0.62.0 — previously the default).** Set `auth_mode: oauth` to
+re-enable it. Only sensible when clients reach the server over **HTTPS** (TLS reverse proxy in
+front of port 8901 + `auth_issuer_url` pointing at the https URL) or from **localhost** (e.g. SSH
+port-forward). The implementation is unchanged from when it was the default:
+
+OAuth 2.0 with Dynamic Client Registration is enabled for SSE / streamable-HTTP transports. The provider auto-approves authorization requests (single-user admin server, no consent UI) and persists clients + tokens to `<data_dir>/oauth.json`. Default token TTLs: 30-day access token with a sliding window (extends on every successful verification), 30-day refresh token.
 
 To clear all stored OAuth state (after a client mismatch or revocation), tick `clear_oauth_on_next_boot` in the addon Configuration and restart — the flag self-resets after firing.
 
 **Re-auth-every-launch — resolved by switching transport to streamable-HTTP (v0.34.0).** Earlier reports of "Claude Code forces a fresh DCR + authorization-code flow on every launch" were tracked against [anthropics/claude-code#43000](https://github.com/anthropics/claude-code/issues/43000). After flipping the addon default from SSE to streamable-HTTP in v0.34.0, the symptom no longer reproduces: same `client_id` reused, same access + refresh tokens persisted across `/clear` and Claude Code restart cycles (`haops_auth_status` confirms TTL decrements at wall-clock rate, no fresh registrations piling up). The root cause was SSE-transport fragility — long-lived `GET /sse` streams dropping on Supervisor-proxy idle, surfacing client-side as forced re-auth — not the DCR-keying theory. If you are still on SSE and seeing this, switch to `transport: streamable-http` in the addon Configuration.
 
-`auth_enabled: false` remains available for trusted single-host LAN deployments where you want zero auth overhead. Disabling it means anyone reachable on `:8901/mcp` can call every tool including `haops_exec_shell` and DB writes — only acceptable if the LAN trust boundary is strict.
+`auth_mode: none` (or the legacy `auth_enabled: false`) remains available for trusted single-host LAN deployments where you want zero auth overhead. Disabling it means anyone reachable on `:8901/mcp` can call every tool including `haops_exec_shell` and DB writes — only acceptable if the LAN trust boundary is strict.
 
 Defensive caps added in v0.34.1: `MAX_CLIENTS = 100` on persisted DCR registrations with LRU-by-`client_id_issued_at` eviction (revokes tokens for dropped clients too), and `issued_at` stamped on every access + refresh token for forensic auditing via `haops_auth_status`.
 
@@ -99,7 +120,7 @@ Defensive caps added in v0.34.1: `MAX_CLIENTS = 100` on persisted DCR registrati
 
 If your MCP client suddenly **"Failed to connect"** but `curl http://homeassistant.local:8901/mcp` returns `401` from the same machine, the server is fine — the block is client-side. The common cause on macOS is **Local Network Privacy**: a terminal-app update (iTerm, Terminal, etc.) resets that app's Local Network permission, so every process it launches — including the MCP client — loses LAN access, while `curl` keeps working because Apple system binaries are exempt. Fix: System Settings → Privacy & Security → **Local Network** → toggle your terminal off/on, then **fully quit and relaunch** it.
 
-Keep the MCP URL as the mDNS hostname (`http://homeassistant.local:8901/mcp`), not an IP — the OAuth resource metadata is pinned to the hostname and an IP URL fails resource matching.
+In **OAuth mode only**: keep the MCP URL as the mDNS hostname (`http://homeassistant.local:8901/mcp`), not an IP — the OAuth resource metadata is pinned to the hostname and an IP URL fails resource matching. Token mode has no such restriction.
 
 Full triage steps and a known-good version baseline (diff against it to spot which component moved) are in [`docs/CONNECTIVITY_TROUBLESHOOTING.md`](https://github.com/dude84/ha-ops-mcp/blob/main/docs/CONNECTIVITY_TROUBLESHOOTING.md) and [`docs/KNOWN_GOOD_ENV.md`](https://github.com/dude84/ha-ops-mcp/blob/main/docs/KNOWN_GOOD_ENV.md).
 
