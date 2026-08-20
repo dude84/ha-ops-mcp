@@ -50,7 +50,7 @@ def main() -> None:
         mcp.run(transport="stdio")
     else:
         from ha_ops_mcp._runner import serve_http
-        anyio.run(lambda: serve_http(mcp, transport))
+        anyio.run(lambda: serve_http(mcp, transport, static_token=ctx.static_token))
 
 
 if __name__ == "__main__":

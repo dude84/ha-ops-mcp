@@ -18,7 +18,7 @@ listener to uvicorn via ``Server.serve(sockets=[...])``.
 from __future__ import annotations
 
 import socket
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import uvicorn
 
@@ -41,13 +41,23 @@ async def serve_http(
     mcp: FastMCP,
     transport: str,
     mount_path: str | None = None,
+    static_token: str | None = None,
 ) -> None:
+    app: Any
     if transport == "sse":
         app = mcp.sse_app(mount_path)
     elif transport == "streamable-http":
         app = mcp.streamable_http_app()
     else:
         raise ValueError(f"serve_http does not support transport: {transport}")
+
+    if static_token:
+        # auth_mode "token": wrap the whole ASGI app in the Bearer check here,
+        # outside the MCP SDK's auth stack, so it is immune to SDK auth-layer
+        # changes. UI/ingress paths are exempted inside the middleware.
+        from ha_ops_mcp.auth.static_token import StaticTokenMiddleware
+
+        app = StaticTokenMiddleware(app, static_token)
 
     sock = _bind_listener(mcp.settings.host, mcp.settings.port)
     config = uvicorn.Config(

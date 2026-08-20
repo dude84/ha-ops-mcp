@@ -353,12 +353,35 @@ def test_server_starts_with_dual_stack_bind_and_oauth_on(tmp_path: Path):
         f"backup:\n  dir: {tmp_path}/backups\n"
         "database:\n  auto_detect: false\n"
         "server:\n  transport: sse\n  host: '::'\n  port: 8901\n"
-        f"auth:\n  enabled: true\n  data_dir: {tmp_path}/data\n"
+        f"auth:\n  enabled: true\n  mode: oauth\n  data_dir: {tmp_path}/data\n"
     )
 
     mcp, ctx = create_server(config_file)
     assert mcp is not None
     assert ctx.auth_provider is not None
+    assert ctx.auth_mode == "oauth"
+
+
+def test_server_defaults_to_static_token_auth(tmp_path: Path):
+    """auth_mode defaults to 'token' (v0.62.0): no OAuth provider is wired,
+    a token is generated + persisted, and ctx carries it for the runner."""
+    from ha_ops_mcp.server import create_server
+
+    config_file = tmp_path / "config.local.yaml"
+    config_file.write_text(
+        "ha:\n  url: http://test:8123\n  token: test\n"
+        f"filesystem:\n  config_root: {tmp_path}\n"
+        f"backup:\n  dir: {tmp_path}/backups\n"
+        "database:\n  auto_detect: false\n"
+        "server:\n  transport: streamable-http\n  host: '::'\n  port: 8901\n"
+        f"auth:\n  enabled: true\n  data_dir: {tmp_path}/data\n"
+    )
+
+    mcp, ctx = create_server(config_file)
+    assert ctx.auth_mode == "token"
+    assert ctx.auth_provider is None
+    assert ctx.static_token
+    assert (tmp_path / "data" / "static_token").read_text().strip() == ctx.static_token
 
 
 def test_server_starts_with_oauth_disabled_on_sse(tmp_path: Path):

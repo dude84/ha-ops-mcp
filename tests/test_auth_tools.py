@@ -21,6 +21,7 @@ async def test_auth_status_disabled(ctx):
 async def test_auth_status_enabled(ctx, tmp_path: Path):
     """When auth is enabled, status reports counts and metadata."""
     ctx.config.auth.enabled = True
+    ctx.auth_mode = "oauth"
     provider = HaOpsOAuthProvider(data_dir=tmp_path)
     ctx.auth_provider = provider
 
@@ -53,6 +54,7 @@ async def test_auth_status_shows_tokens(ctx, tmp_path: Path):
     from pydantic import AnyUrl
 
     ctx.config.auth.enabled = True
+    ctx.auth_mode = "oauth"
     provider = HaOpsOAuthProvider(data_dir=tmp_path)
     ctx.auth_provider = provider
 

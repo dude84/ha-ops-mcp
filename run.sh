@@ -98,12 +98,22 @@ if bashio::var.has_value "${db_url}"; then
     export HA_OPS_DB_URL="${db_url}"
 fi
 
-# OAuth auth — enabled by default since v0.27.0. Always export the flag in
-# both directions so config.py's True default never wins when the addon UI
-# sets auth_enabled=false. Previously only the true branch exported, leaving
-# the env var unset for the false case and the Python config silently
-# re-enabled OAuth.
+# MCP auth. Default mode is "token" (static pre-shared Bearer) since v0.62.0
+# — Claude Code ~v2.1.234 (Aug 2026) silently broke fresh OAuth flows to
+# plain-HTTP endpoints, so OAuth is now an EXPERIMENTAL mode (HTTPS/localhost
+# only). Always export flags in both directions so config.py defaults never
+# win over an explicit addon setting.
 auth_enabled=$(bashio::config 'auth_enabled')
+auth_mode=$(bashio::config 'auth_mode')
+if bashio::var.has_value "${auth_mode}"; then
+    export HA_OPS_AUTH_MODE="${auth_mode}"
+else
+    export HA_OPS_AUTH_MODE="token"
+fi
+auth_token=$(bashio::config 'auth_token')
+if bashio::var.has_value "${auth_token}"; then
+    export HA_OPS_AUTH_TOKEN="${auth_token}"
+fi
 if bashio::var.true "${auth_enabled}"; then
     export HA_OPS_AUTH_ENABLED="true"
     auth_issuer_url=$(bashio::config 'auth_issuer_url')
@@ -198,7 +208,11 @@ bashio::log.info "  Config root: /config"
 bashio::log.info "  Backup dir: ${backup_dir}"
 bashio::log.info "  Retention: ${backup_max_age_days} days / ${backup_max_per_type} per type"
 bashio::log.info "  DB URL: ${db_url:-auto-detect}"
-bashio::log.info "  OAuth: ${auth_enabled:-false}"
+if bashio::var.true "${auth_enabled}"; then
+    bashio::log.info "  Auth: ${HA_OPS_AUTH_MODE} (OAuth is experimental since v0.62.0)"
+else
+    bashio::log.info "  Auth: DISABLED (auth_enabled=false)"
+fi
 
 # Run the MCP server
 exec /opt/ha-ops-mcp/bin/ha-ops-mcp ${verbose_flag}

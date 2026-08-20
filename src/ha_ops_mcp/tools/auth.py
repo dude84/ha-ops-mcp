@@ -36,8 +36,10 @@ def _mask_token(token: str) -> str:
 @registry.tool(
     name="haops_auth_status",
     description=(
-        "Show OAuth authentication status and metadata. "
-        "Reports whether OAuth is enabled, registered clients (id, name, "
+        "Show MCP authentication status and metadata. Reports the active auth "
+        "mode: 'token' (static pre-shared Bearer, the default — returns masked "
+        "token prefix and source), 'oauth' (experimental), or 'none'. "
+        "In oauth mode also reports registered clients (id, name, "
         "registered_at), active access tokens (client_id, scopes, issued_at, "
         "expires_at, masked token prefix), active refresh tokens (client_id, "
         "scopes, issued_at, expires_at), and pending authorization codes. "
@@ -46,10 +48,32 @@ def _mask_token(token: str) -> str:
     ),
 )
 async def haops_auth_status(ctx: HaOpsContext) -> dict[str, Any]:
-    if not ctx.config.auth.enabled or ctx.auth_provider is None:
+    mode = getattr(ctx, "auth_mode", "none")
+
+    if mode == "token":
+        return {
+            "enabled": True,
+            "mode": "token",
+            "token_prefix": _mask_token(ctx.static_token or ""),
+            "token_source": "configured" if ctx.config.auth.static_token else "persisted",
+            "message": (
+                "Static Bearer token auth (default since v0.62.0). Clients "
+                'connect with --header "Authorization: Bearer <token>". The '
+                "token is set via the addon Configuration (auth_token) or "
+                "auto-generated and persisted under <backup_dir>/auth/. "
+                "OAuth mode remains available (experimental) via "
+                "auth_mode: oauth."
+            ),
+        }
+
+    if mode != "oauth" or ctx.auth_provider is None:
         return {
             "enabled": False,
-            "message": "OAuth is disabled. Set auth.enabled=true to enable.",
+            "mode": mode,
+            "message": (
+                "MCP auth is disabled. Set auth_mode: token (recommended) or "
+                "auth_mode: oauth (experimental, needs HTTPS/localhost)."
+            ),
         }
 
     store = ctx.auth_provider._store
@@ -93,6 +117,8 @@ async def haops_auth_status(ctx: HaOpsContext) -> dict[str, Any]:
 
     return {
         "enabled": True,
+        "mode": "oauth",
+        "experimental": True,
         "data_dir": ctx.config.auth.data_dir,
         "access_token_ttl": ctx.config.auth.access_token_ttl,
         "refresh_token_ttl": ctx.config.auth.refresh_token_ttl,

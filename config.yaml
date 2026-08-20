@@ -63,6 +63,8 @@ options:
   audit_log_reads: true
   log_level: "info"
   auth_enabled: true
+  auth_mode: "token"
+  auth_token: ""
   auth_issuer_url: ""
   clear_oauth_on_next_boot: false
   docker_prune_on_start: true
@@ -77,6 +79,8 @@ schema:
   audit_log_reads: "bool?"
   log_level: "list(debug|info|warning|error)"
   auth_enabled: "bool?"
+  auth_mode: "list(token|oauth|none)?"
+  auth_token: "password?"
   auth_issuer_url: "str?"
   clear_oauth_on_next_boot: "bool?"
   docker_prune_on_start: "bool?"

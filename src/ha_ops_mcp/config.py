@@ -102,6 +102,20 @@ class AuditConfig:
 @dataclass
 class AuthConfig:
     enabled: bool = True
+    # "token" (default): static pre-shared Bearer token — the only mode new
+    # Claude Code versions can use over plain HTTP on a LAN, since ~v2.1.234
+    # (Aug 2026) silently refuses OAuth token requests to non-HTTPS endpoints
+    # (localhost exempt; upstream won't-fix, claude-code#3320). Clients send
+    # `Authorization: Bearer <token>`, which suppresses OAuth discovery
+    # entirely and also lifts the hostname/resource-matching restriction.
+    # "oauth": the previous default, now EXPERIMENTAL — works only for clients
+    # that reach the server over HTTPS or localhost, or that hold cached
+    # tokens from before the client-side TLS guard.
+    # "none": no MCP auth (only for strictly trusted networks).
+    mode: str = "token"
+    # Pre-shared token for mode=token. Empty = auto-generate once and persist
+    # to <data_dir>/static_token (printed to the log at generation time).
+    static_token: str = ""
     # Empty = derive <backup.dir>/auth in server.py. That lives on a mapped
     # volume (HA /backup) that survives addon uninstall / slug-change, unlike
     # the old /data default which was wiped on uninstall. A legacy
@@ -167,6 +181,8 @@ _ENV_MAP: dict[str, tuple[str, str]] = {
     "AUDIT_DIR": ("audit", "dir"),
     "AUDIT_LOG_READS": ("audit", "log_reads"),
     "AUTH_ENABLED": ("auth", "enabled"),
+    "AUTH_MODE": ("auth", "mode"),
+    "AUTH_TOKEN": ("auth", "static_token"),
     "AUTH_DATA_DIR": ("auth", "data_dir"),
     "AUTH_ISSUER_URL": ("auth", "issuer_url"),
     "DOCKER_PRUNE_ON_START": ("docker", "prune_on_start"),

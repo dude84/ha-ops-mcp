@@ -88,7 +88,9 @@ class HaOpsContext:
     shell_output: ShellOutputStore
     audit: AuditLog
     path_guard: PathGuard
-    auth_provider: Any | None = None  # HaOpsOAuthProvider when auth enabled
+    auth_provider: Any | None = None  # HaOpsOAuthProvider when auth mode is "oauth"
+    auth_mode: str = "none"  # "token" | "oauth" | "none" (resolved at startup)
+    static_token: str | None = None  # pre-shared Bearer token when mode is "token"
     # Docker Engine access to sibling containers. Always present as an object;
     # whether it actually works depends on `docker_api: true` in the manifest
     # AND Protection mode being OFF, so callers must check `.available()`
@@ -387,12 +389,49 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
             if ctx.db:
                 await ctx.db.close()
 
-    # OAuth auth — opt-in, disabled by default. When enabled on SSE/HTTP
-    # transports the SDK wires Bearer token validation + OAuth endpoints.
+    # MCP auth. Default mode is "token" (static pre-shared Bearer) since
+    # v0.62.0 — Claude Code ~v2.1.234 silently broke fresh OAuth flows to
+    # plain-HTTP endpoints (see auth/static_token.py). "oauth" remains as an
+    # EXPERIMENTAL mode for HTTPS/localhost deployments; "none" disables auth.
     auth_provider = None
     auth_settings = None
 
+    auth_mode = "none"
     if config.auth.enabled and config.server.transport != "stdio":
+        auth_mode = (config.auth.mode or "token").strip().lower()
+        if auth_mode not in ("token", "oauth", "none"):
+            logger.warning("Unknown auth.mode %r — falling back to 'token'", config.auth.mode)
+            auth_mode = "token"
+    ctx.auth_mode = auth_mode
+
+    if auth_mode == "token":
+        from ha_ops_mcp.auth.static_token import resolve_static_token
+
+        token_dir = Path(
+            config.auth.data_dir or str(Path(config.backup.dir) / "auth")
+        ).resolve()
+        token, token_source = resolve_static_token(token_dir, config.auth.static_token)
+        ctx.static_token = token
+        logger.info(
+            "Static Bearer token auth enabled (token %s, prefix %s…) — clients "
+            'connect with --header "Authorization: Bearer <token>"',
+            token_source,
+            token[:8],
+        )
+    elif auth_mode == "none" and config.server.transport != "stdio":
+        logger.warning(
+            "MCP auth is DISABLED — anyone reachable on port %s can call every "
+            "tool including shell and DB writes",
+            config.server.port,
+        )
+
+    if auth_mode == "oauth":
+        logger.warning(
+            "OAuth auth mode is EXPERIMENTAL since v0.62.0: Claude Code "
+            "~v2.1.234+ refuses fresh OAuth flows to non-HTTPS endpoints "
+            "(claude-code#3320). Use it only behind HTTPS or from localhost; "
+            "otherwise switch to auth_mode: token."
+        )
         from mcp.server.auth.settings import (
             AuthSettings,
             ClientRegistrationOptions,
