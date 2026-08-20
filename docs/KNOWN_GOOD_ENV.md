@@ -15,6 +15,27 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.62.2` — verified 2026-08-24 (**Singapore HA** — static Bearer token auth + concurrency hardening)
+
+Server side: HA Core **2026.8.2**, Supervisor **2026.07.5**, HAOS **18.2** amd64, MariaDB
+**11.4.10** schema **53**, Docker socket present (21 containers, 20 running). Client side: Claude
+Code **2.1.235+** (post-OAuth-TLS-guard), macOS. Transport **streamable-http + static Bearer
+token** (`auth_mode: token`), **raw-IP URL** `http://10.0.0.150:8901/mcp` with
+`Authorization: Bearer` header — first baseline off OAuth and off the mDNS-hostname requirement.
+
+- `haops_self_check` → `overall: ok`, `ha_ops_version: 0.62.2`.
+- `haops_auth_status` → `mode: token`, `token_source: configured` (generated token was prefilled
+  into the addon Configuration by run.sh, v0.62.1).
+- `haops_tools_check` → **`all_pass`, 15/15 groups, 0 broken tools**. Live scale: 1962 states,
+  3020 registry entities, 247 devices, 104 config entries (12 removable), **9,156,990 `states`
+  rows**, refindex 3485 nodes / 5398 edges. docker `disk_usage`: images 9.0 GB, ~0.93 GB cache
+  reclaimable, 0 dangling.
+- Auth migration verified end-to-end: OAuth token expired (renewal blocked by the client TLS
+  guard), re-added the server with the Bearer header over a raw IP, 87 tools reconnected. IP URL
+  works because the header suppresses OAuth discovery + resource matching.
+- SSE transport deprecated this release (warned, removal next minor); this baseline is
+  streamable-http.
+
 ### `v0.61.1` — verified 2026-08-15 (**Singapore HA** — HA 2026.8.2 + docker_prune)
 
 Server side: HA Core **2026.8.2** (today's patch), Supervisor **2026.07.5**, HAOS **18.2** amd64,
