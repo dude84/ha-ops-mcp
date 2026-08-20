@@ -36,6 +36,18 @@ token** (`auth_mode: token`), **raw-IP URL** `http://10.0.0.150:8901/mcp` with
 - SSE transport deprecated this release (warned, removal next minor); this baseline is
   streamable-http.
 
+### `v0.62.2` — verified 2026-08-24 (**Poland HA** — token auth, second instance migrated)
+
+Server side: HA Core **2026.8.2**, Supervisor **2026.07.5**, HAOS **18.2** amd64, MariaDB
+**11.4.10** schema **53**, Docker socket present (19 containers, all running). Transport
+streamable-http + static Bearer token (`auth_mode: token`, `token_source: configured`).
+
+- `haops_self_check` → `overall: ok`, `ha_ops_version: 0.62.2`.
+- `haops_tools_check` → **`all_pass`, 15/15 groups, 0 broken tools**. Live scale: 1094 states,
+  1356 registry entities, 142 devices, 50 config entries (11 removable), **2,300,401 `states`
+  rows**, refindex 1621 nodes / 2750 edges, 23 Zigbee devices, 8 ESPHome node configs.
+- Both instances are now off OAuth entirely; this is the first PL baseline on token auth.
+
 ### `v0.61.1` — verified 2026-08-15 (**Singapore HA** — HA 2026.8.2 + docker_prune)
 
 Server side: HA Core **2026.8.2** (today's patch), Supervisor **2026.07.5**, HAOS **18.2** amd64,
