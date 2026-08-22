@@ -117,3 +117,57 @@ _(Native user-account-management — `haops_user_*` — **shipped v0.51.0**. The
 that account is ever pursued.)_
 
 ---
+
+## Zigbee radio ops (first-class tools for coordinator-level work)
+
+Moved here 2026-08-22 from `_gaps/session_gaps_2026-06-05.md`, where it sat as
+a trailing FEATURE note. Not a gap — the user explicitly parked it ("wants this
+in the haops implementation stream, NOT now"), so it is approved-in-principle
+work awaiting a scope decision.
+
+Three radio-level ops that ZHA and zha_toolkit do not cover for a **TI CC2652 /
+zigpy-znp** coordinator, all done by hand in the 2026-06-05 session via
+`exec_shell` plus a pip-installed `zigpy-znp` — **which is wiped on every addon
+rebuild**, so none of it survives an update:
+
+- coordinator firmware flash (`cc2538-bsl`) — kit vendored at
+  `/config/zigbee_fw_flash/`
+- energy scan (`zigpy_znp.tools.energy_scan`) — channel selection
+- **channel change** (`ControllerApplication.move_network_to_channel`) —
+  zha_toolkit's only channel service is `ezsp_set_channel`, which is
+  EZSP/Silabs **only** and useless on znp
+
+Proposed shape: `haops_zigbee_energy_scan`, `haops_zigbee_change_channel(target)`,
+`haops_zigbee_network_backup` / `_restore`, each orchestrating the existing
+`haops_system_core` stop → op → start (+ watchdog) flow.
+
+**Open questions to resolve before building:**
+
+- **Optional dependency, size-gated.** `zigpy-znp` pulls `zigpy` plus a few
+  pure-Python deps (modest, no heavy C), but it must be an extra rather than a
+  base-image dependency, and only after the image-size cost is measured. The
+  image is already ~1.5 GB.
+- **Radio-specific.** znp assumes TI; a Silabs stick needs `bellows`. Either
+  abstract the radio layer or declare the assumption and pick the library at
+  build/config time.
+- **Scope call pending** — how much radio management belongs in an *ops* MCP
+  server at all, versus staying as the `/config/zigbee_fw_flash/` kit.
+
+**Two hard-won facts to keep** (both cost a wasted attempt in 2026-06-05):
+
+- A standalone `move_network_to_channel(25)` **does** retune a running znp
+  coordinator. The failure mode is *persistence*: the last line of that
+  function is `await self.backups.create_backup()`, so an app with no
+  `database_path` writes the new-channel backup to a throwaway store and ZHA
+  reverts to its old `network_backups_v15` row on next start. Point
+  `database_path` at `<config>/zigbee.db` and it persists. This is **not** a
+  "needs a live-app tool" problem — that was a misdiagnosis.
+- `zigpy.config` double-validation: pass a **raw dict** to
+  `ControllerApplication.new(...)`. Pre-running `.SCHEMA()` makes the
+  OTA-provider validator throw `'ZigpyOtaProvider' object has no attribute
+  'get'` on the second pass.
+
+Related: [[project_zigbee_coordinator_flash]], [[project_zigbee_channel_migration]].
+
+---
+
