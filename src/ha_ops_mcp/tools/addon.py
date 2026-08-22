@@ -369,63 +369,117 @@ async def haops_addon_restart(
     }
 
 
-def _self_update_log_path(ctx: HaOpsContext) -> Path:
-    """Where the detached self-updater records what Supervisor said."""
-    return Path(ctx.config.backup.dir) / "self_update.log"
+#: Supervisor's own refusal when an add-on POSTs its own update endpoint.
+#: Matched loosely (substring) so a wording change still classifies.
+_SELF_UPDATE_REFUSAL = "can't update itself"
 
 
-async def _fire_detached_self_update(ctx: HaOpsContext, slug: str) -> Path:
-    """Trigger our own update from a detached child, after a short delay.
+async def _attempt_self_update(ctx: HaOpsContext, slug: str) -> dict[str, Any]:
+    """POST our own update endpoint and report what Supervisor actually says.
 
-    Self-update cannot be done inline: Supervisor stops this container to
-    rebuild it, so the HTTP response to the caller would never be flushed and
-    the client would see a transport error instead of the warning it needs.
+    **Supervisor forbids this.** `POST /addons/<slug>/update` from inside that
+    same add-on answers:
 
-    Instead we hand the POST to a `setsid`-detached child that sleeps first.
-    The tool returns normally, the caller reads the warning, and only then does
-    Supervisor tear us down. The child dying with the container is fine — by
-    then Supervisor has accepted the request and does the work host-side.
+        HTTP 403 {"result": "error",
+                  "message": "App <slug> can't update itself!"}
 
-    The child's output goes to a **log file**, not /dev/null. It used to be
-    discarded, which made a self-update that Supervisor refused completely
-    invisible: the tool reported `triggered: true`, nothing restarted, and
-    there was no way to find out why (observed 2026-08-22 on 0.64.1 → 0.64.2 —
-    two `triggered: true` responses, container never recreated). If the update
-    does not happen, read this file.
+    Verified 2026-08-22 on Supervisor 2026.07.5. It is a deliberate guard, not
+    a role or token problem — `hassio_role: manager` and a valid
+    SUPERVISOR_TOKEN make no difference.
 
-    Returns the log path so the caller can name it in its response.
+    History worth keeping, because it cost three releases: this used to fire
+    the POST from a `setsid`-detached child writing to /dev/null, on the theory
+    that Supervisor would tear our container down mid-request and the caller
+    would never receive the response. That theory was wrong in both halves —
+    Supervisor refuses instantly and nothing is torn down — and discarding the
+    child's output hid the 403 completely. The tool reported `triggered: true`,
+    nothing restarted, and there was no way to find out why (0.64.1 → 0.64.2,
+    twice; then 0.64.3 → 0.65.0 once more, which is the attempt whose log
+    finally named the cause).
+
+    So: POST inline, no detach. If some future Supervisor lifts the guard and
+    *does* start tearing us down, a dropped socket or timeout is treated as
+    "initiated" the way `haops_system_restart` treats its own teardown.
+
+    Returns the tool's response dict — either a clean refusal or, if the guard
+    is ever lifted, an initiated/success shape.
     """
-    import asyncio
     import contextlib
-    import shlex
 
-    token = _supervisor_token(ctx)
-    url = f"{_SUPERVISOR_URL}/addons/{slug}/update"
+    import aiohttp
+
+    # Best-effort log of the raw outcome, for the same reason the log was
+    # added in 0.64.3: whatever Supervisor says here should survive the call.
     log = _self_update_log_path(ctx)
     with contextlib.suppress(OSError):
         log.parent.mkdir(parents=True, exist_ok=True)
 
-    # -sS keeps curl quiet on success but makes it report transport errors;
-    # -w prints the status line even when the body is empty, which is what
-    # distinguishes "Supervisor accepted" from "403, wrong role".
-    cmd = (
-        f"sleep 2; "
-        f"echo \"--- self-update {slug} -> latest ---\" >> {shlex.quote(str(log))}; "
-        f"curl -sS -X POST "
-        f"-H {shlex.quote(f'Authorization: Bearer {token}')} "
-        f"-w '\\nHTTP_CODE=%{{http_code}}\\n' "
-        f"{shlex.quote(url)} >> {shlex.quote(str(log))} 2>&1"
-    )
-    await asyncio.create_subprocess_exec(
-        "setsid",
-        "sh",
-        "-c",
-        cmd,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    return log
+    url = f"{_SUPERVISOR_URL}/addons/{slug}/update"
+    headers = {"Authorization": f"Bearer {_supervisor_token(ctx)}"}
+    status: int | None = None
+    body = ""
+    try:
+        async with aiohttp.ClientSession() as session, session.post(
+            url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)
+        ) as resp:
+            status = resp.status
+            body = (await resp.text())[:500]
+    except (aiohttp.ClientConnectionError, TimeoutError):
+        # Only reachable if Supervisor ever starts accepting self-update and
+        # tears the container down mid-request.
+        with contextlib.suppress(OSError):
+            log.write_text(f"--- self-update {slug} ---\nconnection dropped\n")
+        return {
+            "status": "initiated",
+            "slug": slug,
+            "message": (
+                "Supervisor accepted the request and dropped the connection "
+                "while stopping this add-on. Reconnect the MCP server once it "
+                "is back (`/mcp` in Claude Code)."
+            ),
+        }
+    except Exception as e:  # noqa: BLE001 - report, never raise, from a tool
+        return {"error": f"Self-update request failed: {e}", "slug": slug}
+    finally:
+        with contextlib.suppress(OSError):
+            log.write_text(
+                f"--- self-update {slug} ---\nHTTP {status}\n{body}\n"
+            )
+
+    if status == 403 and _SELF_UPDATE_REFUSAL in body:
+        return {
+            "error": "Supervisor refuses to let an add-on update itself.",
+            "slug": slug,
+            "http_status": 403,
+            "supervisor_message": body,
+            "how_to_update": (
+                "Home Assistant UI: Settings > Add-ons > this add-on > "
+                "Update. There is no MCP path — the restriction is enforced "
+                "by Supervisor, not by this server."
+            ),
+        }
+    if status is not None and status >= 400:
+        return {
+            "error": f"Supervisor rejected the self-update (HTTP {status}).",
+            "slug": slug,
+            "http_status": status,
+            "supervisor_message": body,
+        }
+    return {
+        "status": "initiated",
+        "slug": slug,
+        "http_status": status,
+        "message": (
+            "Supervisor accepted the request — unexpected, it normally "
+            "refuses self-update. Expect this session to drop; reconnect "
+            "with `/mcp`."
+        ),
+    }
+
+
+def _self_update_log_path(ctx: HaOpsContext) -> Path:
+    """Where a self-update attempt records what Supervisor answered."""
+    return Path(ctx.config.backup.dir) / "self_update.log"
 
 
 @registry.tool(
@@ -437,13 +491,17 @@ async def _fire_detached_self_update(ctx: HaOpsContext, slug: str) -> Path:
         "Two-phase: call without confirm to preview the version change, then "
         "again with confirm=true and the token. "
         "Reports 'already_latest' and does nothing when no update exists. "
-        "UPDATING THIS ADD-ON ITSELF is refused unless allow_self=true, "
-        "because the MCP session dies mid-rebuild and a build that fails to "
-        "start can then only be recovered from the Home Assistant UI — there "
-        "is no way back in through MCP. With allow_self=true the update is "
-        "fired detached after a ~2s delay so this response still reaches you; "
-        "expect the session to drop and the rebuild to take several minutes "
-        "(the ha-ops-mcp image builds on the host). "
+        "UPDATING THIS ADD-ON ITSELF IS IMPOSSIBLE — do not try. Supervisor "
+        "forbids it outright: an add-on POSTing its own update endpoint gets "
+        "HTTP 403 \"App <slug> can't update itself!\". That is a Supervisor "
+        "guard, not a permission this server can be granted (verified on "
+        "Supervisor 2026.07.5); no role, token or flag changes it. Updating "
+        "ha-ops-mcp is a Home Assistant UI action: Settings > Add-ons > "
+        "HA Ops MCP > Update. allow_self=true only makes the tool attempt the "
+        "POST anyway and hand you Supervisor's exact refusal (kept so a future "
+        "Supervisor that lifts the guard is detected rather than assumed); "
+        "without it, self-update is refused up front. Either way nothing is "
+        "updated and the session does NOT drop. "
         "Parameters: slug (string, required — from haops_addon_list), "
         "allow_self (bool, default false), "
         "confirm (bool, default false), "
@@ -456,7 +514,10 @@ async def _fire_detached_self_update(ctx: HaOpsContext, slug: str) -> Path:
         },
         "allow_self": {
             "type": "boolean",
-            "description": "Permit updating the add-on hosting this session",
+            "description": (
+                "Attempt the (Supervisor-forbidden) self-update anyway and "
+                "return its 403. Cannot succeed; use the HA UI instead."
+            ),
             "default": False,
         },
         "confirm": {
@@ -503,16 +564,24 @@ async def haops_addon_update(
     if is_self and not allow_self:
         return {
             "error": (
-                f"Refusing to update '{info.get('name')}' — it hosts this MCP "
-                "session. Pass allow_self=true to override. Be aware: the "
-                "session drops mid-rebuild, and if the new build fails to "
-                "start you can only recover from the Home Assistant UI "
-                "(Settings > Add-ons), not from here."
+                f"Supervisor does not allow '{info.get('name')}' to update "
+                "itself — an add-on POSTing its own update endpoint gets "
+                "HTTP 403 \"can't update itself!\". No flag or role changes "
+                "that; it is enforced upstream."
+            ),
+            "how_to_update": (
+                f"Home Assistant UI: Settings > Add-ons > {info.get('name')} "
+                f"> Update ({current} -> {latest})."
             ),
             "slug": slug,
             "self": True,
             "version": current,
             "version_latest": latest,
+            "note": (
+                "allow_self=true attempts the POST anyway and returns "
+                "Supervisor's refusal verbatim — useful only to confirm the "
+                "guard is still in place."
+            ),
         }
 
     if not confirm:
@@ -575,27 +644,18 @@ async def haops_addon_update(
     )
 
     if is_self:
-        # Audit is written BEFORE firing: once Supervisor stops us there is no
-        # opportunity to log anything, and an unlogged self-update is exactly
-        # the entry someone will look for when the add-on doesn't come back.
-        log_path = await _fire_detached_self_update(ctx, slug)
+        # Audit is written BEFORE the attempt: if Supervisor ever does start
+        # accepting self-update, it stops us mid-request and there would be no
+        # opportunity to log anything afterwards.
+        outcome = await _attempt_self_update(ctx, slug)
         return {
-            "triggered": True,
             "slug": slug,
             "name": info.get("name"),
             "version": current,
             "version_latest": latest,
             "self": True,
-            "outcome_log": str(log_path),
-            "warning": (
-                f"Update to {latest} fires in ~2s. This MCP session will drop "
-                "and stay down for several minutes while the image rebuilds on "
-                "the host. Reconnect afterwards (`/mcp` in Claude Code). If it "
-                "never comes back, check Settings > Add-ons > "
-                f"{info.get('name')} in the Home Assistant UI. If NOTHING "
-                "restarts at all, Supervisor refused the request — read "
-                f"{log_path} for the status it returned."
-            ),
+            "outcome_log": str(_self_update_log_path(ctx)),
+            **outcome,
         }
 
     result = await _supervisor_post(ctx, f"/addons/{slug}/update")

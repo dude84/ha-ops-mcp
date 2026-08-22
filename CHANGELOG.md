@@ -1,3 +1,42 @@
+## 0.65.1
+
+**Supervisor forbids add-on self-update. `haops_addon_update` now says so
+instead of pretending it worked.**
+
+The cause of the silent no-ops across 0.64.1 → 0.64.2 and 0.64.3 → 0.65.0,
+finally captured by the log added in 0.64.3:
+
+```
+HTTP 403 {"result":"error","message":"App f5a4c56f_ha_ops_mcp can't update itself!"}
+```
+
+It is an upstream guard, not a permission this server can be granted —
+`hassio_role: manager` and a valid `SUPERVISOR_TOKEN` make no difference
+(Supervisor 2026.07.5). **Updating ha-ops-mcp is a Home Assistant UI action,
+permanently.**
+
+The old implementation was wrong in both halves of its premise. It fired the
+POST from a `setsid`-detached child on the theory that Supervisor would accept
+the request and tear our container down before the HTTP response could flush —
+so the response had to be returned first, and the child's output went to
+`/dev/null`. In reality Supervisor refuses instantly, nothing is torn down,
+and discarding the output was the only reason the 403 stayed invisible for
+three releases while the tool answered `triggered: true`.
+
+- **No more detached child.** The POST runs inline (there is no teardown to
+  race) and Supervisor's actual status and message are returned. A dropped
+  socket or timeout is still treated as `initiated`, the way
+  `haops_system_restart` handles its own teardown, so a future Supervisor that
+  lifts the guard is detected rather than assumed.
+- **`triggered: true` is gone from the self path** — it was a fiction. A
+  regression test now asserts the tool never claims it.
+- **Refusal without `allow_self` names the real cause** and the only route
+  that works (Settings → Add-ons → HA Ops MCP → Update), instead of implying
+  the flag would help. `allow_self=true` now only means "attempt it anyway and
+  show me Supervisor's refusal".
+- **Documented in `docs/HA_COMPATIBILITY.md`** under the Supervisor endpoints,
+  next to the endpoint it constrains, so nobody rebuilds the workaround.
+
 ## 0.65.0
 
 Maintenance release — **no runtime behaviour change**. Cut so the 0.64.x

@@ -1,12 +1,17 @@
 """Tests for haops_addon_update.
 
-The self-update path is what needs covering: it is the one branch that cannot
-be verified by running it (it tears down the process), so the guard rails —
-refuse-without-flag, slug-bound token, audit-before-fire — are asserted here.
+The self-update path is what needs covering. Supervisor **forbids** an add-on
+from updating itself (HTTP 403 "can't update itself!", verified on Supervisor
+2026.07.5), so the contract is: say so honestly, never claim a self-update was
+triggered, and point at the HA UI. The old contract — fire a detached child and
+report `triggered: true` — was a fiction built on the false premise that
+Supervisor would accept and then tear us down; it hid the 403 for three
+releases.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -95,13 +100,25 @@ def _supervisor(monkeypatch):
 
     fired: list[str] = []
 
-    async def fake_fire(ctx, slug):
+    async def fake_attempt(ctx, slug):
+        """Stand in for the real POST — mimics Supervisor's 403 refusal."""
         fired.append(slug)
+        return {
+            "error": "Supervisor refuses to let an add-on update itself.",
+            "http_status": 403,
+            "supervisor_message": (
+                f'{{"result":"error","message":"App {slug} can\'t update itself!"}}'
+            ),
+            "how_to_update": "Home Assistant UI: Settings > Add-ons > ... > Update.",
+        }
 
     monkeypatch.setattr(addon_mod, "_supervisor_get", fake_get)
     monkeypatch.setattr(addon_mod, "_supervisor_post", fake_post)
-    monkeypatch.setattr(addon_mod, "_fire_detached_self_update", fake_fire)
+    monkeypatch.setattr(addon_mod, "_attempt_self_update", fake_attempt)
     monkeypatch.setattr(addon_mod, "_self_slug_cache", None)
+    monkeypatch.setattr(
+        addon_mod, "_self_update_log_path", lambda ctx: Path("/tmp/self_update.log")
+    )
     return SimpleNamespace(posts=posts, infos=infos, fired=fired)
 
 
@@ -139,41 +156,40 @@ async def test_already_latest_is_a_noop(_supervisor):
 
 @pytest.mark.asyncio
 async def test_self_update_refused_without_allow_self(_supervisor):
+    """Refusal must name the real cause and the only working route."""
     result = await haops_addon_update(_ctx(), slug=SELF_SLUG)
     assert "error" in result
     assert result["self"] is True
-    assert "allow_self" in result["error"]
-    # Must not even mint a token for a path it is refusing.
+    assert "update itself" in result["error"]
+    assert "Settings > Add-ons" in result["how_to_update"]
+    # Must not even mint a token for a path that cannot succeed.
     assert "token" not in result
     assert _supervisor.fired == []
 
 
 @pytest.mark.asyncio
-async def test_self_update_preview_warns_about_session_loss(_supervisor):
-    preview = await haops_addon_update(_ctx(), slug=SELF_SLUG, allow_self=True)
-    assert preview["self"] is True
-    assert "session" in preview["warning"].lower()
-    # The unrecoverable case must be named, not implied.
-    assert "Home Assistant UI" in preview["warning"]
-    assert _supervisor.fired == []
+async def test_self_update_never_claims_it_was_triggered(_supervisor):
+    """The regression that cost three releases: a fictional success.
 
-
-@pytest.mark.asyncio
-async def test_self_update_fires_detached_and_returns_first(_supervisor):
+    Supervisor answers 403; the tool must surface that, not `triggered: true`.
+    """
     ctx = _ctx()
     preview = await haops_addon_update(ctx, slug=SELF_SLUG, allow_self=True)
     result = await haops_addon_update(
         ctx, slug=SELF_SLUG, allow_self=True, confirm=True, token=preview["token"]
     )
-    assert result["triggered"] is True
+    assert "triggered" not in result
+    assert result["http_status"] == 403
+    assert "update itself" in result["supervisor_message"]
+    assert result["outcome_log"].endswith("self_update.log")
+    # It did attempt the POST — kept so a future Supervisor that lifts the
+    # guard is detected rather than assumed.
     assert _supervisor.fired == [SELF_SLUG]
-    # Inline POST would never reach the caller — must NOT be used for self.
-    assert f"/addons/{SELF_SLUG}/update" not in _supervisor.posts
 
 
 @pytest.mark.asyncio
 async def test_self_update_audits_before_firing(_supervisor):
-    """An unlogged self-update is the entry you'd want if it never came back."""
+    """Audit lands before the attempt, in case Supervisor ever does tear us down."""
     ctx = _ctx()
     preview = await haops_addon_update(ctx, slug=SELF_SLUG, allow_self=True)
     await haops_addon_update(

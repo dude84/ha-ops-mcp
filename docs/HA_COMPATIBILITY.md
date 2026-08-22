@@ -104,7 +104,17 @@ instance; fixed in v0.64.1. Verified against 2026.8.2 and 2026.8.3.
 ### Supervisor endpoints
 
 `/addons` · `/addons/self/info` · `/addons/<slug>/info|restart|stats` ·
+`/addons/<slug>/update` · `/store/reload` ·
 `/core/options|restart|start|stop` · `hassio/backup_full` · `/docker/info`
+
+**`/addons/<slug>/update` cannot target this add-on itself.** Supervisor
+refuses with `403 {"result":"error","message":"App <slug> can't update
+itself!"}`. It is an upstream guard, not a role or token problem —
+`hassio_role: manager` plus a valid `SUPERVISOR_TOKEN` make no difference
+(verified 2026-08-22, Supervisor 2026.07.5). Updating ha-ops-mcp is therefore
+a Home Assistant **UI** action, permanently. `haops_addon_update` reports the
+refusal verbatim rather than pretending; do not rebuild a workaround around
+it. Updating *other* add-ons works normally.
 
 ### Docker Engine socket (v0.57.0+, opt-in)
 
