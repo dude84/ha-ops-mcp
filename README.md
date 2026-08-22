@@ -28,7 +28,7 @@ Every release is verified against a live instance with `haops_tools_check` — 1
 
 | ha-ops-mcp | HA Core | DB schema | Result |
 |---|---|---|---|
-| 0.64.1 | 2026.8.3 | 53 | 16/16 groups pass, both instances (config_flow group) |
+| 0.64.3 | 2026.8.3 | 53 | 16/16 groups pass, both instances |
 | 0.61.1 | 2026.8.2 | 53 | 15/15 groups pass (docker_prune group) |
 | 0.57.1 | 2026.8.1 | 53 | 14/14 groups pass (Docker enabled) |
 | 0.56.0 | 2026.8.1 | 53 | 13/13 groups pass |

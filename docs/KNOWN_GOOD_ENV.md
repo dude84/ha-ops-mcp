@@ -37,6 +37,10 @@ Node **v26.5.0**. Transport streamable-http + static Bearer token (`auth_mode: t
   before trusting any count or `tools_check` after an HA upgrade**.
 - 90 tools. One pending config flow existed during verification (an `espsomfy_rts` zeroconf
   discovery) — `flow_progress` reporting `pending_flows: 1` is a healthy pass, not a problem.
+- **Re-verified at v0.64.3** (same day, same HA / client stack): `all_pass` 16/16 again on both
+  instances, `built_against_ha` now equal to live (2026.8.3). No separate row — the only delta from
+  the rows above is the addon patch version. 0.64.2 was never deployed: the self-update path could
+  not fire it (see the v0.64.3 CHANGELOG entry), so both instances went 0.64.1 → 0.64.3 via the UI.
 
 ### `v0.64.1` — verified 2026-08-22 (**Poland HA** — HA 2026.8.3)
 
