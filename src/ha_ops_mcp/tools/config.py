@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import re
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,11 @@ LARGE_DIFF_BYTES = 30 * 1024
 # `cap_bytes` so the caller knows they got a slice and can use `chunk`
 # or `haops_exec_shell` to see the rest.
 CONFIG_READ_CAP_BYTES = 128 * 1024
+
+# haops_config_search returns the matching line, which is fine for YAML but
+# catastrophic for .storage/* (the whole registry is one line). Past this
+# length the match is reported as a window centred on the hit.
+SEARCH_MATCH_WINDOW = 400
 
 
 def _canonicalise_yaml(text: str) -> str | None:
@@ -115,6 +121,75 @@ def _load_inline_or_file(
     return inline
 
 
+def _walk_json_path(data: Any, path: str) -> tuple[Any, str | None]:
+    """Resolve a dotted ``json_path`` against parsed JSON.
+
+    Segments index dicts by key and lists by integer position, so
+    ``data.items.0.entity_id`` works without the caller knowing which is
+    which. Returns ``(value, error)`` — exactly one is meaningful.
+
+    Dots are the separator, which means a literal dot inside a key is not
+    addressable. That is a deliberate trade: HA's ``.storage`` files use
+    snake_case keys throughout, and a pointer syntax nobody can type from
+    memory would defeat the purpose.
+    """
+    if not path:
+        return data, None
+
+    current = data
+    walked: list[str] = []
+    for segment in path.split("."):
+        walked.append(segment)
+        here = ".".join(walked)
+        if isinstance(current, dict):
+            if segment not in current:
+                available = list(current.keys())[:20]
+                return None, (
+                    f"No key '{segment}' at '{here}'. "
+                    f"Available keys here: {available}"
+                )
+            current = current[segment]
+        elif isinstance(current, list):
+            try:
+                index = int(segment)
+            except ValueError:
+                return None, (
+                    f"'{here}' is a list of {len(current)} items — "
+                    f"'{segment}' is not an index. Use a number."
+                )
+            if not -len(current) <= index < len(current):
+                return None, (
+                    f"Index {index} out of range at '{here}' "
+                    f"(list has {len(current)} items)."
+                )
+            current = current[index]
+        else:
+            return None, (
+                f"'{'.'.join(walked[:-1]) or 'root'}' is a "
+                f"{type(current).__name__}, not a dict or list — "
+                f"cannot descend into '{segment}'."
+            )
+    return current, None
+
+
+def _json_outline(value: Any) -> dict[str, Any]:
+    """Describe a JSON value's shape without dumping it.
+
+    This is the half of the answer that stops the caller from having to read
+    a 2 MB registry to find out what is in it: what type this node is, what
+    keys it has, how long the list is, and what a list item looks like.
+    """
+    outline: dict[str, Any] = {"value_type": type(value).__name__}
+    if isinstance(value, dict):
+        outline["keys"] = list(value.keys())
+    elif isinstance(value, list):
+        outline["length"] = len(value)
+        first = next((i for i in value if isinstance(i, dict)), None)
+        if first is not None:
+            outline["item_keys"] = list(first.keys())
+    return outline
+
+
 def _redact_secrets(content: str) -> str:
     """Redact values in secrets.yaml, keeping keys visible."""
     lines = []
@@ -139,10 +214,21 @@ def _redact_secrets(content: str) -> str:
         "chunk (list[int, int], optional — [start_byte, end_byte] half-open range), "
         "lines (list[int, int], optional — [start_line, end_line] 1-based, "
         "half-open line range — returns numbered lines so you can build hunk "
-        "headers for unified diffs without manual byte counting). "
+        "headers for unified diffs without manual byte counting), "
+        "json_path (string, optional — for JSON files only: return just the "
+        "subtree at a dotted path instead of the whole file). "
+        "USE json_path FOR BIG .storage FILES: byte and line ranges are the "
+        "wrong tool for a one-line JSON blob. Pass json_path='' (or omit the "
+        "value) to get the top-level shape — value_type plus keys/length, no "
+        "content — then descend: json_path='data' → json_path='data.entities' "
+        "→ json_path='data.entities.0'. Numeric segments index lists, so "
+        "'data.entities.0.entity_id' reads one field. Every response includes "
+        "the node's keys / list length / item_keys, so you can navigate "
+        "without dumping the file. Mutually exclusive with chunk and lines. "
         "Large files are capped at 128 KB of content by default: if the file "
         "exceeds the cap, the response carries truncated=true, size_bytes, "
-        "cap_bytes, and a hint pointing at the `chunk` or `lines` param. "
+        "cap_bytes, and a hint pointing at the `chunk`, `lines` or `json_path` "
+        "param. "
         "Read-only — does not modify anything."
     ),
     params={
@@ -169,6 +255,15 @@ def _redact_secrets(content: str) -> str:
             ),
             "items": {"type": "integer"},
         },
+        "json_path": {
+            "type": "string",
+            "description": (
+                "Dotted path into a JSON file ('data.entities.0'); numeric "
+                "segments index lists. Empty string returns the root's shape. "
+                "The way to read .storage/* files."
+            ),
+            "default": "",
+        },
     },
 )
 async def haops_config_read(
@@ -177,6 +272,7 @@ async def haops_config_read(
     redact_secrets: bool = True,
     chunk: list[int] | None = None,
     lines: list[int] | None = None,
+    json_path: str | None = None,
 ) -> dict[str, Any]:
     resolved = ctx.path_guard.validate(path)
 
@@ -184,6 +280,57 @@ async def haops_config_read(
         return {"error": f"File not found: {path}"}
 
     size_bytes = resolved.stat().st_size
+
+    # JSON sub-path read — the only sane way into a .storage file, where the
+    # whole registry is one line and byte/line ranges cut mid-token.
+    if json_path is not None:
+        if chunk is not None or lines is not None:
+            return {
+                "error": (
+                    "json_path is mutually exclusive with chunk and lines — "
+                    "it slices the parsed structure, they slice raw text."
+                ),
+            }
+        try:
+            data = json.loads(resolved.read_text())
+        except json.JSONDecodeError as e:
+            return {
+                "error": f"Not valid JSON: {e}",
+                "hint": (
+                    "json_path only works on JSON files. For YAML use the "
+                    "`lines` parameter."
+                ),
+            }
+
+        value, walk_error = _walk_json_path(data, json_path)
+        if walk_error:
+            return {"error": walk_error, "path": str(resolved), "json_path": json_path}
+
+        json_result: dict[str, Any] = {
+            "path": str(resolved),
+            "json_path": json_path,
+            "size_bytes": size_bytes,
+            **_json_outline(value),
+        }
+        # Scalars are their own best representation; containers get pretty
+        # JSON so the caller can read (and re-paste) them.
+        if isinstance(value, dict | list):
+            rendered = json.dumps(value, indent=2, sort_keys=False)
+            if len(rendered) > CONFIG_READ_CAP_BYTES:
+                json_result["content"] = rendered[:CONFIG_READ_CAP_BYTES]
+                json_result["truncated"] = True
+                json_result["cap_bytes"] = CONFIG_READ_CAP_BYTES
+                json_result["hint"] = (
+                    f"Subtree at '{json_path or 'root'}' renders to "
+                    f"{len(rendered):,} bytes, capped at "
+                    f"{CONFIG_READ_CAP_BYTES:,}. Narrow the json_path — the "
+                    "keys / item_keys above show what to descend into."
+                )
+            else:
+                json_result["content"] = rendered
+        else:
+            json_result["value"] = value
+        return json_result
 
     # Chunked read — caller asked for a specific byte range. Trust the
     # range but clamp to the file size to avoid short-read surprises.
@@ -292,12 +439,22 @@ async def haops_config_read(
         result["content"] = content[:CONFIG_READ_CAP_BYTES]
         result["truncated"] = True
         result["cap_bytes"] = CONFIG_READ_CAP_BYTES
-        result["hint"] = (
-            f"File is {size_bytes:,} bytes; inline content capped at "
-            f"{CONFIG_READ_CAP_BYTES:,} bytes. Use "
-            f"chunk=[{CONFIG_READ_CAP_BYTES}, {size_bytes}] for the rest, "
-            "or haops_exec_shell for a one-shot full read."
-        )
+        if resolved.suffix == ".json" or ".storage" in resolved.parts:
+            # Byte ranges are near-useless on a single-line registry blob.
+            result["hint"] = (
+                f"File is {size_bytes:,} bytes; inline content capped at "
+                f"{CONFIG_READ_CAP_BYTES:,} bytes. This is JSON — use "
+                "json_path to walk it (start with json_path='' for the "
+                "top-level shape) instead of byte ranges, which cut "
+                "mid-token."
+            )
+        else:
+            result["hint"] = (
+                f"File is {size_bytes:,} bytes; inline content capped at "
+                f"{CONFIG_READ_CAP_BYTES:,} bytes. Use "
+                f"chunk=[{CONFIG_READ_CAP_BYTES}, {size_bytes}] for the rest, "
+                "or haops_exec_shell for a one-shot full read."
+            )
 
     if secret_refs:
         result["secret_references"] = secret_refs
@@ -811,14 +968,22 @@ def _format_check_result(response: dict[str, Any]) -> dict[str, Any]:
         "Default: recursive scan of **/*.yaml and **/*.yml under config root "
         "(covers scripts/, packages/, esphome/, automations/, dashboards/, etc.), "
         "excluding hidden directories (.storage, .cloud, .git, ...). "
-        "Set include_registries=true to also scan .storage/core.* JSON files "
-        "(device_registry, entity_registry, area_registry, config_entries) — "
-        "the ground truth for HA's registries. "
+        "Set include_registries=true to also scan HA's .storage state: the "
+        "core.* registries (device_registry, entity_registry, area_registry, "
+        "config_entries) AND the storage-mode dashboards (lovelace, "
+        "lovelace.*, lovelace_resources). That covers UI-created dashboards, "
+        "which live in .storage and NOT in any YAML file — so a card or "
+        "entity reference that a plain search cannot find is usually in "
+        "there. "
         "Parameters: pattern (string, required — regex or plain text, "
         "case-insensitive), paths (list of glob patterns — overrides defaults), "
         "include_registries (bool, default false), "
         "max_results (int, default 100). "
-        "Returns matches with file path, line number, and content."
+        "Returns matches with file path, line number, and content. "
+        "NOTE on .storage matches: those files are single-line JSON, so a hit "
+        "reports line 1 and the 'content' is the whole file's line, truncated. "
+        "Treat a match as 'it is in this file' and read the structure with "
+        "haops_config_read(json_path=...) or haops_dashboard_get."
     ),
     params={
         "pattern": {
@@ -831,7 +996,10 @@ def _format_check_result(response: dict[str, Any]) -> dict[str, Any]:
         },
         "include_registries": {
             "type": "boolean",
-            "description": "Also scan .storage/core.* JSON registries",
+            "description": (
+                "Also scan .storage state: core.* registries and the "
+                "storage-mode dashboards (lovelace*)"
+            ),
             "default": False,
         },
         "max_results": {
@@ -857,7 +1025,11 @@ async def haops_config_search(
         # .git) are skipped below unless include_registries is set.
         paths = ["**/*.yaml", "**/*.yml"]
         if include_registries:
-            paths = paths + [".storage/core.*"]
+            # core.* is the registry ground truth; lovelace* is where every
+            # UI-created dashboard lives. Leaving lovelace out meant a search
+            # for a card or entity reference silently missed the dashboards
+            # that only exist in .storage.
+            paths = paths + [".storage/core.*", ".storage/lovelace*"]
 
     # If caller explicitly included .storage in paths, allow it even with
     # include_registries=False
@@ -894,12 +1066,24 @@ async def haops_config_search(
                 continue
 
             for line_num, line in enumerate(lines, 1):
-                if compiled.search(line):
-                    matches.append({
+                found = compiled.search(line)
+                if found:
+                    match_row: dict[str, Any] = {
                         "file": str(rel),
                         "line": line_num,
                         "content": line.rstrip(),
-                    })
+                    }
+                    # .storage files are one enormous line — returning it
+                    # whole would blow the response for a single hit. Return
+                    # a window around the match instead.
+                    if len(line) > SEARCH_MATCH_WINDOW:
+                        start = max(0, found.start() - SEARCH_MATCH_WINDOW // 2)
+                        end = min(len(line), start + SEARCH_MATCH_WINDOW)
+                        match_row["content"] = line[start:end].strip()
+                        match_row["match_offset"] = found.start()
+                        match_row["line_length"] = len(line)
+                        match_row["content_truncated"] = True
+                    matches.append(match_row)
                     if len(matches) >= max_results:
                         return {
                             "matches": matches,

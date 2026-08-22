@@ -89,6 +89,25 @@ Consequences:
 
 ---
 
+## #4 — every call returns `-32602 Invalid request parameters` → stale session after an addon restart
+
+**Symptom:** every tool call fails identically, including no-parameter ones like `haops_self_check`.
+The error names *parameters*, so it reads like a malformed call or a broken tool.
+
+**Cause:** the client holds an MCP session bound to the addon process that existed before the
+restart. The addon came back as a new process; the old session id means nothing to it. This fires
+after any addon restart or update — including one you triggered yourself via
+`haops_addon_restart` / `haops_addon_update`, whose previews warn about it when the target is this
+addon.
+
+**Fix:** reconnect the server (Claude Code: `/mcp`). Tools work again immediately, no restart of
+anything else needed.
+
+**Not this** if `curl` also fails — that's #1 or a genuinely stopped addon. A stale session still
+answers `curl` with a `401`/`400`, because the HTTP server is healthy.
+
+---
+
 ## Don't chase these (red herrings)
 
 - **HA core update** — verify with `curl` first; if curl reaches the endpoint, HA is not the cause.
@@ -103,5 +122,6 @@ Consequences:
 
 1. `curl -i -X POST http://homeassistant.local:8901/mcp` — reachable? If `401`, server is fine → it's the client.
 2. Read the latest `mcp-logs-ha-ops/*.jsonl` — look for the fast `FailedToOpenSocket`/`errno: none` line.
-3. Apply **#1** (Local Network grant + terminal restart).
-4. Diff live versions against `KNOWN_GOOD_ENV.md` to spot which component moved.
+3. All calls failing with `-32602` while `curl` answers? → **#4**, reconnect with `/mcp`.
+4. Apply **#1** (Local Network grant + terminal restart).
+5. Diff live versions against `KNOWN_GOOD_ENV.md` to spot which component moved.

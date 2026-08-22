@@ -22,6 +22,7 @@ async def test_tools_check_reports_all_groups(ctx):
     assert "database" in result
     assert "filesystem" in result
     assert "registries" in result
+    assert "config_flow" in result
     assert "supervisor" in result
     assert "shell" in result
     assert "summary" in result
@@ -113,3 +114,53 @@ async def test_tools_check_registries_group(ctx):
     assert registries["tests"]["areas"]["count"] == 2
     assert registries["tests"]["floors"]["count"] == 2
     assert registries["tests"]["config_entries"]["count"] == 3
+
+
+@pytest.mark.asyncio
+async def test_tools_check_config_flow_group_probes_index_only(ctx):
+    """Proves the flow REST route answers — without parking a pending flow.
+
+    Starting a real flow would leave state in the user's HA, which a
+    read-only health check must never do.
+    """
+    calls: list[str] = []
+
+    async def _get(path: str):
+        calls.append(path)
+        if path == "/api/config/config_entries/flow":
+            return []
+        from tests.conftest import _mock_rest_get
+        return _mock_rest_get(path)
+
+    ctx.rest.get = AsyncMock(side_effect=_get)
+    ctx.ws.send_command = AsyncMock(return_value=[])
+
+    result = await haops_tools_check(ctx)
+    group = result["config_flow"]
+
+    assert group["status"] == "pass"
+    assert group["tests"]["flow_index"]["pending_flows"] == 0
+    assert "haops_integration_flow_start" in group["tools_affected"]
+    # Only the index GET — no POST to /flow anywhere.
+    assert calls.count("/api/config/config_entries/flow") == 1
+
+
+@pytest.mark.asyncio
+async def test_tools_check_config_flow_group_fails_if_route_gone(ctx):
+    """A removed/moved flow endpoint must be visible, not silent."""
+    from ha_ops_mcp.connections.rest import RestClientError
+
+    async def _get(path: str):
+        if path == "/api/config/config_entries/flow":
+            raise RestClientError(404, "not found")
+        from tests.conftest import _mock_rest_get
+        return _mock_rest_get(path)
+
+    ctx.rest.get = AsyncMock(side_effect=_get)
+    ctx.ws.send_command = AsyncMock(return_value=[])
+
+    result = await haops_tools_check(ctx)
+
+    assert result["config_flow"]["status"] == "fail"
+    assert "cannot be created" in result["config_flow"]["tests"]["flow_index"]["impact"]
+    assert "haops_integration_flow_step" in result["summary"]["broken_tools"]

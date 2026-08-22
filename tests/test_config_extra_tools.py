@@ -97,3 +97,41 @@ async def test_config_search_include_registries(ctx):
     )
     assert result["count"] >= 1
     assert any(".storage" in m["file"] for m in result["matches"])
+
+
+@pytest.mark.asyncio
+async def test_config_search_include_registries_covers_lovelace(ctx):
+    """Storage-mode dashboards live in .storage/lovelace*, not in any YAML.
+
+    Before this, include_registries globbed only `.storage/core.*`, so a
+    search for a card type or entity used exclusively by a UI-created
+    dashboard came back empty and looked authoritative.
+    """
+    result = await haops_config_search(
+        ctx, pattern="mushroom-template-card", include_registries=True
+    )
+    assert result["count"] >= 1
+    assert any("lovelace" in m["file"] for m in result["matches"])
+
+
+@pytest.mark.asyncio
+async def test_config_search_still_skips_lovelace_by_default(ctx):
+    result = await haops_config_search(ctx, pattern="mushroom-template-card")
+    assert result["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_config_search_windows_giant_single_line_matches(ctx, config_dir):
+    """A .storage hit must not drag a multi-MB single line into the response."""
+    blob = '{"data": {"junk": "' + ("x" * 5000) + 'NEEDLE' + ("y" * 5000) + '"}}'
+    (config_dir / ".storage" / "core.giant").write_text(blob)
+
+    result = await haops_config_search(
+        ctx, pattern="NEEDLE", include_registries=True
+    )
+
+    hit = next(m for m in result["matches"] if "giant" in m["file"])
+    assert hit["content_truncated"] is True
+    assert "NEEDLE" in hit["content"]
+    assert len(hit["content"]) <= 400
+    assert hit["line_length"] > 10000

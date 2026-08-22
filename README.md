@@ -10,7 +10,7 @@ An [MCP server](https://modelcontextprotocol.io/) that gives AI assistants (and 
 
 Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.io/integrations/mcp_server/), [ha-mcp](https://github.com/homeassistant-ai/ha-mcp), [hass-mcp](https://github.com/voska/hass-mcp)) focus on device control — "turn on the lights", query states, trigger automations via natural language. ha-ops-mcp is for the work that comes *during and after* setup: cleaning up 200 orphaned entities, reorganising dashboards across views, purging a bloated recorder database, editing YAML without losing comments, understanding what references `sensor.energy_grid` before renaming it, **seeing your dashboards** (server-side headless screenshots + load-performance capture), and doing all of that with diffs you can review and rollback if something goes wrong (most of the time...). Device control here is a *secondary* objective — the generic `haops_service_call` covers it; there are no bespoke per-device tools.
 
-**87 tools. 878 tests. Mypy strict. Debian image with Playwright/Chromium (v0.50.0+).**
+**90 tools. 972 tests. Mypy strict. Debian image with Playwright/Chromium (v0.50.0+).**
 
 ## Home Assistant compatibility
 
@@ -92,6 +92,12 @@ doesn't resolve).
 removed in v0.63.1 (single valid value) and the legacy `sse` transport in v0.63.0 — its long-lived
 streams dropped on Supervisor-proxy idle. A stored `transport` value from an older install is
 ignored with a log line; point your client at `/mcp`.
+
+**If the addon restarts while your client is connected, reconnect the server** (Claude Code: `/mcp`).
+The client holds a session bound to the old process, so every call after a restart or update fails
+until it re-handshakes — often as a confusing `-32602 Invalid request parameters` rather than an
+obvious connection error. `haops_addon_restart` and `haops_addon_update` say so in their previews
+when the target is this addon itself.
 
 For standalone (stdio):
 

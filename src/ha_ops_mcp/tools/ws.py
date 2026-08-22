@@ -59,7 +59,10 @@ def _looks_read_only(command_type: str) -> bool:
         "is two-phase: call without confirm to preview the exact message, "
         "then confirm=true + token to send. The confirm step is for audit + "
         "an explicit gate, NOT a safety guarantee — this can do anything the "
-        "HA WS API can, so read the preview. "
+        "HA WS API can, so read the preview. The preview does NOT verify that "
+        "command_type exists (HA publishes no list of its WS commands), so it "
+        "renders for any string and an unknown type only fails at send time — "
+        "a preview is not proof of a capability. "
         "Parameters: command_type (string, e.g. 'config/entity_registry/"
         "update'), payload (object — extra fields merged into the WS message, "
         "e.g. {\"entity_id\": \"sensor.x\", \"name\": \"New\"}), "
@@ -112,8 +115,14 @@ async def haops_ws_command(
             "preview": {"type": command_type, **payload},
             "token": tk.id,
             "read_only": False,
+            "command_type_verified": False,
             "message": "This is a non-read WS command. Review the message "
-            "above, then call again with confirm=true and this token to send.",
+            "above, then call again with confirm=true and this token to send. "
+            "NOTE: the command type is NOT validated here — HA exposes no way "
+            "to enumerate its WS commands, so a preview renders for any "
+            "string. An unrecognised or removed type fails at send time with "
+            "'Unknown command'; a successful preview is not evidence the "
+            "command exists.",
         }
 
     if not read_only:

@@ -1,3 +1,67 @@
+## 0.64.0
+
+**Config entries can be created now.** ha-ops could read config entries, reload one and remove a
+device, but nothing could *create* one — so any multi-entry integration was untestable end-to-end
+from here, and the workarounds were all bad: `haops_ws_command` can't reach config flows (they're a
+REST surface, not WS), `curl` with a Bearer token through `haops_exec_shell` is shaped exactly like
+credential exfiltration and gets blocked by client-side permission classifiers, and hand-editing
+`.storage/core.config_entries` means minting a ULID by hand, matching a sibling entry's key order,
+taking a full Core restart, and skipping every validation the flow performs. Three new tools cover
+the lifecycle generically, for every integration:
+
+- **`haops_integration_flow_start(domain)`** — opens the flow, returns `flow_id` plus the step's
+  `data_schema` (the exact fields it wants). Runs immediately: a pending flow creates nothing. Also
+  lists other pending flows for that domain so you don't stack duplicates. If the flow needs no
+  input at all, HA creates the entry during this call — unavoidable, since it happens server-side
+  before we see a response, so the result flags `created_on_start` and audits it as the mutation it
+  was.
+- **`haops_integration_flow_step(flow_id, user_input)`** — the call that creates the entry, so this
+  is the two-phase one. The preview shows the step's own `data_schema` next to what you're about to
+  submit, and names any missing required field, so a typo costs a preview instead of a token. Flow
+  validation (`already_configured`, slug checks) comes back in `errors` with `success: false` and
+  nothing created.
+- **`haops_integration_flow_abort(flow_id)`** — discards a pending flow, so an abandoned one stops
+  showing up in Settings > Devices & Services. Can never touch an already-created entry. An
+  already-gone flow reports `aborted: false` rather than erroring.
+
+New `config_flow` group in `haops_tools_check` (16 groups now) probes only the flow *index*
+endpoint — a plain GET that proves the route exists and we're authorised — because starting a real
+flow would leave pending state in a user's HA, which a read-only health check must never do. A 404
+there means HA moved the endpoint and entry creation is broken; that's the silent post-upgrade
+breakage the group exists to catch.
+
+**`haops_config_read` learned `json_path`.** Byte and line ranges are the wrong tool for a
+`.storage` file: the whole registry is one line, so `lines` returns everything and `chunk` cuts
+mid-token. `json_path` walks the parsed structure instead — `json_path=''` returns the top-level
+shape (type + keys, no content), then `data` → `data.entities` → `data.entities.0.entity_id`, with
+numeric segments indexing lists. Every response carries the node's keys / list length / item_keys,
+so you can navigate a multi-MB registry without ever dumping it, and a truncated subtree says
+"narrow the path" instead of pointing at byte offsets. The default oversized-file hint now points at
+`json_path` for JSON rather than suggesting byte ranges.
+
+**`haops_config_search(include_registries=true)` now covers storage-mode dashboards.** It globbed
+`.storage/core.*` only, so a search for a card type or an entity used exclusively by a UI-created
+dashboard came back empty — and an empty result reads as authoritative. `.storage/lovelace*` is
+included now. Matches in single-line JSON are returned as a 400-char window centred on the hit
+(with `match_offset`, `line_length`, `content_truncated`) instead of the entire line, which would
+otherwise have dragged megabytes into a single result.
+
+**`haops_ws_command` no longer implies a command exists.** It previews any `command_type` string,
+because HA publishes no way to enumerate its WS commands — but a normal-looking preview + token
+reads as "this will work", and an unrecognised type only fails at send time. The preview now carries
+`command_type_verified: false` and says so. Deliberately still no allowlist: this is the documented
+power-user escape hatch.
+
+**Stale-session symptom documented.** After an addon restart or update the client holds a session
+bound to the dead process, and every call — even parameterless ones — fails as
+`-32602 Invalid request parameters`, which reads like a malformed call. README and
+`docs/CONNECTIVITY_TROUBLESHOOTING.md` (new section #4) now name the symptom and the one-command
+fix. The tool previews already warned about it for self-restart and self-update.
+
+**`RestClient.delete` accepts 204.** A no-body success is a legitimate DELETE response; insisting on
+200-plus-JSON turned a successful delete into an error. Non-JSON bodies on a success status are
+tolerated too.
+
 ## 0.63.1
 
 **The `transport` option is gone.** After v0.63.0 removed `sse` it was a radio group with a single

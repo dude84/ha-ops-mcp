@@ -529,6 +529,7 @@ def create_server(config_path: Path | None = None) -> tuple[FastMCP, HaOpsContex
     import ha_ops_mcp.tools.backup  # noqa: F401
     import ha_ops_mcp.tools.batch  # noqa: F401
     import ha_ops_mcp.tools.config  # noqa: F401
+    import ha_ops_mcp.tools.config_entry  # noqa: F401
     import ha_ops_mcp.tools.container  # noqa: F401
     import ha_ops_mcp.tools.dashboard  # noqa: F401
     import ha_ops_mcp.tools.db  # noqa: F401

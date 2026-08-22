@@ -103,6 +103,22 @@ async def test_ws_command_requires_type(ctx):
     assert "error" in result
 
 
+@pytest.mark.asyncio
+async def test_ws_command_preview_does_not_claim_the_type_exists(ctx, mock_ws):
+    """A preview renders for ANY string — it must not imply a capability.
+
+    HA publishes no way to enumerate its WS commands, so the tool cannot
+    validate the type. Previously a made-up type previewed exactly like a
+    real one and only failed at send time, which reads as "this will work".
+    """
+    preview = await haops_ws_command(
+        ctx, command_type="config_entries/flow/progress"
+    )
+    assert preview["command_type_verified"] is False
+    assert "NOT validated" in preview["message"]
+    assert mock_ws.send_command.await_count == 0
+
+
 # --- haops_zigbee_info ------------------------------------------------------
 
 

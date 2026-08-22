@@ -775,3 +775,139 @@ def test_atomic_write_text_creates_new_file(tmp_path):
     target = tmp_path / "new.txt"
     atomic_write_text(target, "hello\n")
     assert target.read_text() == "hello\n"
+
+
+# ── haops_config_read(json_path=...) ──────────────────────────────────
+# Byte and line ranges are useless on a .storage registry: the whole file is
+# one line, so `lines` returns everything and `chunk` cuts mid-token.
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_root_returns_shape_not_content(ctx):
+    result = await haops_config_read(
+        ctx, path=".storage/core.entity_registry", json_path=""
+    )
+    assert result["value_type"] == "dict"
+    assert set(result["keys"]) == {"version", "data"}
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_descends_and_reports_list_shape(ctx):
+    result = await haops_config_read(
+        ctx, path=".storage/core.entity_registry", json_path="data.entities"
+    )
+    assert result["value_type"] == "list"
+    assert result["length"] >= 3
+    # item_keys is the navigation aid — what one element looks like.
+    assert "entity_id" in result["item_keys"]
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_indexes_lists_numerically(ctx):
+    result = await haops_config_read(
+        ctx, path=".storage/core.entity_registry", json_path="data.entities.0"
+    )
+    assert '"entity_id": "sensor.temperature"' in result["content"]
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_returns_scalar_as_value(ctx):
+    result = await haops_config_read(
+        ctx,
+        path=".storage/core.entity_registry",
+        json_path="data.entities.0.entity_id",
+    )
+    assert result["value"] == "sensor.temperature"
+    assert result["value_type"] == "str"
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_bad_key_lists_alternatives(ctx):
+    result = await haops_config_read(
+        ctx, path=".storage/core.entity_registry", json_path="data.nope"
+    )
+    assert "No key 'nope'" in result["error"]
+    assert "entities" in str(result["error"])
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_non_numeric_list_segment(ctx):
+    result = await haops_config_read(
+        ctx,
+        path=".storage/core.entity_registry",
+        json_path="data.entities.first",
+    )
+    assert "not an index" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_index_out_of_range(ctx):
+    result = await haops_config_read(
+        ctx, path=".storage/core.entity_registry", json_path="data.entities.999"
+    )
+    assert "out of range" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_cannot_descend_into_scalar(ctx):
+    result = await haops_config_read(
+        ctx, path=".storage/core.entity_registry", json_path="version.deeper"
+    )
+    assert "not a dict or list" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_on_yaml_points_at_lines(ctx):
+    result = await haops_config_read(
+        ctx, path="configuration.yaml", json_path="homeassistant"
+    )
+    assert "Not valid JSON" in result["error"]
+    assert "`lines`" in result["hint"]
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_excludes_chunk_and_lines(ctx):
+    result = await haops_config_read(
+        ctx,
+        path=".storage/core.entity_registry",
+        json_path="data",
+        lines=[1, 2],
+    )
+    assert "mutually exclusive" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_config_read_json_path_truncation_says_narrow_the_path(
+    ctx, config_dir
+):
+    import json as _json
+
+    big = {"data": {"rows": [{"i": i, "pad": "x" * 200} for i in range(2000)]}}
+    (config_dir / ".storage" / "core.big").write_text(_json.dumps(big))
+
+    result = await haops_config_read(
+        ctx, path=".storage/core.big", json_path="data.rows"
+    )
+
+    assert result["truncated"] is True
+    assert "Narrow the json_path" in result["hint"]
+    # Shape survives truncation — that's what makes narrowing possible.
+    assert result["length"] == 2000
+    assert result["item_keys"] == ["i", "pad"]
+
+
+@pytest.mark.asyncio
+async def test_config_read_uncapped_json_hint_points_at_json_path(
+    ctx, config_dir
+):
+    """The default (no-param) read of an oversized JSON must not suggest bytes."""
+    import json as _json
+
+    big = {"data": {"rows": [{"i": i, "pad": "x" * 200} for i in range(2000)]}}
+    (config_dir / ".storage" / "core.big2").write_text(_json.dumps(big))
+
+    result = await haops_config_read(ctx, path=".storage/core.big2")
+
+    assert result["truncated"] is True
+    assert "json_path" in result["hint"]
+    assert "chunk=[" not in result["hint"]

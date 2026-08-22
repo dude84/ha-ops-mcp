@@ -89,6 +89,12 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
     "helper_create": ("mutate", "helper"),
     "helper_update": ("mutate", "helper"),
     "integration_reload": ("mutate", "system"),
+    # Opening a flow parks pending state and creates nothing; answering a
+    # step is what creates the config entry; aborting throws the pending
+    # flow away. None of the three can delete an existing entry.
+    "integration_flow_start": ("read", "registry"),
+    "integration_flow_step": ("mutate", "registry"),
+    "integration_flow_abort": ("mutate", "registry"),
     "system_reload": ("mutate", "system"),
     "system_restart": ("mutate", "system"),
     "system_core": ("mutate", "system"),
@@ -154,6 +160,9 @@ _TYPE_LABELS: dict[str, str] = {
     "service_call": "service call", "scene_activate": "activate scene",
     "script_run": "run script", "automation_trigger": "trigger",
     "integration_reload": "reload", "system_reload": "reload",
+    "integration_flow_start": "flow start",
+    "integration_flow_step": "flow step",
+    "integration_flow_abort": "flow abort",
     "system_restart": "restart", "system_backup": "backup",
     "system_core": "core power", "zha_reconfigure_device": "zha reconfigure",
     "zigbee_scan": "zigbee scan", "ws_command": "ws command",

@@ -1,4 +1,4 @@
-# Tools (86)
+# Tools (90)
 
 All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 
@@ -16,12 +16,12 @@ All tools are prefixed `haops_` to avoid collisions with other MCP servers.
 
 | Tool | Type | Description |
 |---|---|---|
-| `haops_config_read` | Read | Read any file under config root. `secrets.yaml` values redacted by default. Path traversal blocked. Supports byte-range and line-range chunking for large files. |
+| `haops_config_read` | Read | Read any file under config root. `secrets.yaml` values redacted by default. Path traversal blocked. Supports byte-range and line-range chunking for large files, and `json_path` for walking a JSON file's structure (the way to read `.storage/*`, where the whole registry is one line). |
 | `haops_config_patch` | Write | Patch an existing YAML file via unified diff. Two-phase: preview returns diff + token, apply writes. Strict exact-match (no fuzz). Canonicalises YAML to suppress HA's re-wrap churn. Supports `auto_apply` for single-call atomic operations. |
 | `haops_config_create` | Write | Create a new file (rejects if path exists). Two-phase with `auto_apply` option. |
 | `haops_config_apply` | Write | Apply a change from `config_patch` or `config_create`. Creates rollback savepoint + persistent backup. Preserves YAML comments via ruamel.yaml. |
 | `haops_config_validate` | Read | Run HA's config check. Returns valid/invalid with error details. |
-| `haops_config_search` | Read | Recursive regex/substring search across `**/*.yaml` under config root. Optional `.storage/core.*` registry scan. |
+| `haops_config_search` | Read | Recursive regex/substring search across `**/*.yaml` under config root. `include_registries=true` also scans `.storage/core.*` **and** `.storage/lovelace*` (storage-mode dashboards exist nowhere else). Matches in single-line JSON are returned as a window around the hit, not the whole line. |
 
 ## Dashboard tools (`haops_dashboard_*`)
 
@@ -147,6 +147,9 @@ Stateless typed graph rebuilt per query — registries, structured YAML, dashboa
 | `haops_script_run` | Write | Run a script. |
 | `haops_scene_activate` | Write | Activate a scene. |
 | `haops_integration_reload` | Write | Reload a config entry. |
+| `haops_integration_flow_start` | Write | Open a config flow to ADD an integration instance — the only way to create a config entry. Returns the step's `data_schema`. Runs immediately (opens pending state, creates nothing). |
+| `haops_integration_flow_step` | Write | Answer one flow step — the call that creates the entry. Two-phase; preview shows the step's schema beside your input. Flow validation errors (`already_configured`, …) come back in `errors`. |
+| `haops_integration_flow_abort` | Write | Discard a pending flow. Cannot touch an already-created entry. |
 | `haops_entities_assign_area` | Write | Bulk area reassignment. Two-phase. |
 | `haops_entity_customize` | Write | Update entity registry options (name, icon, unit, device_class). Two-phase. |
 

@@ -917,6 +917,55 @@ async def _check_refs(ctx: HaOpsContext) -> dict[str, Any]:
     }
 
 
+async def _check_config_flow(ctx: HaOpsContext) -> dict[str, Any]:
+    """Check the config-flow REST surface the haops_integration_flow_* tools use.
+
+    Only the in-progress LIST endpoint is probed — it is a plain GET that
+    proves the route exists and we are authorised for it. Starting a real
+    flow would park pending state in the user's HA, which a read-only health
+    check must never do.
+
+    A 404 here means HA moved or removed ``/api/config/config_entries/flow``
+    and config-entry creation is broken; that is exactly the silent breakage
+    this group exists to surface after an HA upgrade.
+    """
+    from ha_ops_mcp.tools.config_entry import _FLOW_BASE
+
+    tools_affected = [
+        "haops_integration_flow_start",
+        "haops_integration_flow_step",
+        "haops_integration_flow_abort",
+    ]
+    checks: dict[str, Any] = {}
+    try:
+        flows = await ctx.rest.get(_FLOW_BASE)
+        checks["flow_index"] = {
+            # Answering at all is the signal — zero pending flows is the
+            # normal, healthy state.
+            "ok": isinstance(flows, list),
+            "endpoint": _FLOW_BASE,
+            "pending_flows": len(flows) if isinstance(flows, list) else 0,
+        }
+        if not isinstance(flows, list):
+            checks["flow_index"]["error"] = (
+                f"Expected a list of pending flows, got {type(flows).__name__}"
+            )
+    except Exception as e:
+        checks["flow_index"] = {
+            "ok": False,
+            "endpoint": _FLOW_BASE,
+            "error": str(e)[:200],
+            "impact": "Config entries cannot be created over MCP.",
+        }
+
+    all_ok = all(c.get("ok") for c in checks.values())
+    return {
+        "status": "pass" if all_ok else "fail",
+        "tools_affected": tools_affected,
+        "tests": checks,
+    }
+
+
 @registry.tool(
     name="haops_tools_check",
     description=(
@@ -926,7 +975,8 @@ async def _check_refs(ctx: HaOpsContext) -> dict[str, Any]:
         "Tests each group with real READ-ONLY operations and reports which "
         "haops_* tools are functional. "
         "Groups tested: REST API, WebSocket, Database, Filesystem, "
-        "Supervisor API, Shell execution. "
+        "Registries, Config flow, Supervisor API, Shell execution, Docker, "
+        "ESPHome, References, Debugger, Helpers, Zigbee, UI, Users. "
         "Read-only, no parameters. For configuration/connectivity issues, "
         "use haops_self_check instead."
     ),
@@ -939,6 +989,7 @@ async def haops_tools_check(ctx: HaOpsContext) -> dict[str, Any]:
     results["database"] = await _check_database(ctx)
     results["filesystem"] = await _check_filesystem(ctx)
     results["registries"] = await _check_registries(ctx)
+    results["config_flow"] = await _check_config_flow(ctx)
     results["supervisor"] = await _check_supervisor(ctx)
     results["shell"] = await _check_shell(ctx)
     results["docker"] = await _check_docker(ctx)

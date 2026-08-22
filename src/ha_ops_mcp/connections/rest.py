@@ -113,10 +113,22 @@ class RestClient:
             return await resp.text()
 
     async def delete(self, path: str) -> Any:
-        """DELETE request, returns parsed JSON."""
+        """DELETE request, returns parsed JSON ({} when the body is empty).
+
+        Accepts 204 as success: it is a legitimate DELETE response (HA uses
+        it on some endpoints) and has no body to parse, so insisting on 200
+        + JSON would turn a successful delete into an error.
+        """
         session = await self._ensure_session()
         async with session.delete(self._url(path)) as resp:
-            if resp.status != 200:
+            if resp.status not in (200, 201, 204):
                 text = await resp.text()
                 raise RestClientError(resp.status, text)
-            return await resp.json()
+            if resp.status == 204 or resp.content_length == 0:
+                return {}
+            try:
+                return await resp.json()
+            except (aiohttp.ContentTypeError, ValueError):
+                # Non-JSON body on a success status — the delete happened,
+                # which is all the caller needs.
+                return {}
