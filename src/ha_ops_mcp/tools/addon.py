@@ -8,6 +8,7 @@ not in Container or Core installs.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ha_ops_mcp.server import registry
@@ -368,7 +369,12 @@ async def haops_addon_restart(
     }
 
 
-async def _fire_detached_self_update(ctx: HaOpsContext, slug: str) -> None:
+def _self_update_log_path(ctx: HaOpsContext) -> Path:
+    """Where the detached self-updater records what Supervisor said."""
+    return Path(ctx.config.backup.dir) / "self_update.log"
+
+
+async def _fire_detached_self_update(ctx: HaOpsContext, slug: str) -> Path:
     """Trigger our own update from a detached child, after a short delay.
 
     Self-update cannot be done inline: Supervisor stops this container to
@@ -379,15 +385,36 @@ async def _fire_detached_self_update(ctx: HaOpsContext, slug: str) -> None:
     The tool returns normally, the caller reads the warning, and only then does
     Supervisor tear us down. The child dying with the container is fine — by
     then Supervisor has accepted the request and does the work host-side.
+
+    The child's output goes to a **log file**, not /dev/null. It used to be
+    discarded, which made a self-update that Supervisor refused completely
+    invisible: the tool reported `triggered: true`, nothing restarted, and
+    there was no way to find out why (observed 2026-08-22 on 0.64.1 → 0.64.2 —
+    two `triggered: true` responses, container never recreated). If the update
+    does not happen, read this file.
+
+    Returns the log path so the caller can name it in its response.
     """
     import asyncio
+    import contextlib
     import shlex
 
     token = _supervisor_token(ctx)
     url = f"{_SUPERVISOR_URL}/addons/{slug}/update"
+    log = _self_update_log_path(ctx)
+    with contextlib.suppress(OSError):
+        log.parent.mkdir(parents=True, exist_ok=True)
+
+    # -sS keeps curl quiet on success but makes it report transport errors;
+    # -w prints the status line even when the body is empty, which is what
+    # distinguishes "Supervisor accepted" from "403, wrong role".
     cmd = (
-        f"sleep 2; curl -s -X POST -H {shlex.quote(f'Authorization: Bearer {token}')} "
-        f"{shlex.quote(url)} >/dev/null 2>&1"
+        f"sleep 2; "
+        f"echo \"--- self-update {slug} -> latest ---\" >> {shlex.quote(str(log))}; "
+        f"curl -sS -X POST "
+        f"-H {shlex.quote(f'Authorization: Bearer {token}')} "
+        f"-w '\\nHTTP_CODE=%{{http_code}}\\n' "
+        f"{shlex.quote(url)} >> {shlex.quote(str(log))} 2>&1"
     )
     await asyncio.create_subprocess_exec(
         "setsid",
@@ -398,6 +425,7 @@ async def _fire_detached_self_update(ctx: HaOpsContext, slug: str) -> None:
         stderr=asyncio.subprocess.DEVNULL,
         start_new_session=True,
     )
+    return log
 
 
 @registry.tool(
@@ -550,7 +578,7 @@ async def haops_addon_update(
         # Audit is written BEFORE firing: once Supervisor stops us there is no
         # opportunity to log anything, and an unlogged self-update is exactly
         # the entry someone will look for when the add-on doesn't come back.
-        await _fire_detached_self_update(ctx, slug)
+        log_path = await _fire_detached_self_update(ctx, slug)
         return {
             "triggered": True,
             "slug": slug,
@@ -558,12 +586,15 @@ async def haops_addon_update(
             "version": current,
             "version_latest": latest,
             "self": True,
+            "outcome_log": str(log_path),
             "warning": (
                 f"Update to {latest} fires in ~2s. This MCP session will drop "
                 "and stay down for several minutes while the image rebuilds on "
                 "the host. Reconnect afterwards (`/mcp` in Claude Code). If it "
                 "never comes back, check Settings > Add-ons > "
-                f"{info.get('name')} in the Home Assistant UI."
+                f"{info.get('name')} in the Home Assistant UI. If NOTHING "
+                "restarts at all, Supervisor refused the request — read "
+                f"{log_path} for the status it returned."
             ),
         }
 

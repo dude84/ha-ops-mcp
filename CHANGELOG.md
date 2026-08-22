@@ -1,3 +1,29 @@
+## 0.64.3
+
+**A refused self-update is no longer silent.** `haops_addon_update` with
+`allow_self=true` hands the Supervisor POST to a detached child so the warning
+reaches the caller before the container is torn down — but that child sent its
+output to `/dev/null`. When Supervisor declines the request (or accepts it and
+the on-host build fails), the tool still answered `triggered: true`, nothing
+restarted, and there was no way to find out why.
+
+Observed on 0.64.1 → 0.64.2: two `triggered: true` responses, the container
+never recreated, `state: started` and `version` unchanged both times. The
+detach mechanism itself was verified working (a detached child runs as uid 0
+and writes its output fine), so the rejection is Supervisor-side — precisely
+the status code that was being discarded.
+
+The child now appends its response *and* `HTTP_CODE=` to
+`<backup_dir>/self_update.log`, and the tool returns that path as
+`outcome_log` plus a line in the warning telling you to read it if nothing
+restarts at all. `curl -sS` instead of `-s`, so transport errors are recorded
+rather than swallowed too.
+
+Note for anyone hitting this: a self-update that Supervisor refuses still
+needs the Home Assistant UI (Settings → Add-ons → HA Ops MCP → Update), which
+also shows the build error directly. The fix here buys diagnosis, not a
+workaround.
+
 ## 0.64.2
 
 **Compatibility bumped to HA Core 2026.8.3.** Both instances were upgraded and
