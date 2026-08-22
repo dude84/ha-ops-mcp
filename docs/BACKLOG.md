@@ -9,6 +9,56 @@ the entry (not strike-through) on the merge commit.
 
 ---
 
+## HA 2026.8.3 — confirm compatibility alignment
+
+**Filed 2026-08-22.** Both instances (SG and PL) were upgraded to HA Core
+**2026.8.3** while we were built and verified against **2026.8.2**. Nothing is
+known to be broken; this is the standing post-upgrade routine from
+`CLAUDE.md`, which is the agent's job, not the user's.
+
+No startup warning fired and `in_window` reports `true` — but only because
+`MAX_TESTED_HA` is minor-granular (`2026.8`), so a patch bump can't fall out
+of the window. That is exactly the case where a silent break hides: the
+2026.8 device-registry storage split (v3.2) broke us while the API kept a
+deprecated shim and every API-level test stayed green. Do not treat
+`in_window: true` as evidence of anything.
+
+**Verify on a settled instance.** Both were still booting when this was filed
+— SG read `automation_count: 0` and 1604 entities (against 50 / 1969 before
+the upgrade), PL 924 (against 1094). Those numbers are integrations still
+loading, not losses, but `haops_tools_check` and any count comparison will
+lie until they settle. Re-read `haops_system_info` first and only proceed
+when the counts are back to roughly pre-upgrade levels.
+
+Steps:
+
+1. `haops_tools_check` on **both** instances. That single call is the
+   verification — 16 read-only groups covering every backend.
+2. Diff HA's 2026.8.3 release notes against the **API-surface inventory** in
+   `docs/HA_COMPATIBILITY.md` — not against the breaking-change list whole,
+   which is overwhelmingly integration-level noise. Pay attention to
+   anything touching `.storage` schemas, the WS command set, or the recorder
+   schema (currently 53).
+3. On `all_pass` (16/16): bump `BUILT_AGAINST_HA` to `2026.8.3` in
+   `src/ha_ops_mcp/compat.py` **and** `docs/HA_COMPATIBILITY.md` together —
+   `tests/test_compat.py` fails if they drift. Add a verification-history
+   row. Also update the compatibility tables in `README.md` and `DOCS.md`;
+   they are user-facing and go stale silently. `MAX_TESTED_HA` needs no
+   change for a patch release.
+4. Append the pending **`KNOWN_GOOD_ENV.md` baseline row** in the same pass —
+   it is owed for v0.64.1 anyway (v0.64.0 never got one: its `config_flow`
+   check group was broken, so no instance ever reached `all_pass` on it).
+   Gather the full stack per that file's convention: `haops_system_info`,
+   `haops_self_check`, `claude --version`, `sw_vers`, `bun --version`,
+   `node --version`, `$TERM_PROGRAM_VERSION`, `git describe --tags`.
+
+Blocked on: both addons being updated to **v0.64.1** first, otherwise the
+`config_flow` group still reports the 405 false failure and `all_pass` is
+unreachable. Related: [[project_ha_compat_window]],
+[[reference_ha_storage_schema_vs_api_shim]], [[feedback_env_baseline_routine]].
+
+---
+
 ## UI program (follows the chart de-jag, task 1 — done)
 
 ### Task 2 — standing UI performance / freeze-hunting suite
