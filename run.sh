@@ -69,10 +69,19 @@ export HA_OPS_TOKEN="${ha_token}"
 export HA_OPS_URL="${ha_url}"
 export HA_OPS_WS_URL="${ws_url}"
 # Transport is not an addon option any more (v0.63.1): streamable-http is the
-# only one the addon can serve, so a single-choice picker was noise. An install
-# updated from an older version may still carry a stored `transport` value —
-# Supervisor drops keys the schema no longer declares, but read it anyway so a
-# leftover `sse` produces a pointer to /mcp instead of silence.
+# only one the addon can serve, so a single-choice picker was noise.
+#
+# Any install upgraded in place still carries a stored `transport` value.
+# Supervisor does NOT prune saved user options when a key leaves the schema —
+# it only stops validating and rendering them (verified on both instances,
+# 2026-08-22: `transport: streamable-http` still present in the saved options
+# of two installs upgraded from <=0.62.x). Earlier comments here claimed the
+# opposite; they were wrong.
+#
+# The stored value decides NOTHING — the export below is unconditional. It is
+# read only so a leftover `sse` produces a pointer to /mcp instead of silence.
+# Removing the dead key is a manual admin action (Configuration tab -> Edit in
+# YAML), deliberately not something this addon does to its own options.
 if bashio::config.exists 'transport'; then
     stored_transport=$(bashio::config 'transport')
     if [ "${stored_transport}" != "streamable-http" ]; then
