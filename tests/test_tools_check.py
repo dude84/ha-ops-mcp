@@ -117,50 +117,107 @@ async def test_tools_check_registries_group(ctx):
 
 
 @pytest.mark.asyncio
-async def test_tools_check_config_flow_group_probes_index_only(ctx):
-    """Proves the flow REST route answers — without parking a pending flow.
+async def test_tools_check_config_flow_probes_without_creating_a_flow(ctx):
+    """Proves both flow surfaces answer — without parking pending state.
 
-    Starting a real flow would leave state in the user's HA, which a
-    read-only health check must never do.
+    The creation route is probed with a handler that cannot exist; HA
+    rejects it with a 404 before touching any integration. Starting a real
+    flow would leave state in the user's HA, which a read-only check must
+    never do.
     """
-    calls: list[str] = []
+    from ha_ops_mcp.connections.rest import RestClientError
+    from ha_ops_mcp.tools.config_entry import _PROBE_HANDLER
 
-    async def _get(path: str):
-        calls.append(path)
+    posts: list[tuple] = []
+
+    async def _post(path: str, data=None):
+        posts.append((path, data))
         if path == "/api/config/config_entries/flow":
-            return []
-        from tests.conftest import _mock_rest_get
-        return _mock_rest_get(path)
+            raise RestClientError(404, '{"message": "Invalid handler specified"}')
+        return {}
 
-    ctx.rest.get = AsyncMock(side_effect=_get)
-    ctx.ws.send_command = AsyncMock(return_value=[])
+    async def _ws(command: str, **kwargs):
+        if command == "config_entries/flow/progress":
+            return []
+        return []
+
+    ctx.rest.post = AsyncMock(side_effect=_post)
+    ctx.ws.send_command = AsyncMock(side_effect=_ws)
 
     result = await haops_tools_check(ctx)
     group = result["config_flow"]
 
     assert group["status"] == "pass"
-    assert group["tests"]["flow_index"]["pending_flows"] == 0
-    assert "haops_integration_flow_start" in group["tools_affected"]
-    # Only the index GET — no POST to /flow anywhere.
-    assert calls.count("/api/config/config_entries/flow") == 1
+    assert group["tests"]["flow_create_route"]["probe"] == "rejected_bogus_handler"
+    assert group["tests"]["flow_progress"]["pending_flows"] == 0
+    # Exactly one POST, and it used the un-creatable handler.
+    flow_posts = [p for p in posts if p[0] == "/api/config/config_entries/flow"]
+    assert len(flow_posts) == 1
+    assert flow_posts[0][1] == {"handler": _PROBE_HANDLER}
 
 
 @pytest.mark.asyncio
-async def test_tools_check_config_flow_group_fails_if_route_gone(ctx):
-    """A removed/moved flow endpoint must be visible, not silent."""
+async def test_tools_check_config_flow_fails_if_create_route_gone(ctx):
+    """A moved/removed creation endpoint must be visible, not silent.
+
+    v0.64.0 shipped a probe that did GET on the POST-only index and reported
+    a false failure on every healthy instance (405). Pin the real shape.
+    """
     from ha_ops_mcp.connections.rest import RestClientError
 
-    async def _get(path: str):
+    async def _post(path: str, data=None):
         if path == "/api/config/config_entries/flow":
-            raise RestClientError(404, "not found")
-        from tests.conftest import _mock_rest_get
-        return _mock_rest_get(path)
+            raise RestClientError(405, "405: Method Not Allowed")
+        return {}
 
-    ctx.rest.get = AsyncMock(side_effect=_get)
+    ctx.rest.post = AsyncMock(side_effect=_post)
     ctx.ws.send_command = AsyncMock(return_value=[])
 
     result = await haops_tools_check(ctx)
 
     assert result["config_flow"]["status"] == "fail"
-    assert "cannot be created" in result["config_flow"]["tests"]["flow_index"]["impact"]
+    assert "cannot be created" in (
+        result["config_flow"]["tests"]["flow_create_route"]["impact"]
+    )
     assert "haops_integration_flow_step" in result["summary"]["broken_tools"]
+
+
+@pytest.mark.asyncio
+async def test_tools_check_config_flow_partial_when_only_listing_is_down(ctx):
+    """Losing the WS listing costs a warning, not the ability to create."""
+    from ha_ops_mcp.connections.rest import RestClientError
+    from ha_ops_mcp.connections.websocket import WebSocketError
+
+    async def _post(path: str, data=None):
+        if path == "/api/config/config_entries/flow":
+            raise RestClientError(404, "Invalid handler specified")
+        return {}
+
+    async def _ws(command: str, **kwargs):
+        if command == "config_entries/flow/progress":
+            raise WebSocketError("Unknown command")
+        return []
+
+    ctx.rest.post = AsyncMock(side_effect=_post)
+    ctx.ws.send_command = AsyncMock(side_effect=_ws)
+
+    result = await haops_tools_check(ctx)
+    group = result["config_flow"]
+
+    assert group["status"] == "partial"
+    assert group["tests"]["flow_create_route"]["ok"] is True
+    assert "Creation itself still works" in group["tests"]["flow_progress"]["impact"]
+
+
+@pytest.mark.asyncio
+async def test_tools_check_config_flow_fails_if_bogus_handler_accepted(ctx):
+    """If HA accepts an impossible handler, the probe is no longer honest."""
+    ctx.rest.post = AsyncMock(return_value={"type": "form", "flow_id": "x"})
+    ctx.ws.send_command = AsyncMock(return_value=[])
+
+    result = await haops_tools_check(ctx)
+
+    assert result["config_flow"]["status"] == "fail"
+    assert "accepted the bogus handler" in (
+        result["config_flow"]["tests"]["flow_create_route"]["error"]
+    )

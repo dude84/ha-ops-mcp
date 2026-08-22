@@ -81,7 +81,7 @@ def test_normalise_unknown_type_keeps_raw_payload() -> None:
 
 @pytest.mark.asyncio
 async def test_start_returns_schema_without_confirm(ctx: Any) -> None:
-    ctx.rest.get = AsyncMock(return_value=[])
+    ctx.ws.send_command = AsyncMock(return_value=[])
     ctx.rest.post = AsyncMock(return_value=FORM_STEP)
 
     result = await haops_integration_flow_start(ctx, domain="ac_controller")
@@ -101,8 +101,18 @@ async def test_start_returns_schema_without_confirm(ctx: Any) -> None:
 
 @pytest.mark.asyncio
 async def test_start_reports_existing_pending_flows(ctx: Any) -> None:
-    ctx.rest.get = AsyncMock(return_value=[
-        {"flow_id": "old1", "handler": "ac_controller", "step_id": "user"},
+    """The listing is WS (`config_entries/flow/progress`), NOT REST.
+
+    `GET /api/config/config_entries/flow` answers 405 on HA 2026.8 — the
+    REST index is POST-only. v0.64.0 used the GET and the feature was dead.
+    """
+    ctx.ws.send_command = AsyncMock(return_value=[
+        {
+            "flow_id": "old1",
+            "handler": "ac_controller",
+            "step_id": "user",
+            "context": {"source": "user"},
+        },
         {"flow_id": "other", "handler": "mqtt", "step_id": "user"},
     ])
     ctx.rest.post = AsyncMock(return_value=FORM_STEP)
@@ -111,13 +121,35 @@ async def test_start_reports_existing_pending_flows(ctx: Any) -> None:
 
     # Filtered to this handler only.
     assert [f["flow_id"] for f in result["in_progress"]] == ["old1"]
+    assert result["in_progress"][0]["source"] == "user"
     assert "haops_integration_flow_abort" in result["note"]
+    ctx.ws.send_command.assert_awaited_once_with("config_entries/flow/progress")
+
+
+@pytest.mark.asyncio
+async def test_start_names_discovered_flows(ctx: Any) -> None:
+    """A zeroconf/dhcp flow is only identifiable by its title placeholder."""
+    ctx.ws.send_command = AsyncMock(return_value=[{
+        "flow_id": "disco1",
+        "handler": "espsomfy_rts",
+        "step_id": "zeroconf_confirm",
+        "context": {
+            "source": "zeroconf",
+            "title_placeholders": {"name": "ESPSomfyRTS.local.", "host": "10.0.30.202"},
+        },
+    }])
+    ctx.rest.post = AsyncMock(return_value=FORM_STEP)
+
+    result = await haops_integration_flow_start(ctx, domain="espsomfy_rts")
+
+    assert result["in_progress"][0]["name"] == "ESPSomfyRTS.local."
+    assert result["in_progress"][0]["source"] == "zeroconf"
 
 
 @pytest.mark.asyncio
 async def test_start_flags_entry_created_on_init(ctx: Any) -> None:
     """A no-input flow commits inside start — say so loudly, audit as mutate."""
-    ctx.rest.get = AsyncMock(return_value=[])
+    ctx.ws.send_command = AsyncMock(return_value=[])
     ctx.rest.post = AsyncMock(return_value=CREATED_STEP)
 
     result = await haops_integration_flow_start(ctx, domain="ac_controller")
@@ -129,7 +161,7 @@ async def test_start_flags_entry_created_on_init(ctx: Any) -> None:
 
 @pytest.mark.asyncio
 async def test_start_unknown_domain_explains_yaml_only(ctx: Any) -> None:
-    ctx.rest.get = AsyncMock(return_value=[])
+    ctx.ws.send_command = AsyncMock(return_value=[])
     ctx.rest.post = AsyncMock(side_effect=RestClientError(400, "unknown handler"))
 
     result = await haops_integration_flow_start(ctx, domain="nope")
@@ -146,7 +178,9 @@ async def test_start_requires_domain(ctx: Any) -> None:
 @pytest.mark.asyncio
 async def test_start_survives_unreadable_flow_index(ctx: Any) -> None:
     """Can't list pending flows → still start, just without the extra info."""
-    ctx.rest.get = AsyncMock(side_effect=RestClientError(500, "boom"))
+    from ha_ops_mcp.connections.websocket import WebSocketError
+
+    ctx.ws.send_command = AsyncMock(side_effect=WebSocketError("Unknown command"))
     ctx.rest.post = AsyncMock(return_value=FORM_STEP)
 
     result = await haops_integration_flow_start(ctx, domain="ac_controller")

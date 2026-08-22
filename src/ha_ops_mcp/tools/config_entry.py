@@ -6,9 +6,12 @@ entries (`haops_registry_query type='config_entries'`, `config_entries/get`),
 (`haops_device_remove`) — but nothing could **create** an entry, so any
 multi-entry integration was untestable end-to-end from here.
 
-`haops_ws_command` is not the escape hatch for this: config flows are a REST
-surface (`/api/config/config_entries/flow`), not a WS one, so the WS
-passthrough cannot reach them. The alternatives were worse — `curl` with a
+`haops_ws_command` is not the escape hatch for this. The flow API is split:
+*creating* and *answering* a flow are REST (`POST /api/config/config_entries/
+flow`, then `POST .../flow/<flow_id>`), while only the pending-flow *listing*
+is WS (`config_entries/flow/progress`). The WS passthrough therefore cannot
+start a flow — listing progress can never create anything. The alternatives
+were worse — `curl` with a
 Bearer token through `haops_exec_shell` (correctly blocked by client-side
 permission classifiers, since it is shaped exactly like credential
 exfiltration), or hand-editing `.storage/core.config_entries` with a
@@ -44,6 +47,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _FLOW_BASE = "/api/config/config_entries/flow"
+
+#: Pending-flow listing. WS-only: the REST index at ``_FLOW_BASE`` accepts
+#: POST alone and answers 405 to GET (verified against HA 2026.8.2).
+_FLOW_PROGRESS_WS = "config_entries/flow/progress"
+
+#: Handler that cannot exist, used to prove the flow POST route is alive
+#: without creating anything: HA answers 404 "Invalid handler specified"
+#: before touching any integration.
+_PROBE_HANDLER = "__haops_probe_nonexistent__"
 
 #: Flow-result types that end the flow — no further `step` call is possible.
 _TERMINAL_TYPES = frozenset({"create_entry", "abort"})
@@ -100,25 +112,39 @@ def _normalise_step(step: Any) -> dict[str, Any]:
 async def _in_progress(ctx: HaOpsContext, domain: str | None = None) -> list[dict[str, Any]]:
     """List pending flows, optionally filtered to one handler.
 
+    Uses the WS command, not REST: ``GET /api/config/config_entries/flow``
+    answers **405 Method Not Allowed** on HA 2026.8 — the index endpoint is
+    POST-only and the in-progress listing lives on the WebSocket API, which
+    is where HA's own frontend reads it from.
+
     Best-effort: a failure here must not stop a flow from being started, so
     callers treat an empty list as "couldn't tell" rather than "none exist".
     """
     try:
-        flows = await ctx.rest.get(_FLOW_BASE)
-    except RestClientError:
+        flows = await ctx.ws.send_command(_FLOW_PROGRESS_WS)
+    except Exception:
+        # Any failure — WS down, command renamed — degrades to "couldn't
+        # tell". This is a convenience, never a precondition.
         return []
     if not isinstance(flows, list):
         return []
-    rows = [
-        {
+    rows = []
+    for f in flows:
+        if not isinstance(f, dict):
+            continue
+        context = f.get("context") or {}
+        row = {
             "flow_id": f.get("flow_id"),
             "handler": f.get("handler"),
             "step_id": f.get("step_id"),
-            "context": (f.get("context") or {}).get("source"),
+            "source": context.get("source"),
         }
-        for f in flows
-        if isinstance(f, dict)
-    ]
+        # Discovered flows (zeroconf/dhcp/ssdp) carry the device name here,
+        # which is the only thing that makes one identifiable in a list.
+        placeholders = context.get("title_placeholders") or {}
+        if placeholders.get("name"):
+            row["name"] = placeholders["name"]
+        rows.append(row)
     if domain:
         rows = [r for r in rows if r["handler"] == domain]
     return rows
@@ -132,8 +158,9 @@ async def _in_progress(ctx: HaOpsContext, domain: str | None = None) -> list[dic
     description=(
         "Start a config flow to ADD a new integration instance (config "
         "entry) — the 'Add integration' button, over MCP. This is the only "
-        "way to create a config entry; haops_ws_command cannot reach config "
-        "flows (they are REST, not WebSocket), and hand-editing "
+        "way to create a config entry: starting and answering a flow are "
+        "REST endpoints, so haops_ws_command cannot reach them (the WS API "
+        "only lists flows already in progress), and hand-editing "
         ".storage/core.config_entries bypasses the flow's own validation. "
         "Runs immediately (no confirm): it opens a PENDING flow, which "
         "creates nothing until you answer a step. "

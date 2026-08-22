@@ -1,3 +1,43 @@
+## 0.64.1
+
+**Fixes the `config_flow` check group shipped broken in 0.64.0.** It probed
+`GET /api/config/config_entries/flow`, which does not exist: the REST index is
+POST-only and answers **405 Method Not Allowed**, so the group reported `fail`
+on every healthy instance and dragged `haops_tools_check` to
+`partial_failure` (15/16). Verified against HA 2026.8.2 on both instances.
+Config-entry *creation* was never affected — that path is a POST and works.
+
+The endpoint reality, now pinned by tests:
+
+| Surface | Verdict |
+|---|---|
+| `POST /api/config/config_entries/flow` (start a flow) | works |
+| `POST /api/config/config_entries/flow/<flow_id>` (answer a step) | works |
+| `GET /api/config/config_entries/flow/<flow_id>` (read pending step) | works |
+| `GET /api/config/config_entries/flow` (list flows) | **405 — not a route** |
+| WS `config_entries/flow/progress` (list flows) | works |
+
+- **The check group now probes both halves properly.** The creation route is
+  probed with a handler that cannot exist (`__haops_probe_nonexistent__`): HA
+  answers `404 Invalid handler specified` before touching any integration, so
+  the POST route is proven alive without a flow ever being created — the same
+  trick `_probe_zha_ws` plays with an all-zero IEEE. The pending-flow listing
+  is probed separately over WS. Losing only the listing now reports `partial`
+  rather than `fail`, because creation still works without it. The group also
+  fails loudly if HA ever *accepts* the impossible handler, since the probe
+  would no longer be honest.
+- **`flow_start`'s duplicate-flow warning actually works now.** It listed
+  pending flows via the 405 endpoint, and the failure was swallowed by design
+  (the listing is a convenience, not a precondition), so `in_progress` was
+  silently always empty. It uses the WS command now, and names discovered
+  flows from their `title_placeholders` — a zeroconf/dhcp flow is otherwise
+  unidentifiable in a list.
+- **Corrected a wrong claim in the tool docs.** `haops_integration_flow_start`
+  said config flows are "REST, not WebSocket". The API is split: creating and
+  answering are REST, the pending-flow listing is WS. The reason
+  `haops_ws_command` still can't substitute is narrower and now stated —
+  listing progress cannot create anything.
+
 ## 0.64.0
 
 **Config entries can be created now.** ha-ops could read config entries, reload one and remove a

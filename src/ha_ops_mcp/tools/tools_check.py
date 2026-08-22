@@ -918,18 +918,28 @@ async def _check_refs(ctx: HaOpsContext) -> dict[str, Any]:
 
 
 async def _check_config_flow(ctx: HaOpsContext) -> dict[str, Any]:
-    """Check the config-flow REST surface the haops_integration_flow_* tools use.
+    """Check both halves of the flow API the haops_integration_flow_* tools use.
 
-    Only the in-progress LIST endpoint is probed — it is a plain GET that
-    proves the route exists and we are authorised for it. Starting a real
-    flow would park pending state in the user's HA, which a read-only health
-    check must never do.
+    The creation route is probed with a handler that cannot exist. HA answers
+    ``404 Invalid handler specified`` before touching any integration, so the
+    POST route is proven alive without a flow ever being created — the same
+    trick ``_probe_zha_ws`` plays with an all-zero IEEE. Actually starting a
+    real flow would park pending state in the user's HA, which a read-only
+    health check must never do.
 
-    A 404 here means HA moved or removed ``/api/config/config_entries/flow``
-    and config-entry creation is broken; that is exactly the silent breakage
-    this group exists to surface after an HA upgrade.
+    The pending-flow listing is probed separately because it lives on the
+    WebSocket API, not REST. (v0.64.0 probed ``GET`` on the REST index and
+    reported a false failure: that endpoint is POST-only and answers 405.)
+
+    Both failing means config-entry creation is broken — exactly the silent
+    breakage this group exists to surface after an HA upgrade.
     """
-    from ha_ops_mcp.tools.config_entry import _FLOW_BASE
+    from ha_ops_mcp.connections.rest import RestClientError
+    from ha_ops_mcp.tools.config_entry import (
+        _FLOW_BASE,
+        _FLOW_PROGRESS_WS,
+        _PROBE_HANDLER,
+    )
 
     tools_affected = [
         "haops_integration_flow_start",
@@ -937,30 +947,78 @@ async def _check_config_flow(ctx: HaOpsContext) -> dict[str, Any]:
         "haops_integration_flow_abort",
     ]
     checks: dict[str, Any] = {}
+
+    # ── creation route (REST POST) ──
     try:
-        flows = await ctx.rest.get(_FLOW_BASE)
-        checks["flow_index"] = {
-            # Answering at all is the signal — zero pending flows is the
-            # normal, healthy state.
-            "ok": isinstance(flows, list),
-            "endpoint": _FLOW_BASE,
-            "pending_flows": len(flows) if isinstance(flows, list) else 0,
-        }
-        if not isinstance(flows, list):
-            checks["flow_index"]["error"] = (
-                f"Expected a list of pending flows, got {type(flows).__name__}"
-            )
+        await ctx.rest.post(_FLOW_BASE, {"handler": _PROBE_HANDLER})
+    except RestClientError as e:
+        # 404 = route alive, handler rejected. That is the pass condition.
+        if e.status == 404:
+            checks["flow_create_route"] = {
+                "ok": True,
+                "endpoint": f"POST {_FLOW_BASE}",
+                "probe": "rejected_bogus_handler",
+            }
+        else:
+            checks["flow_create_route"] = {
+                "ok": False,
+                "endpoint": f"POST {_FLOW_BASE}",
+                "error": str(e)[:200],
+                "impact": "Config entries cannot be created over MCP.",
+            }
     except Exception as e:
-        checks["flow_index"] = {
+        checks["flow_create_route"] = {
             "ok": False,
-            "endpoint": _FLOW_BASE,
+            "endpoint": f"POST {_FLOW_BASE}",
             "error": str(e)[:200],
             "impact": "Config entries cannot be created over MCP.",
         }
+    else:
+        # A nonexistent handler must never be accepted. If it is, HA changed
+        # its validation and the probe is no longer trustworthy.
+        checks["flow_create_route"] = {
+            "ok": False,
+            "endpoint": f"POST {_FLOW_BASE}",
+            "error": (
+                f"HA accepted the bogus handler '{_PROBE_HANDLER}' — flow "
+                "validation changed; a stray flow may now be pending."
+            ),
+        }
 
-    all_ok = all(c.get("ok") for c in checks.values())
+    # ── pending-flow listing (WS) ──
+    try:
+        flows = await ctx.ws.send_command(_FLOW_PROGRESS_WS)
+        checks["flow_progress"] = {
+            # Answering at all is the signal — zero pending flows is normal.
+            "ok": isinstance(flows, list),
+            "command": _FLOW_PROGRESS_WS,
+            "pending_flows": len(flows) if isinstance(flows, list) else 0,
+        }
+        if not isinstance(flows, list):
+            checks["flow_progress"]["error"] = (
+                f"Expected a list of pending flows, got {type(flows).__name__}"
+            )
+    except Exception as e:
+        checks["flow_progress"] = {
+            "ok": False,
+            "command": _FLOW_PROGRESS_WS,
+            "error": str(e)[:200],
+            "impact": (
+                "flow_start cannot warn about duplicate pending flows. "
+                "Creation itself still works."
+            ),
+        }
+
+    # The creation route is what the group is really about; losing only the
+    # progress listing costs a warning, not a capability.
+    if all(c.get("ok") for c in checks.values()):
+        status = "pass"
+    elif checks["flow_create_route"].get("ok"):
+        status = "partial"
+    else:
+        status = "fail"
     return {
-        "status": "pass" if all_ok else "fail",
+        "status": status,
         "tools_affected": tools_affected,
         "tests": checks,
     }
