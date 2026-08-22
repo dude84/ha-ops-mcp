@@ -15,6 +15,42 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.64.1` — verified 2026-08-22 (**Singapore HA** — HA 2026.8.3 + config-entry flow tools)
+
+Server side: HA Core **2026.8.3**, Supervisor **2026.07.5**, HAOS **18.2** amd64, MariaDB
+**11.4.10** schema **53**, Docker socket present (21 containers, 20 running). Client side: Claude
+Code **2.1.239**, macOS **26.5.2** (build 25F84, Darwin 25.5.0), iTerm2 **3.6.11**, Bun **1.3.14**,
+Node **v26.5.0**. Transport streamable-http + static Bearer token (`auth_mode: token`,
+`token_source: configured`), raw-IP URL.
+
+- `haops_self_check` → `overall: ok`, `ha_ops_version: 0.64.1`.
+- `haops_tools_check` → **`all_pass`, 16/16 groups, 0 broken tools** — first baseline with the
+  `config_flow` group (`POST /api/config/config_entries/flow` probed with an un-creatable handler,
+  plus the WS `config_entries/flow/progress` listing). Live scale: 1969 states, 3026 registry
+  entities, 247 devices, 106 config entries (12 removable), **9,279,803 `states` rows**, refindex
+  3493 nodes / 5400 edges, 30 Zigbee devices, 15 ESPHome node configs. docker `disk_usage`: images
+  9.0 GB, ~0.93 GB cache reclaimable, 0 dangling.
+- **First baseline on HA 2026.8.3.** `BUILT_AGAINST_HA` bumped to match. Release notes carry no
+  changes to the WS command set, `.storage` schemas, recorder schema, or the REST endpoints we use
+  — integration-level fixes only. Entity/automation counts returned to exactly pre-upgrade levels
+  (1969 / 50) once the instance settled; they read 1604 / 0 mid-boot, so **let an instance settle
+  before trusting any count or `tools_check` after an HA upgrade**.
+- 90 tools. One pending config flow existed during verification (an `espsomfy_rts` zeroconf
+  discovery) — `flow_progress` reporting `pending_flows: 1` is a healthy pass, not a problem.
+
+### `v0.64.1` — verified 2026-08-22 (**Poland HA** — HA 2026.8.3)
+
+Server side: HA Core **2026.8.3**, Supervisor **2026.07.5**, HAOS **18.2** amd64, MariaDB
+**11.4.10** schema **53**, Docker socket present (19 containers, all running). Client side
+identical to the Singapore row above. Transport streamable-http + static Bearer token, raw-IP URL.
+
+- `haops_self_check` → `overall: ok`, `ha_ops_version: 0.64.1`.
+- `haops_tools_check` → **`all_pass`, 16/16 groups, 0 broken tools**. Live scale: 1093 states,
+  1356 registry entities, 142 devices, 50 config entries (11 removable), **2,368,386 `states`
+  rows**, refindex 1621 nodes / 2750 edges, 23 Zigbee devices, 8 ESPHome node configs.
+- Entity count settled at 1093 (was 1094 pre-upgrade — one entity gone, not investigated;
+  automations unchanged at 30). Mid-boot it read 924, same settle-first caveat as above.
+
 ### `v0.62.2` — verified 2026-08-24 (**Singapore HA** — static Bearer token auth + concurrency hardening)
 
 Server side: HA Core **2026.8.2**, Supervisor **2026.07.5**, HAOS **18.2** amd64, MariaDB

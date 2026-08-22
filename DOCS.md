@@ -8,7 +8,7 @@ Built for the maintenance and observability work that comes during and after set
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.8.2** |
+| **Built against** | HA Core **2026.8.3** |
 | **Supported window** | **2026.6 – 2026.8** |
 | **Recorder DB schema** | **53** |
 

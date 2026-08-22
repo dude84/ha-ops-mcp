@@ -1,3 +1,30 @@
+## 0.64.2
+
+**Compatibility bumped to HA Core 2026.8.3.** Both instances were upgraded and
+`haops_tools_check` returns **`all_pass`, 16/16 groups, 0 broken tools** on each
+— the first verification pass that includes the `config_flow` group. Release
+notes carry no changes to the WebSocket command set, `.storage` schemas, the
+recorder schema (still 53) or the REST endpoints we use; the changes are
+integration-level. `BUILT_AGAINST_HA` moves 2026.8.2 → 2026.8.3;
+`MIN_SUPPORTED_HA` / `MAX_TESTED_HA` are unchanged, since a patch release
+cannot move the minor-granular window.
+
+- **The config-flow endpoints are now in the API-surface inventory** in
+  `docs/HA_COMPATIBILITY.md`, listed *per method* because the method is the
+  part that bites: `POST /api/config/config_entries/flow` starts a flow,
+  `GET|POST|DELETE .../flow/<flow_id>` reads / answers / discards one, and
+  `GET` on the index is **not a route** (405). That inventory is the list HA's
+  release notes get diffed against, so a surface missing from it is a surface
+  nobody checks.
+- **Two `KNOWN_GOOD_ENV.md` baseline rows** (Singapore + Poland, v0.64.1 on HA
+  2026.8.3) with the full client stack: Claude Code 2.1.239, macOS 26.5.2
+  (25F84), iTerm2 3.6.11, Bun 1.3.14, Node v26.5.0.
+- **Settle-first caveat recorded.** Read mid-upgrade, SG reported 1604 entities
+  and `automation_count: 0` (against 1969 / 50), PL 924 (against 1094) — those
+  are integrations still loading, not losses, but any count comparison or
+  `tools_check` run against a booting instance lies. Both settled to
+  pre-upgrade levels (PL is 1093, one entity gone, not investigated).
+
 ## 0.64.1
 
 **Fixes the `config_flow` check group shipped broken in 0.64.0.** It probed

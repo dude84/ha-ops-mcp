@@ -16,11 +16,11 @@ Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.i
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.8.2** |
+| **Built against** | HA Core **2026.8.3** |
 | **Supported window** | **2026.6 – 2026.8** |
 | **Recorder DB schema** | **53** |
 
-Every release is verified against a live instance with `haops_tools_check` — 14 read-only groups exercising REST, WebSocket, database, filesystem, registries, Supervisor, shell, Docker, reference graph, debugger, helpers, Zigbee, UI and user tools. A release ships when that returns `all_pass`. (The Docker group reports `skip` unless you opt into container access, and `skip` does not block `all_pass`.)
+Every release is verified against a live instance with `haops_tools_check` — 16 read-only groups exercising REST, WebSocket, database, filesystem, registries, config flow, Supervisor, shell, Docker, ESPHome, reference graph, debugger, helpers, Zigbee, UI and user tools. A release ships when that returns `all_pass`. (The Docker group reports `skip` unless you opt into container access, and `skip` does not block `all_pass`.)
 
 **Running a newer HA than the window?** Nothing will refuse to start. The server logs a warning, and `haops_system_info` reports a `compatibility` block telling you the same. HA ships on the first Wednesday of every month, so the newest verified version goes stale by design — outside the window means *untested*, not *known-broken*. If something misbehaves, run `haops_tools_check` first: each failing group names the tools it affects.
 
@@ -28,6 +28,7 @@ Every release is verified against a live instance with `haops_tools_check` — 1
 
 | ha-ops-mcp | HA Core | DB schema | Result |
 |---|---|---|---|
+| 0.64.1 | 2026.8.3 | 53 | 16/16 groups pass, both instances (config_flow group) |
 | 0.61.1 | 2026.8.2 | 53 | 15/15 groups pass (docker_prune group) |
 | 0.57.1 | 2026.8.1 | 53 | 14/14 groups pass (Docker enabled) |
 | 0.56.0 | 2026.8.1 | 53 | 13/13 groups pass |

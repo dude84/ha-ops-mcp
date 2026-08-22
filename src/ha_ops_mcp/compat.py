@@ -18,7 +18,7 @@ import re
 
 #: HA Core version this release was verified end-to-end against
 #: (`haops_tools_check` all-pass on a live instance).
-BUILT_AGAINST_HA = "2026.8.2"
+BUILT_AGAINST_HA = "2026.8.3"
 
 #: Recorder DB schema version seen at BUILT_AGAINST_HA. Bumping HA does not
 #: necessarily bump this — schema 53 has held since 2026.5.

@@ -16,12 +16,12 @@ server logs a warning at startup when the live instance falls outside the window
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.8.2** |
+| **Built against** | HA Core **2026.8.3** |
 | **Recorder DB schema** | **53** (unchanged since 2026.5) |
 | **Oldest supported** | **2026.6** |
 | **Newest verified** | **2026.8** |
-| Verified how | `haops_tools_check` → `all_pass`, 14/14 groups, 0 broken tools |
-| Verified on | Poland HA, 2026-08-12, addon v0.57.1 |
+| Verified how | `haops_tools_check` → `all_pass`, 16/16 groups, 0 broken tools |
+| Verified on | Singapore **and** Poland HA, 2026-08-22, addon v0.64.1 |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.64.1 | 2026.8.3 | 53 | 16/16 pass, both instances (config_flow group) | 2026-08-22 |
 | 0.61.1 | 2026.8.2 | 53 | 15/15 pass (docker_prune group) | 2026-08-15 |
 | 0.57.1 | 2026.8.1 | 53 | 14/14 pass (Docker group enabled) | 2026-08-12 |
 | 0.56.0 | 2026.8.1 | 53 | 13/13 pass | 2026-08-11 |
@@ -67,6 +68,7 @@ almost all HA breakage is integration-level and touches none of it.
 | `config/device_registry/remove_config_entry` | `haops_device_remove` |
 | `config_entries/get` | `haops_device_remove` (per-entry `supports_remove_device`) |
 | `config_entries/reload` | `haops_integration_reload` |
+| `config_entries/flow/progress` | `haops_integration_flow_start` (duplicate-flow warning), `haops_tools_check` |
 | `lovelace/config`, `lovelace/config/save` | dashboard read/write |
 | `lovelace/dashboards/list`, `lovelace/resources` | `haops_dashboard_list`, `_resources` |
 | `trace/get`, `trace/list` | `haops_automation_trace` |
@@ -81,6 +83,22 @@ almost all HA breakage is integration-level and touches none of it.
 `/api/config` · `/api/states` · `/api/states/<entity_id>` · `/api/services` ·
 `/api/services/<domain>/<service>` · `/api/template` · `/api/error_log` ·
 `/api/history/period/<ts>` · `/api/logbook/<ts>`
+
+**Config-flow endpoints** (v0.64.0+, `haops_integration_flow_*`) — the method
+matters here, so they are listed separately:
+
+| Endpoint | Method | Used by |
+|---|---|---|
+| `/api/config/config_entries/flow` | **POST only** | `haops_integration_flow_start` |
+| `/api/config/config_entries/flow/<flow_id>` | GET | `haops_integration_flow_step` (preview) |
+| `/api/config/config_entries/flow/<flow_id>` | POST | `haops_integration_flow_step` (apply) |
+| `/api/config/config_entries/flow/<flow_id>` | DELETE | `haops_integration_flow_abort` |
+
+`GET` on the **index** (`/api/config/config_entries/flow`) is **not a route** —
+it answers `405 Method Not Allowed`. The pending-flow listing is WS-only
+(`config_entries/flow/progress`, above). v0.64.0 shipped a `tools_check` probe
+that assumed the GET existed and reported a false failure on every healthy
+instance; fixed in v0.64.1. Verified against 2026.8.2 and 2026.8.3.
 
 ### Supervisor endpoints
 
