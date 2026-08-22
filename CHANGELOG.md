@@ -1,3 +1,25 @@
+## 0.65.0
+
+Maintenance release — **no runtime behaviour change**. Cut so the 0.64.x
+documentation corrections ship, and so the self-update path added in 0.64.3
+has something to actually update *to*.
+
+- **Corrected a `run.sh` comment that contradicted our own CHANGELOG.** It
+  claimed Supervisor drops saved options when a key leaves the schema. It does
+  not — it stops validating and rendering them, but keeps the stored values
+  verbatim. Verified on both instances: `transport: streamable-http` was still
+  present in the saved options of two installs upgraded from ≤0.62.x, months
+  after v0.63.1 removed the option. v0.63.0's entry had this right all along
+  ("stored option values survive a schema change"); only the comment was
+  wrong. Behaviour was always correct — the transport export is
+  unconditional and the stored value decides nothing.
+- **Recorded the v0.64.3 re-verification** on HA 2026.8.3: `all_pass` 16/16 on
+  both instances, `built_against_ha` equal to live. Noted inline on the
+  existing baseline rows rather than duplicating a near-identical entry whose
+  only delta is a patch version. Also records that **0.64.2 was never
+  deployed** — the self-update path could not fire it, so both instances went
+  0.64.1 → 0.64.3 through the UI.
+
 ## 0.64.3
 
 **A refused self-update is no longer silent.** `haops_addon_update` with
