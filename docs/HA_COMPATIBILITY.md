@@ -16,12 +16,12 @@ server logs a warning at startup when the live instance falls outside the window
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.8.3** |
+| **Built against** | HA Core **2026.9.0** |
 | **Recorder DB schema** | **53** (unchanged since 2026.5) |
 | **Oldest supported** | **2026.6** |
-| **Newest verified** | **2026.8** |
+| **Newest verified** | **2026.9** |
 | Verified how | `haops_tools_check` → `all_pass`, 16/16 groups, 0 broken tools |
-| Verified on | Singapore **and** Poland HA, 2026-08-22, addon v0.64.1 → re-confirmed on v0.64.3 |
+| Verified on | Singapore **and** Poland HA, 2026-09-03, addon v0.65.1 → certified as v0.66.0 |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.65.1 | 2026.9.0 | 53 | 16/16 pass, both instances (certified as 0.66.0) | 2026-09-03 |
 | 0.64.3 | 2026.8.3 | 53 | 16/16 pass, both instances (deployed version) | 2026-08-22 |
 | 0.64.1 | 2026.8.3 | 53 | 16/16 pass, both instances (config_flow group) | 2026-08-22 |
 | 0.61.1 | 2026.8.2 | 53 | 15/15 pass (docker_prune group) | 2026-08-15 |
@@ -43,7 +44,7 @@ exactly that.
 
 ## How to re-verify after an HA update
 
-1. `haops_tools_check` — 14 groups, all read-only. This is the whole test.
+1. `haops_tools_check` — 16 groups, all read-only. This is the whole test.
 2. If a group fails, its `tools_affected` list names the broken tools directly.
 3. Bump `BUILT_AGAINST_HA` / `MAX_TESTED_HA` in `src/ha_ops_mcp/compat.py`, add a row above, and
    add a `KNOWN_GOOD_ENV.md` baseline row.
@@ -236,6 +237,38 @@ former primary rather than an entry the record belongs to.
 
 Also expect `haops_device_info`, `haops_registry_query`, `haops_entity_audit` and
 `haops_references` to report **more devices than before**, with duplicate-looking names.
+
+### Nothing in our surface moved — 2026.9 (VERIFIED 2026-09-03)
+
+Recorded because "we checked and it was clean" is as useful to a future reader as a breakage, and
+because a release with **zero** surface impact is the normal case this list exists to establish.
+
+2026.9 ships 8 breaking changes: Flexit Nordic, KNX, LLM APIs, Persistent Notification, UniFi
+Protect, Update, Vacuum, Z-Wave JS — plus the VLC integration removed and Configurator deprecated.
+Every one is integration-level. **None touches a WebSocket command, REST endpoint, Supervisor
+endpoint, `.storage` layout or recorder table on the lists above.** Confirmed empirically:
+`haops_tools_check` → `all_pass`, 16/16 groups, 0 broken tools, on both instances.
+
+Facts worth having on record:
+
+| | |
+|---|---|
+| Recorder schema | **53** — unchanged, both instances (HA does not always announce a bump) |
+| HA bundled Python | **3.14.6** — still 3.14, no interpreter bump (see the 2026.7 entry for why this matters) |
+| Supervisor | 2026.08.0 |
+| HA OS | 18.2 |
+| Device registry | still version 3, minor 2 — the 2026.8 split did not move again |
+| `zigbee.db` | still `*_v15` tables |
+
+One trend worth naming, because it will eventually reach us: **HA is progressively admin-gating
+service actions.** 2026.9 requires an administrator account for the `update` entity's install /
+skip / clear-skipped actions and for Z-Wave JS lock user/credential management. Nothing here calls
+those — `haops_addon_update` goes through Supervisor `/addons/<slug>/update`, a different surface
+entirely — but `haops_service_call` is a generic passthrough, so an instance configured with a
+**non-admin** long-lived token will start seeing `Unauthorized` on an expanding set of domains.
+This server already needs an admin token for `config/auth/*` (`haops_user_*`), so a correctly
+configured instance is unaffected; a deliberately least-privilege one degrades in more places than
+it used to.
 
 ### ESPHome add-on container (used by `haops_esphome_*`)
 

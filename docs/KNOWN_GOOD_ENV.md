@@ -15,6 +15,45 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.65.1` → certified `v0.66.0` — verified 2026-09-03 (**Singapore HA** — first baseline on HA 2026.9.0)
+
+Server side: HA Core **2026.9.0**, Supervisor **2026.08.0**, HAOS **18.2** amd64, HA bundled Python
+**3.14.6**, MariaDB **11.4.10** schema **53**, Docker socket present (20 containers, all running).
+Client side: Claude Code **2.1.259**, macOS **26.6.2** (build 25G83, Darwin 25.6.0), iTerm2
+**3.6.11**, Bun **1.3.14**, Node **v26.5.0**. Transport streamable-http + static Bearer token,
+raw-IP URL.
+
+- `haops_self_check` → `overall: ok`, `ha_ops_version: 0.65.1` (the running addon; the compat
+  constants certifying 2026.9 ship as 0.66.0).
+- `haops_tools_check` → **`all_pass`, 16/16 groups, 0 broken tools**. Live scale: 1993 states, 3050
+  registry entities, 246 devices, 108 config entries (12 removable), **8,819,661 `states` rows**,
+  1340 `statistics_meta`, refindex 3519 nodes / 5427 edges, 30 Zigbee devices (`*_v15` tables), 16
+  ESPHome node configs, 14 add-ons, 6 users. docker `disk_usage`: images 9.2 GB, ~0.93 GB
+  reclaimable, 0 dangling.
+- **First baseline on HA 2026.9.0.** All 8 of its breaking changes are integration-level and none
+  touches this server's API surface — see the 2026.9 section of `HA_COMPATIBILITY.md`. Recorder
+  schema held at 53 and the bundled Python stayed on 3.14, both checked explicitly because HA does
+  not reliably announce either.
+- The instance was given time to settle before the suite ran, per the v0.64.1 note below — counts
+  came back at pre-upgrade levels (1993 states / 51 automations).
+
+### `v0.65.1` → certified `v0.66.0` — verified 2026-09-03 (**Poland HA** — HA 2026.9.0)
+
+Server side: HA Core **2026.9.0**, Supervisor **2026.08.0**, HAOS **18.2** amd64, MariaDB
+**11.4.10** schema **53**, Docker socket present (18 containers, all running). Client side identical
+to the Singapore row above. Transport streamable-http + static Bearer token, raw-IP URL.
+
+- `haops_self_check` → `overall: ok`, `ha_ops_version: 0.65.1`.
+- `haops_tools_check` → **`all_pass`, 16/16 groups, 0 broken tools**. Live scale: 1096 states, 1359
+  registry entities, 142 devices, 50 config entries (11 removable), **2,748,689 `states` rows**, 241
+  `statistics_meta`, refindex 1624 nodes / 2749 edges, 23 Zigbee devices, 8 ESPHome node configs, 13
+  add-ons, 5 users.
+- **`haops_system_info` reported `database: {"error": "Could not connect to database"}` once**,
+  immediately before a `haops_self_check` on the same instance returned the DB healthy (MariaDB
+  11.4.10, schema 53). Same stale-pooled-connection symptom already noted on the v0.37.0 row below,
+  seen here through `system_info` rather than `self_check`. It recovers on retry — do not read a
+  single DB error after an idle period as a real outage.
+
 ### `v0.64.1` — verified 2026-08-22 (**Singapore HA** — HA 2026.8.3 + config-entry flow tools)
 
 Server side: HA Core **2026.8.3**, Supervisor **2026.07.5**, HAOS **18.2** amd64, MariaDB

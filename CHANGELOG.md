@@ -1,3 +1,32 @@
+## 0.66.0
+
+**Certified against Home Assistant 2026.9.0. Supported window is now 2026.6 – 2026.9.**
+
+`haops_tools_check` returns `all_pass` — 16/16 groups, 0 broken tools — on both
+production instances (Singapore and Poland), so the startup warning that fired
+for every 2026.9 user is now silent by default.
+
+No code changed beyond the compatibility constants. That is the finding, not an
+omission: 2026.9's 8 breaking changes (Flexit Nordic, KNX, LLM APIs, Persistent
+Notification, UniFi Protect, Update, Vacuum, Z-Wave JS) plus the VLC removal and
+Configurator deprecation are all integration-level, and none touches a
+WebSocket command, REST endpoint, Supervisor endpoint, `.storage` layout or
+recorder table this server depends on.
+
+Verified alongside, because HA does not reliably announce these:
+
+- Recorder schema is **still 53** on both instances (unchanged since 2026.5).
+- HA's bundled Python is **still 3.14** (3.14.6). An interpreter bump is the
+  category of breakage that appears in no changelog — 2026.7's move to 3.14
+  broke an `IntEnum.__str__` assumption and caused a reconnect storm.
+- The 2026.8 device-registry split did not move again — still version 3, minor 2.
+
+`docs/HA_COMPATIBILITY.md` gains a 2026.9 section recording all of the above,
+including one trend worth watching: HA is progressively admin-gating service
+actions (2026.9 does it to `update` install/skip and Z-Wave JS lock credential
+management). Nothing here calls those, but `haops_service_call` is a generic
+passthrough, so a deliberately non-admin token now degrades in more places.
+
 ## 0.65.1
 
 **Supervisor forbids add-on self-update. `haops_addon_update` now says so
