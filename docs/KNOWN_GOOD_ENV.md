@@ -37,6 +37,14 @@ raw-IP URL.
 - The instance was given time to settle before the suite ran, per the v0.64.1 note below — counts
   came back at pre-upgrade levels (1993 states / 51 automations).
 
+- **Re-verified on HA 2026.9.1 at addon v0.66.0** (2026-09-09, same git tag `v0.66.0`): `self_check`
+  → `overall: ok`, `tools_check` → `all_pass` 16/16 again. Deltas from the row above: HA Core
+  2026.9.0 → **2026.9.1**, Supervisor 2026.08.0 → **2026.09.0**, deployed addon 0.65.1 → **0.66.0**,
+  Claude Code 2.1.259 → **2.1.265**. Unchanged: HAOS 18.2, MariaDB 11.4.10 schema **53**, 20/20
+  containers, macOS 26.6.2, iTerm2 3.6.11, Bun 1.3.14, Node v26.5.0. Live scale drifted only as
+  expected (1994 states, **8,585,228 `states` rows** after purge, 3519 refindex nodes). No separate
+  row — an HA patch bump inside the certified 2026.9 window, so `compat.py` stays at 2026.9.0.
+
 ### `v0.65.1` → certified `v0.66.0` — verified 2026-09-03 (**Poland HA** — HA 2026.9.0)
 
 Server side: HA Core **2026.9.0**, Supervisor **2026.08.0**, HAOS **18.2** amd64, MariaDB
@@ -53,6 +61,15 @@ to the Singapore row above. Transport streamable-http + static Bearer token, raw
   11.4.10, schema 53). Same stale-pooled-connection symptom already noted on the v0.37.0 row below,
   seen here through `system_info` rather than `self_check`. It recovers on retry — do not read a
   single DB error after an idle period as a real outage.
+
+- **Re-verified on HA 2026.9.1 at addon v0.66.0** (2026-09-09): `self_check` → `overall: ok`,
+  `tools_check` → `all_pass` 16/16. Deltas from the row above: HA Core 2026.9.0 → **2026.9.1**,
+  deployed addon 0.65.1 → **0.66.0**, Claude Code 2.1.259 → **2.1.265**. Supervisor stayed on
+  **2026.08.0** here while Singapore moved to 2026.09.0 — the two instances are not in lockstep, so
+  read the Supervisor version per instance. MariaDB 11.4.10 schema **53**, 18/18 containers. Live
+  scale: 1097 states, 1363 registry entities, **2,936,746 `states` rows**, 241 `statistics_meta`,
+  refindex 1628 nodes / 2757 edges, 23 Zigbee devices, 8 ESPHome nodes, 13 add-ons, 5 users. The
+  stale-DB-connection symptom noted above did **not** recur this time.
 
 ### `v0.64.1` — verified 2026-08-22 (**Singapore HA** — HA 2026.8.3 + config-entry flow tools)
 
