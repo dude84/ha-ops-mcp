@@ -45,6 +45,25 @@ raw-IP URL.
   expected (1994 states, **8,585,228 `states` rows** after purge, 3519 refindex nodes). No separate
   row — an HA patch bump inside the certified 2026.9 window, so `compat.py` stays at 2026.9.0.
 
+- **Re-verified on HA 2026.9.2 at addon v0.66.0** (2026-09-13, same git tag `v0.66.0`): `self_check`
+  → `overall: ok`, `tools_check` → **`all_pass` 16/16**, 0 broken tools. Deltas from the bullet
+  above: HA Core 2026.9.1 → **2026.9.2**, Claude Code 2.1.265 → **2.1.269**. Unchanged: deployed
+  addon **0.66.0**, Supervisor **2026.09.0**, HAOS 18.2, MariaDB 11.4.10 schema **53**, 20/20
+  containers, macOS 26.6.2 (25G83, Darwin 25.6.0), iTerm2 3.6.11, Bun 1.3.14, Node v26.5.0. Live
+  scale: 1890 states, 3051 registry entities, 246 devices, 108 config entries (12 removable),
+  **8,495,683 `states` rows**, 1340 `statistics_meta`, refindex 3520 nodes / 5429 edges, 30 Zigbee
+  devices, 16 ESPHome node configs, 14 add-ons, 6 users. docker `disk_usage`: images 11.5 GB,
+  ~0.93 GB reclaimable, 0 dangling. No separate row — HA patch bump inside the certified 2026.9
+  window, `compat.py` stays at 2026.9.0.
+- **Mid-restart reads look like a dead instance, not a slow one.** Both instances were caught
+  mid-upgrade on the first attempt: Singapore's `haops_system_info` returned `entity_count: 0`,
+  empty `domain_counts` and `database: {"error": "Could not connect to database"}` while still
+  reporting the new `ha_version`, and Poland failed outright with
+  `Cannot connect to host homeassistant:8123 ... Connect call failed ('172.30.32.1', 8123)`. Both
+  are boot-order artifacts, distinct from the stale-pooled-connection symptom below. Wait for
+  `/api/` to answer on both hosts plus ~45 s of settle before running the suite, or the counts in
+  the baseline row will be garbage.
+
 ### `v0.65.1` → certified `v0.66.0` — verified 2026-09-03 (**Poland HA** — HA 2026.9.0)
 
 Server side: HA Core **2026.9.0**, Supervisor **2026.08.0**, HAOS **18.2** amd64, MariaDB
@@ -70,6 +89,17 @@ to the Singapore row above. Transport streamable-http + static Bearer token, raw
   scale: 1097 states, 1363 registry entities, **2,936,746 `states` rows**, 241 `statistics_meta`,
   refindex 1628 nodes / 2757 edges, 23 Zigbee devices, 8 ESPHome nodes, 13 add-ons, 5 users. The
   stale-DB-connection symptom noted above did **not** recur this time.
+
+- **Re-verified on HA 2026.9.2 at addon v0.66.0** (2026-09-13): `self_check` → `overall: ok`,
+  `tools_check` → **`all_pass` 16/16**. Deltas from the bullet above: HA Core 2026.9.1 →
+  **2026.9.2**, Supervisor 2026.08.0 → **2026.09.0** (PL has now caught up with Singapore — both
+  instances are on the same Supervisor for the first time since 2026-09-03), Claude Code 2.1.265 →
+  **2.1.269**. Unchanged: deployed addon **0.66.0**, HAOS 18.2, MariaDB 11.4.10 schema **53**, 18/18
+  containers, macOS 26.6.2 (25G83, Darwin 25.6.0), iTerm2 3.6.11, Bun 1.3.14, Node v26.5.0. Live
+  scale: 1096 states, 1363 registry entities, 142 devices, 50 config entries (11 removable),
+  **3,051,080 `states` rows**, 241 `statistics_meta`, refindex 1628 nodes / 2757 edges, 23 Zigbee
+  devices, 8 ESPHome nodes, 13 add-ons, 5 users. No separate row — HA patch bump inside the
+  certified 2026.9 window, `compat.py` unchanged.
 
 ### `v0.64.1` — verified 2026-08-22 (**Singapore HA** — HA 2026.8.3 + config-entry flow tools)
 

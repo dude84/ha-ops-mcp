@@ -21,7 +21,7 @@ server logs a warning at startup when the live instance falls outside the window
 | **Oldest supported** | **2026.6** |
 | **Newest verified** | **2026.9** |
 | Verified how | `haops_tools_check` → `all_pass`, 16/16 groups, 0 broken tools |
-| Verified on | Singapore **and** Poland HA, 2026-09-03, addon v0.65.1 → certified as v0.66.0; re-confirmed on HA 2026.9.1, 2026-09-09 |
+| Verified on | Singapore **and** Poland HA, 2026-09-03, addon v0.65.1 → certified as v0.66.0; re-confirmed on HA 2026.9.1, 2026-09-09; re-confirmed on HA 2026.9.2, 2026-09-13 |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.66.0 | 2026.9.2 | 53 | 16/16 pass, both instances (HA patch bump, no surface change) | 2026-09-13 |
 | 0.66.0 | 2026.9.1 | 53 | 16/16 pass, both instances (HA patch bump, no surface change) | 2026-09-09 |
 | 0.65.1 | 2026.9.0 | 53 | 16/16 pass, both instances (certified as 0.66.0) | 2026-09-03 |
 | 0.64.3 | 2026.8.3 | 53 | 16/16 pass, both instances (deployed version) | 2026-08-22 |
