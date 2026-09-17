@@ -60,7 +60,7 @@ almost all HA breakage is integration-level and touches none of it.
 
 | Command | Used by |
 |---|---|
-| `config/check_config` | `haops_config_validate` |
+| `config/check_config` | `haops_config_validate` — **BROKEN on 2026.9.2**, see below |
 | `config/area_registry/list` | registry tools (fallback) |
 | `config/device_registry/list` | registry tools (fallback) |
 | `config/entity_registry/list` | registry tools (fallback) |
@@ -239,6 +239,36 @@ former primary rather than an entry the record belongs to.
 
 Also expect `haops_device_info`, `haops_registry_query`, `haops_entity_audit` and
 `haops_references` to report **more devices than before**, with duplicate-looking names.
+
+### `config/check_config` is gone — 2026.9.2 (FOUND 2026-09-17)
+
+The first surface breakage this list has caught in the wild, and it invalidates part of the
+2026.9 "nothing moved" entry below.
+
+`haops_config_validate` returns:
+
+    Config check failed: Command config/check_config failed: Unknown command.
+
+`config/core/check_config` — the other plausible spelling — fails the same way. The
+`homeassistant.check_config` **service** still exists (confirmed in `haops_service_list`), but it
+returns no response object, which is exactly why this tool used the WS command in the first place.
+So the verdict is currently unreadable and `haops_config_validate` is dead until a replacement
+surface is found. The REST endpoint `POST /api/config/core/check_config` is the obvious candidate
+and has **not** been tested.
+
+**We cannot date this regression.** It was found on 2026.9.2, but the 2026.9.0 and 2026.9.1
+verifications would not have caught it either, because `haops_tools_check` never exercises
+`config/check_config` — its `websocket` group tests ping, `get_config`, `dashboards/list` and
+`lovelace/config`, and nothing else. The command may have been dead for several releases.
+
+Two lessons, both worth more than the bug:
+
+1. **`all_pass` means "the groups we test pass", not "the tools work".** The 16/16 result on
+   2026.9.0, 2026.9.1 and 2026.9.2 was accurate and still missed a broken tool. Any surface on
+   the lists above that no group touches is unverified, and the compat routine treats
+   `tools_check` as *the* verification step.
+2. The surface inventory is only as good as the coverage behind it. A row here with no
+   corresponding probe in `tools_check` is a claim, not a check.
 
 ### Nothing in our surface moved — 2026.9 (VERIFIED 2026-09-03)
 
