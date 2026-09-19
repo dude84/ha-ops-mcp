@@ -55,6 +55,26 @@ raw-IP URL.
   devices, 16 ESPHome node configs, 14 add-ons, 6 users. docker `disk_usage`: images 11.5 GB,
   ~0.93 GB reclaimable, 0 dangling. No separate row — HA patch bump inside the certified 2026.9
   window, `compat.py` stays at 2026.9.0.
+
+- **Re-verified on HA 2026.9.3 at addon v0.66.0** (2026-09-19, same git tag `v0.66.0`): `self_check`
+  → `overall: ok`, `tools_check` → **`all_pass` 16/16**, 0 broken tools. Deltas from the bullet
+  above: HA Core 2026.9.2 → **2026.9.3**, Supervisor 2026.09.0 → **2026.09.2**, Claude Code 2.1.269
+  → **2.1.276**. Unchanged: deployed addon **0.66.0**, MariaDB 11.4.10 schema **53**, 20/20
+  containers, macOS 26.6.2 (25G83, Darwin 25.6.0), iTerm2 3.6.11, Bun 1.3.14, Node v26.5.0. Live
+  scale: 1995 states, 3065 registry entities, 246 devices, 108 config entries (12 removable),
+  **8,410,546 `states` rows**, **420 `statistics_meta`** (was 1340 — the 2026-09-17 orphan cleanup
+  cleared 921 ids), refindex 3534 nodes / 5447 edges, 30 Zigbee devices, 16 ESPHome node configs,
+  14 add-ons, 6 users. docker `disk_usage`: images 9.3 GB, ~0.93 GB reclaimable, 0 dangling. No
+  separate row — HA patch bump inside the certified 2026.9 window, `compat.py` stays at 2026.9.0.
+- **An HAOS update splits the version in two until the host reboots.** Caught on Singapore here:
+  `update.home_assistant_operating_system_update` reported installed **18.3**, state `off` (nothing
+  pending), while Supervisor's own `supervisor_info` still reported `hassos_version: 18.2` — and
+  Poland, updated in the same window but already rebooted, reported **18.3** from both. A host
+  reboot closed the gap: Singapore's `supervisor_info` then read **18.3** and `tools_check` returned
+  `all_pass` 16/16 again. Read the Supervisor value as what is *running* and the update entity as
+  what is *on disk*; while they disagree, the reboot is still owed. The reboot itself is also
+  distinguishable from a mid-boot instance — it refuses the socket outright
+  (`Unable to connect`), where a booting instance answers HTTP with zeroed counts (see above).
 - **Mid-restart reads look like a dead instance, not a slow one.** Both instances were caught
   mid-upgrade on the first attempt: Singapore's `haops_system_info` returned `entity_count: 0`,
   empty `domain_counts` and `database: {"error": "Could not connect to database"}` while still
@@ -100,6 +120,19 @@ to the Singapore row above. Transport streamable-http + static Bearer token, raw
   **3,051,080 `states` rows**, 241 `statistics_meta`, refindex 1628 nodes / 2757 edges, 23 Zigbee
   devices, 8 ESPHome nodes, 13 add-ons, 5 users. No separate row — HA patch bump inside the
   certified 2026.9 window, `compat.py` unchanged.
+
+- **Re-verified on HA 2026.9.3 at addon v0.66.0** (2026-09-19): `self_check` → `overall: ok`,
+  `tools_check` → **`all_pass` 16/16**. Deltas from the bullet above: HA Core 2026.9.2 →
+  **2026.9.3**, HAOS 18.2 → **18.3**, Supervisor 2026.09.0 → **2026.09.2**, Claude Code 2.1.269 →
+  **2.1.276**. Unchanged: deployed addon **0.66.0**, MariaDB 11.4.10 schema **53**, 18/18
+  containers, macOS 26.6.2 (25G83, Darwin 25.6.0), iTerm2 3.6.11, Bun 1.3.14, Node v26.5.0. Live
+  scale: 1097 states, 1363 registry entities, 142 devices, 50 config entries (11 removable),
+  **3,248,789 `states` rows**, 241 `statistics_meta`, refindex 1628 nodes / 2757 edges, 23 Zigbee
+  devices, 8 ESPHome nodes, 13 add-ons, 5 users. Poland had already completed the HAOS 18.3 reboot
+  when this ran; Singapore had not — see the note on the Singapore bullet above. No separate row — HA patch bump inside the
+  certified 2026.9 window, `compat.py` unchanged.
+- **`haops_config_validate` is broken here too**, identically: `Command config/check_config failed:
+  Unknown command.` Both instances, same release — not a per-instance fault.
 
 ### `v0.64.1` — verified 2026-08-22 (**Singapore HA** — HA 2026.8.3 + config-entry flow tools)
 
