@@ -75,6 +75,24 @@ raw-IP URL.
   what is *on disk*; while they disagree, the reboot is still owed. The reboot itself is also
   distinguishable from a mid-boot instance — it refuses the socket outright
   (`Unable to connect`), where a booting instance answers HTTP with zeroed counts (see above).
+
+- **Re-verified on HA 2026.9.4 at addon v0.66.0** (2026-09-28, same git tag `v0.66.0`):
+  `tools_check` → **`all_pass` 16/16**, 0 broken tools. Deltas from the 2026.9.3 bullet: HA Core
+  → **2026.9.4**, Claude Code 2.1.276 → **2.1.283**, **macOS 26.6.2 → 27.0 (26A428)**, **iTerm2
+  3.6.11 → 3.7.3**. Unchanged: addon **0.66.0**, HAOS **18.3**, Supervisor **2026.09.2**, MariaDB
+  11.4.10 schema **53**, 20/20 containers. Live scale: 1995 states, 3065 registry entities, 246
+  devices, 108 config entries (12 removable), **7,998,050 `states` rows**, 420 `statistics_meta`,
+  refindex 3534 / 5447, 30 Zigbee, 16 ESPHome, 14 add-ons, 6 users. `config/check_config` still
+  `Unknown command`. No separate row — patch bump inside the 2026.9 window, `compat.py` unchanged.
+- **Local Network Privacy struck again — and this time it only hit one instance.** After the
+  macOS 27.0 + iTerm2 3.7.3 upgrades, `ha-ops-sg` failed to connect with `EHOSTUNREACH` while
+  `ha-ops-pl` kept working. `curl` to the same `10.0.0.150:8901/mcp` returned `401` and HA's
+  `:8123` returned `200`, ping 4 ms — the textbook LNP signature from
+  `CONNECTIVITY_TROUBLESHOOTING.md`. The asymmetry is the new lesson: LNP only gates the **local
+  subnet**. Singapore (`10.0.0.150`) is on-link from this Mac; Poland (`10.1.0.150`) is routed, so
+  LNP never applies to it. **One instance down + the other fine is not evidence against LNP.** Fix
+  was the usual: grant Local Network to iTerm, then `/mcp` → reconnect (the session holds the
+  failed connection until reconnected).
 - **Mid-restart reads look like a dead instance, not a slow one.** Both instances were caught
   mid-upgrade on the first attempt: Singapore's `haops_system_info` returned `entity_count: 0`,
   empty `domain_counts` and `database: {"error": "Could not connect to database"}` while still
@@ -133,6 +151,16 @@ to the Singapore row above. Transport streamable-http + static Bearer token, raw
   certified 2026.9 window, `compat.py` unchanged.
 - **`haops_config_validate` is broken here too**, identically: `Command config/check_config failed:
   Unknown command.` Both instances, same release — not a per-instance fault.
+
+- **Re-verified on HA 2026.9.4 at addon v0.66.0** (2026-09-28): `tools_check` → **`all_pass`
+  16/16** on the second run. The first run failed the `database` group only, on `basic_query`
+  (`Lost connection to MySQL server during query ([Errno 104] Connection reset by peer)` at `SET
+  SESSION TRANSACTION READ ONLY`) while the other three DB subtests in the same run passed — the
+  stale-pooled-connection symptom above, not a regression. Deltas: HA Core → **2026.9.4**, Claude
+  Code → **2.1.283**, macOS → **27.0**, iTerm2 → **3.7.3**. Unchanged: HAOS 18.3, Supervisor
+  2026.09.2, MariaDB 11.4.10 schema **53**, 18/18 containers. Live scale: 1096 states, 1363
+  registry entities, 142 devices, 50 config entries, **3,532,973 `states` rows**, 241
+  `statistics_meta`, 23 Zigbee, 8 ESPHome, 13 add-ons, 5 users. `config/check_config` still gone.
 
 ### `v0.64.1` — verified 2026-08-22 (**Singapore HA** — HA 2026.8.3 + config-entry flow tools)
 

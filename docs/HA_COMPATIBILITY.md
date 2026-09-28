@@ -21,7 +21,7 @@ server logs a warning at startup when the live instance falls outside the window
 | **Oldest supported** | **2026.6** |
 | **Newest verified** | **2026.9** |
 | Verified how | `haops_tools_check` → `all_pass`, 16/16 groups, 0 broken tools |
-| Verified on | Singapore **and** Poland HA, 2026-09-03, addon v0.65.1 → certified as v0.66.0; re-confirmed on HA 2026.9.1, 2026-09-09; re-confirmed on HA 2026.9.2, 2026-09-13; re-confirmed on HA 2026.9.3, 2026-09-19 |
+| Verified on | Singapore **and** Poland HA, 2026-09-03, addon v0.65.1 → certified as v0.66.0; re-confirmed on HA 2026.9.1, 2026-09-09; re-confirmed on HA 2026.9.2, 2026-09-13; re-confirmed on HA 2026.9.3, 2026-09-19; re-confirmed on HA 2026.9.4, 2026-09-28 |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.66.0 | 2026.9.4 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-09-28 |
 | 0.66.0 | 2026.9.3 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-09-19 |
 | 0.66.0 | 2026.9.2 | 53 | 16/16 pass, both instances (HA patch bump, no surface change) | 2026-09-13 |
 | 0.66.0 | 2026.9.1 | 53 | 16/16 pass, both instances (HA patch bump, no surface change) | 2026-09-09 |
@@ -61,7 +62,7 @@ almost all HA breakage is integration-level and touches none of it.
 
 | Command | Used by |
 |---|---|
-| `config/check_config` | `haops_config_validate` — **BROKEN on 2026.9.2 and 2026.9.3**, see below |
+| `config/check_config` | `haops_config_validate` — **BROKEN on 2026.9.2 – 2026.9.4**, see below |
 | `config/area_registry/list` | registry tools (fallback) |
 | `config/device_registry/list` | registry tools (fallback) |
 | `config/entity_registry/list` | registry tools (fallback) |
@@ -241,7 +242,7 @@ former primary rather than an entry the record belongs to.
 Also expect `haops_device_info`, `haops_registry_query`, `haops_entity_audit` and
 `haops_references` to report **more devices than before**, with duplicate-looking names.
 
-### `config/check_config` is gone — 2026.9.2, still gone on 2026.9.3 (FOUND 2026-09-17)
+### `config/check_config` is gone — 2026.9.2, still gone on 2026.9.4 (FOUND 2026-09-17)
 
 The first surface breakage this list has caught in the wild, and it invalidates part of the
 2026.9 "nothing moved" entry below.
@@ -258,7 +259,8 @@ surface is found. The REST endpoint `POST /api/config/core/check_config` is the 
 and has **not** been tested.
 
 Re-probed on both instances after the 2026.9.3 update (2026-09-19): identical `Unknown command.`
-on Singapore and Poland. Not a transient, not a single-instance fault.
+on Singapore and Poland. Not a transient, not a single-instance fault. Same again on 2026.9.4
+(2026-09-28), both instances.
 
 **We cannot date this regression.** It was found on 2026.9.2, but the 2026.9.0 and 2026.9.1
 verifications would not have caught it either, because `haops_tools_check` never exercises
