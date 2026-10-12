@@ -302,7 +302,10 @@ async def _check_registries(ctx: HaOpsContext) -> dict[str, Any]:
             continue
         try:
             data = json.loads(path.read_text())
-            records = data.get("data", {}).get(spec.data_key, [])
+            body = data.get("data", {})
+            records = body.get(spec.data_key, [])
+            for key in spec.extra_keys:
+                records = records + body.get(key, [])
             checks[name] = {
                 "ok": isinstance(records, list),
                 "file": str(path),

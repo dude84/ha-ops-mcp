@@ -88,6 +88,8 @@ class RegistrySpec:
     file: str
     data_key: str
     ws_command: str | None
+    extra_keys: tuple[str, ...] = ()
+    """More record lists in the same file, appended after `data_key`."""
 
 
 REGISTRY_SPECS: dict[str, RegistrySpec] = {
@@ -95,6 +97,9 @@ REGISTRY_SPECS: dict[str, RegistrySpec] = {
         file=".storage/core.device_registry",
         data_key="devices",
         ws_command="config/device_registry/list",
+        # Device registry 3.4 (HA 2026.9) stores child devices in their own list;
+        # `config/device_registry/list` chains both, so the file read must too.
+        extra_keys=("child_devices",),
     ),
     "entities": RegistrySpec(
         file=".storage/core.entity_registry",
@@ -206,16 +211,21 @@ def _file_is_behind_our_write(path: Path) -> bool:
 
 
 def _records_from_file(
-    path: Path, data_key: str
+    path: Path, spec: RegistrySpec
 ) -> list[dict[str, Any]] | None:
     try:
         data = json.loads(path.read_text())
     except (OSError, ValueError):
         return None
-    records = data.get("data", {}).get(data_key) if isinstance(data, dict) else None
-    if isinstance(records, list):
-        return records
-    return None
+    body = data.get("data", {}) if isinstance(data, dict) else {}
+    records = body.get(spec.data_key)
+    if not isinstance(records, list):
+        return None
+    for key in spec.extra_keys:
+        extra = body.get(key)
+        if isinstance(extra, list):
+            records = records + extra
+    return records
 
 
 async def _records_from_ws(
@@ -284,7 +294,7 @@ async def load_registry(
                 notes=notes,
             )
 
-    from_file = _records_from_file(path, spec.data_key)
+    from_file = _records_from_file(path, spec)
     if from_file is not None:
         notes = []
         if behind:

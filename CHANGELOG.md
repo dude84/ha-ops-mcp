@@ -1,3 +1,23 @@
+## 0.66.1
+
+**Certified against Home Assistant 2026.10.1. Supported window is now 2026.6 – 2026.10.**
+
+`haops_tools_check` returns `all_pass` (16/16 groups, 0 broken tools) on the Singapore
+instance running 2026.10.1. Recorder schema still 53, bundled Python still 3.14.6.
+
+**Fixed: child devices were invisible to every device tool.** The device registry
+is now version 3.4: HA 2026.9 added child devices and stores them in a separate
+top-level `child_devices` list. HA's `config/device_registry/list` returns both
+lists chained together, but our filesystem-first loader only read `devices`, so a
+child device was missing from `haops_device_info`, `haops_registry_query`,
+`haops_entity_find`, the reference graph and the ESPHome device mapping. The loader
+now reads both lists, and so does the `tools_check` registry count. `all_pass` did
+not catch this because the registry group only counts records.
+
+2026.10's breaking changes are otherwise integration-level. The two worth knowing
+are recorded in `docs/HA_COMPATIBILITY.md`: usernames are now normalised (which
+matters to `haops_user_create`), and more service actions are admin-gated.
+
 ## 0.66.0
 
 **Certified against Home Assistant 2026.9.0. Supported window is now 2026.6 – 2026.9.**

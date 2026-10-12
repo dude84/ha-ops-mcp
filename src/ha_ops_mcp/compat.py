@@ -18,10 +18,10 @@ import re
 
 #: HA Core version this release was verified end-to-end against
 #: (`haops_tools_check` all-pass on a live instance).
-BUILT_AGAINST_HA = "2026.9.0"
+BUILT_AGAINST_HA = "2026.10.1"
 
 #: Recorder DB schema version seen at BUILT_AGAINST_HA. Bumping HA does not
-#: necessarily bump this — schema 53 has held since 2026.5 (still 53 on 2026.9).
+#: necessarily bump this — schema 53 has held since 2026.5 (still 53 on 2026.10).
 BUILT_AGAINST_DB_SCHEMA = 53
 
 #: Oldest HA minor we claim to support. Below this we have not run the tool
@@ -30,7 +30,7 @@ MIN_SUPPORTED_HA = (2026, 6)
 
 #: Newest HA minor verified. Above this is untested, not known-broken — HA's
 #: monthly cadence means this goes stale within weeks by design.
-MAX_TESTED_HA = (2026, 9)
+MAX_TESTED_HA = (2026, 10)
 
 _VERSION_RE = re.compile(r"^(\d{4})\.(\d{1,2})")
 

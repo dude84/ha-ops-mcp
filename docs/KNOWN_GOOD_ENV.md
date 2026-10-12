@@ -15,6 +15,28 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.66.0` → certified `v0.66.1` — verified 2026-10-12 (**Singapore HA** — first baseline on HA 2026.10.1)
+
+Server side: HA Core **2026.10.1**, Supervisor **2026.09.3**, HAOS **18.3** amd64, HA bundled Python
+**3.14.6**, MariaDB **11.4.10** schema **53**, Docker socket present (20 containers, all running).
+Client side: Claude Code **2.1.296**, macOS **27.0.1** (build 26A434, Darwin 27.0.0), iTerm2
+**3.7.3**, Bun **1.3.14**, Node **v26.5.0**. Transport streamable-http + static Bearer token,
+raw-IP URL.
+
+- `haops_self_check` → `overall: ok`, `ha_ops_version: 0.66.0`.
+- `haops_tools_check` → **`all_pass`, 16/16 groups, 0 broken tools**. Live scale: 1953 states, 3071
+  registry entities, 246 devices (0 child devices), 108 config entries (12 removable),
+  **7,216,172 `states` rows**, 425 `statistics_meta`, refindex 3540 nodes / 5454 edges, 30 Zigbee
+  devices (`*_v15`), 16 ESPHome node configs, 14 add-ons, 6 users. docker `disk_usage`: images
+  9.2 GB, ~0.94 GB reclaimable, 0 dangling.
+- Device registry is now **3.4** (`child_devices` list) — `all_pass` did not catch that the file
+  loader ignored it; fixed in 0.66.1. See `HA_COMPATIBILITY.md`.
+- Client deltas since the last baseline: macOS 26.6.2 → **27.0.1**, iTerm2 3.6.11 → **3.7.3**.
+  The iTerm update did not drop the Local Network grant this time — the MCP connection held.
+- `haops_system_info` reported `database: Could not connect` once while `self_check` and
+  `tools_check` read MariaDB fine moments later — the known stale-pooled-connection blip, not a fault.
+- Poland not re-run on 2026.10 in this pass.
+
 ### `v0.65.1` → certified `v0.66.0` — verified 2026-09-03 (**Singapore HA** — first baseline on HA 2026.9.0)
 
 Server side: HA Core **2026.9.0**, Supervisor **2026.08.0**, HAOS **18.2** amd64, HA bundled Python

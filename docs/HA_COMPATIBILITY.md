@@ -16,12 +16,12 @@ server logs a warning at startup when the live instance falls outside the window
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.9.0** |
+| **Built against** | HA Core **2026.10.1** |
 | **Recorder DB schema** | **53** (unchanged since 2026.5) |
 | **Oldest supported** | **2026.6** |
-| **Newest verified** | **2026.9** |
+| **Newest verified** | **2026.10** |
 | Verified how | `haops_tools_check` → `all_pass`, 16/16 groups, 0 broken tools |
-| Verified on | Singapore **and** Poland HA, 2026-09-03, addon v0.65.1 → certified as v0.66.0; re-confirmed on HA 2026.9.1, 2026-09-09; re-confirmed on HA 2026.9.2, 2026-09-13; re-confirmed on HA 2026.9.3, 2026-09-19; re-confirmed on HA 2026.9.4, 2026-09-28 |
+| Verified on | Singapore HA, 2026-10-12, addon v0.66.0 → certified as v0.66.1 (Poland not yet re-run on 2026.10) |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.66.0 | 2026.10.1 | 53 | 16/16 pass, Singapore; device registry now 3.4 (`child_devices` list) — loader fixed, certified as 0.66.1 | 2026-10-12 |
 | 0.66.0 | 2026.9.4 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-09-28 |
 | 0.66.0 | 2026.9.3 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-09-19 |
 | 0.66.0 | 2026.9.2 | 53 | 16/16 pass, both instances (HA patch bump, no surface change) | 2026-09-13 |
@@ -241,6 +242,49 @@ former primary rather than an entry the record belongs to.
 
 Also expect `haops_device_info`, `haops_registry_query`, `haops_entity_audit` and
 `haops_references` to report **more devices than before**, with duplicate-looking names.
+
+### Device registry 3.4: child devices live in their own list — 2026.9/2026.10 (FOUND 2026-10-12)
+
+`.storage/core.device_registry` is now **version 3, minor 4**. Minor 3 (2026.8) only cleared
+`via_device_id` self-references. Minor 4 (2026.9) adds **child devices**: a top-level
+`data.child_devices` list next to `devices` and `deleted_devices`, holding `ChildDeviceEntry`
+records (`parent_device_id`, no `connections`/`manufacturer`). Main device records are unchanged —
+same field set as 3.2.
+
+Same trap as the 2026.8 split, from the other side: `config/device_registry/list` returns
+`chain(devices, child_devices)`, so anything reading through the API sees child devices, while a
+filesystem-first reader of `data.devices` silently misses them. `tools_check` stayed green because
+it only counts records. Fixed in 0.66.1: `RegistrySpec.extra_keys` makes the device loader (and the
+`tools_check` count) read both lists. Singapore has 0 child devices today, so nothing was wrong in
+practice yet.
+
+The 2026.9 entry below recorded "still version 3, minor 2" — that was read on Poland; Singapore was
+not re-read then, so the exact release that wrote 3.4 there is unknown (HA's own comment says 2026.9).
+
+### Nothing else in our surface moved — 2026.10 (VERIFIED 2026-10-12, Singapore)
+
+2026.10's breaking changes are integration-level (easyEnergy, EnergyFlip, EnergyZero, Google
+Sheets, Google Wifi, IoTaWatt, Libre Hardware Monitor, Linode/Tank Utility disabled, Mealie,
+OpenEVSE, Proxmox VE, Rejseplanen, Sofar, Synology DSM, Telegram Bot, Teslemetry, UniFi Network,
+UpCloud, Xbox) plus state conditions rejecting `for` with attributes/lists. Two touch the edges of
+what we do:
+
+- **Authentication**: legacy mode removed and usernames are now normalised (lowercased, trimmed).
+  `haops_user_create` passes the username through, so HA may store a different spelling than the
+  one sent — read it back from the response, don't assume.
+- **Admin-gating continues**: `mqtt.publish`/`mqtt.dump` and Synology DSM reboot/shutdown now need
+  an admin. Same trend as 2026.9 — affects a non-admin token via `haops_service_call` only.
+
+| | |
+|---|---|
+| Recorder schema | **53** — unchanged |
+| HA bundled Python | **3.14.6** — unchanged |
+| Supervisor | 2026.09.3 |
+| HA OS | 18.3 |
+| Device registry | **3.4** — see above |
+| Entity registry | 1.23 |
+| `zigbee.db` | still `*_v15` tables |
+| `config/check_config` | still gone |
 
 ### `config/check_config` is gone — 2026.9.2, still gone on 2026.9.4 (FOUND 2026-09-17)
 

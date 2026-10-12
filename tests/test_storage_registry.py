@@ -49,6 +49,22 @@ async def test_file_read_reports_source_and_age(ctx, config_dir):
 
 
 @pytest.mark.asyncio
+async def test_device_read_includes_child_devices(ctx, config_dir):
+    # Device registry 3.4 (HA 2026.9) keeps child devices in a separate list.
+    path = config_dir / ".storage" / "core.device_registry"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps({"version": 3, "minor_version": 4, "data": {
+        "devices": [{"id": "d1"}],
+        "child_devices": [{"id": "c1", "parent_device_id": "d1"}],
+        "deleted_devices": [{"id": "gone"}],
+    }}))
+
+    read = await load_registry(ctx, "devices")
+
+    assert [r["id"] for r in read.records] == ["d1", "c1"]
+
+
+@pytest.mark.asyncio
 async def test_stale_file_after_our_write_escalates_to_websocket(
     ctx, config_dir, mock_ws
 ):
