@@ -29,11 +29,13 @@ RUN python3 -m venv /opt/ha-ops-mcp
 # Browser stack FIRST — it doesn't depend on our source, so a code change won't
 # invalidate this layer and re-download Chromium (keeps rebuilds fast).
 # `--with-deps` apt-installs the headless shell's system libs (needs apt lists,
-# so refresh here and clean afterwards). ipv4first: Playwright's downloader takes
-# the first DNS answer with no fallback, so a host with broken IPv6 hangs on it.
-RUN /opt/ha-ops-mcp/bin/pip install --no-cache-dir playwright \
+# so refresh here and clean afterwards).
+# !=1.63.0: its downloader follows cdn.playwright.dev's redirect without clearing the
+# first request's timeout, which kills any Chrome download slower than ~5 s. Drop the
+# exclusion once a fixed release ships. Not a pin: newer releases are still picked up.
+RUN /opt/ha-ops-mcp/bin/pip install --no-cache-dir "playwright!=1.63.0" \
     && apt-get update \
-    && NODE_OPTIONS=--dns-result-order=ipv4first /opt/ha-ops-mcp/bin/playwright install --with-deps chromium-headless-shell \
+    && /opt/ha-ops-mcp/bin/playwright install --with-deps chromium-headless-shell \
     && rm -rf /var/lib/apt/lists/* /root/.cache/pip
 
 # Copy project source — build context is the repo root

@@ -1,3 +1,17 @@
+## 0.66.3
+
+**Fixed: the add-on image failed to build on slower connections.** The cause is
+a bug in Playwright 1.63.0. Its browser downloader follows `cdn.playwright.dev`'s
+redirect without clearing the first request's timeout. About 5 seconds later
+that stale timeout fires and aborts the real download, which shows up as a
+misleading "timed out after 30000ms". Any Chrome download that takes longer than
+about 5 seconds failed every time, so on-host builds on slower links could not
+complete. The build now skips that one release (`playwright!=1.63.0`). This is
+not a pin: 1.63.1 and later are picked up as soon as they ship.
+
+0.66.2's IPv4-first change is reverted. It was based on a wrong diagnosis and
+had no effect.
+
 ## 0.66.2
 
 **Fixed: the add-on image failed to build on hosts with broken IPv6.** The
