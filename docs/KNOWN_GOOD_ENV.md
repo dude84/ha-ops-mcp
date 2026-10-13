@@ -37,6 +37,12 @@ raw-IP URL.
   `tools_check` read MariaDB fine moments later — the known stale-pooled-connection blip, not a fault.
 - Poland not re-run on 2026.10 in this pass.
 
+- **Deployed as v0.66.3** (2026-10-13). 0.66.1 and 0.66.2 never deployed: the on-host image build
+  failed on Playwright 1.63.0's broken Chrome download, so 0.66.3 builds with `playwright!=1.63.0`
+  and the image carries Playwright **1.62.0**. `self_check` → `overall: ok`, `ha_ops_version: 0.66.3`.
+  `tools_check` → **`all_pass` 16/16**, `in_window: true`, `ui.browser_available: true`. Live scale:
+  1955 states, 3072 registry entities, 246 devices, 7,149,602 `states` rows, refindex 3541/5457.
+
 ### `v0.65.1` → certified `v0.66.0` — verified 2026-09-03 (**Singapore HA** — first baseline on HA 2026.9.0)
 
 Server side: HA Core **2026.9.0**, Supervisor **2026.08.0**, HAOS **18.2** amd64, HA bundled Python
