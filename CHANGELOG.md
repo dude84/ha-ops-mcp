@@ -1,3 +1,12 @@
+## 0.66.2
+
+**Fixed: the add-on image failed to build on hosts with broken IPv6.** The
+on-host build downloads Chrome for Playwright, and Playwright's downloader
+connects to the first address DNS returns with no fallback. Where the network
+hands out IPv6 addresses but cannot route IPv6, every attempt hung until it timed
+out and the update to 0.66.1 failed. The install step now prefers IPv4
+(`NODE_OPTIONS=--dns-result-order=ipv4first`). Playwright stays unpinned.
+
 ## 0.66.1
 
 **Certified against Home Assistant 2026.10.1. Supported window is now 2026.6 – 2026.10.**
