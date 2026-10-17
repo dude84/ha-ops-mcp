@@ -28,7 +28,7 @@ Every release is verified against a live instance with `haops_tools_check` — 1
 
 | ha-ops-mcp | HA Core | DB schema | Result |
 |---|---|---|---|
-| 0.66.3 | 2026.10.2 | 53 | 16/16 groups pass, Singapore |
+| 0.66.3 | 2026.10.2 | 53 | 16/16 groups pass, both instances |
 | 0.66.1 | 2026.10.1 | 53 | 16/16 groups pass, Singapore |
 | 0.66.0 | 2026.9.4 | 53 | 16/16 groups pass, both instances |
 | 0.66.0 | 2026.9.3 | 53 | 16/16 groups pass, both instances |

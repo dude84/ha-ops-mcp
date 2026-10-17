@@ -15,7 +15,7 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
-### `v0.66.3` — verified 2026-10-17 (**Singapore HA** — HA 2026.10.2 patch update)
+### `v0.66.3` — verified 2026-10-17 (**Singapore and Poland HA** — HA 2026.10.2 patch update)
 
 Server side: HA Core **2026.10.2**, Supervisor **2026.10.2**, HAOS **18.3** amd64, MariaDB
 **11.4.10** schema **53**, Docker socket present (20 containers, all running). Client side: Claude
@@ -28,6 +28,11 @@ Code **2.1.302**, macOS **27.0.1** (build 26A434), iTerm2 **3.7.3**, Bun **1.3.1
   6,908,474 `states` rows, 431 `statistics_meta`, refindex 3612 nodes / 5586 edges, 30 Zigbee
   devices (`*_v15`), 16 ESPHome node configs, 14 add-ons, 6 users.
 - `haops_config_validate` still fails with `config/check_config` → `Unknown command`.
+- **Poland**, same day: HA 2026.10.2, Supervisor 2026.10.2, HAOS 18.3, MariaDB 11.4.10 schema 53.
+  `self_check` → `overall: ok`, `ha_ops_version: 0.66.3`; `tools_check` → **`all_pass` 16/16**,
+  `in_window: true`. Scale: 1076 states, 1365 registry entities, 142 devices, 50 config entries,
+  3,718,824 `states` rows, refindex 1630/2759, 23 Zigbee devices, 8 ESPHome configs, 13 add-ons.
+  `config/check_config` → `Unknown command` there too. First Poland run on any 2026.10 release.
 - Client deltas since the last baseline: Claude Code 2.1.296 → **2.1.302**, Supervisor 2026.09.3 →
   **2026.10.2**. compat.py unchanged: the 2026.10 window already covers the patch.
 

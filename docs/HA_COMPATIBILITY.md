@@ -21,7 +21,7 @@ server logs a warning at startup when the live instance falls outside the window
 | **Oldest supported** | **2026.6** |
 | **Newest verified** | **2026.10** |
 | Verified how | `haops_tools_check` → `all_pass`, 16/16 groups, 0 broken tools |
-| Verified on | Singapore HA, 2026-10-12, addon v0.66.0 → certified as v0.66.1; re-confirmed on HA 2026.10.2 with v0.66.3, 2026-10-17 (Poland not yet re-run on 2026.10) |
+| Verified on | Singapore HA, 2026-10-12, addon v0.66.0 → certified as v0.66.1; re-confirmed on Singapore **and** Poland at HA 2026.10.2 with v0.66.3, 2026-10-17 |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,7 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
-| 0.66.3 | 2026.10.2 | 53 | 16/16 pass, Singapore (HA patch bump, no surface change); `config/check_config` still gone | 2026-10-17 |
+| 0.66.3 | 2026.10.2 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-10-17 |
 | 0.66.0 | 2026.10.1 | 53 | 16/16 pass, Singapore; device registry now 3.4 (`child_devices` list) — loader fixed, certified as 0.66.1 | 2026-10-12 |
 | 0.66.0 | 2026.9.4 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-09-28 |
 | 0.66.0 | 2026.9.3 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-09-19 |
