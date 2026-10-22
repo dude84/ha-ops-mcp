@@ -1,3 +1,14 @@
+## 0.66.4
+
+**Fixed: `haops_esphome_status` and `haops_esphome_build` missed nodes built
+entirely from remote packages.** A node was only recognised by a top-level
+`esphome:` block, but configs like the Xiaomi bslamp2 lamps get that block from
+the package and pass the node name as a `name` substitution. Such files were
+treated as package fragments, so the node was not listed and could not be
+compiled ("No ESPHome node config matches"). A yaml with `packages:` now counts
+as a node, and its name comes from the `name` substitution when there is no
+`esphome.name`.
+
 ## 0.66.3
 
 **Fixed: the add-on image failed to build on slower connections.** The cause is

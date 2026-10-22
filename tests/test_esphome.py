@@ -569,6 +569,23 @@ def test_package_based_config_reports_unknown_not_false(config_dir):
     assert node["uses_packages"] is True
 
 
+def test_esphome_block_from_a_package_is_still_a_node(config_dir):
+    """The bslamp2 lamp configs carry no `esphome:` block of their own."""
+    d = config_dir / "esphome"
+    d.mkdir(exist_ok=True)
+    path = d / "sg-mi-bedside-lamp.yaml"
+    path.write_text(
+        "substitutions:\n  name: bedside\n  friendly_name: Bedside\n\n"
+        "packages:\n  remote:\n    url: https://example.invalid/repo\n"
+    )
+
+    node = _parse_node(path)
+
+    assert node is not None
+    assert node["node"] == "bedside"
+    assert node["friendly_name"] == "Bedside"
+
+
 def test_plain_config_still_reports_false(esphome_dir):
     path = esphome_dir / "plain.yaml"
     path.write_text("esphome:\n  name: plain\n")

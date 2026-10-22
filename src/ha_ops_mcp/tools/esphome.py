@@ -167,7 +167,9 @@ def _parse_node(path: Path) -> dict[str, Any] | None:
     except Exception as e:  # malformed YAML is a finding, not a crash
         return {"file": path.name, "error": f"unparseable: {str(e)[:200]}"}
 
-    if not isinstance(data, dict) or "esphome" not in data:
+    # A node built from remote packages can get its whole `esphome:` block from
+    # the package (the bslamp2 lamp configs do), so `packages:` counts too.
+    if not isinstance(data, dict) or not ("esphome" in data or "packages" in data):
         # A package/include fragment, not a compilable node.
         return None
 
@@ -184,8 +186,10 @@ def _parse_node(path: Path) -> dict[str, Any] | None:
         if isinstance(raw_name, str)
         else None
     )
+    # Packaged configs conventionally pass the name as a `name` substitution;
     # ESPHome falls back to the filename when `name:` is templated away.
-    node = name or path.stem
+    sub_name = subs.get("name") if raw_name is None else None
+    node = name or (str(sub_name) if sub_name else None) or path.stem
 
     platform = None
     board = None
