@@ -15,6 +15,31 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.66.4` — verified 2026-10-22 (**Singapore and Poland HA** — ESPHome node-discovery fix)
+
+Server side: HA Core **2026.10.2**, Supervisor **2026.10.3**, HAOS **18.3** amd64, MariaDB
+**11.4.10** schema **53**. ESPHome add-on: **2026.10.0** on Singapore, **2026.9.1** on Poland.
+Client side: Claude Code **2.1.308**, macOS **27.0.1**, iTerm2 **3.7.6**, Bun **1.3.14**, Node
+**v26.12.0**. Transport streamable-http + static Bearer token, raw-IP URL.
+
+- **Singapore:**
+  - `haops_self_check` → `overall: ok`, `ha_ops_version: 0.66.4`.
+  - `haops_tools_check` → **`all_pass`, 16/16 groups**, `in_window: true`.
+  - Scale: 2019 states, 3140 registry entities, 249 devices, 6,422,041 `states` rows, and
+    17 ESPHome node configs, up from 16. The new one is `sg-mi-bedside-lamp`, a
+    packages-only config that the old parser skipped; `haops_esphome_status` now maps it to
+    its HA device.
+- **Poland:**
+  - `self_check` → `overall: ok`, `ha_ops_version: 0.66.4`.
+  - `tools_check` → **`all_pass` 16/16**.
+  - Scale: 1077 states, 1365 entities, 142 devices, 3,732,755 `states` rows,
+    8 ESPHome configs.
+- Client deltas since the last baseline:
+  - Claude Code 2.1.302 → **2.1.308**
+  - iTerm2 3.7.3 → **3.7.6**
+  - Node v26.5.0 → **v26.12.0**
+  - Supervisor 2026.10.2 → **2026.10.3**
+
 ### `v0.66.3` — verified 2026-10-17 (**Singapore and Poland HA** — HA 2026.10.2 patch update)
 
 Server side: HA Core **2026.10.2**, Supervisor **2026.10.2**, HAOS **18.3** amd64, MariaDB
