@@ -196,3 +196,84 @@ Related: [[project_zigbee_coordinator_flash]], [[project_zigbee_channel_migratio
 
 ---
 
+
+## Fleet ops: move every ESPHome node from OTA password to OTA encryption
+
+Not urgent, but every item below has a deadline. This is home-fleet work done
+through ha-ops-mcp, not a code change in this repo. Found 2026-10-22 while
+fixing the SG bedside lamp build (bslamp2 fork, ESPHome 2026.10).
+
+**Scope.** `esphome config` was run on all 25 configs:
+
+- SG: 17 configs, ESPHome 2026.10.0.
+- PL: 8 configs, ESPHome 2026.9.1.
+
+All 25 warn "'ota' password wastes significant flash and RAM". Every one already
+has `api: encryption: key`, which OTA encryption reuses, so no new secret is needed.
+
+**What it buys.**
+
+- Encrypted uploads. With a password, the image goes in plain text, and the
+  image contains the wifi credentials and the api key.
+- One less secret, since `ota_password` is no longer used.
+- About 3.5 KB of flash and about 60 B of RAM per node, according to ESPHome's
+  own estimate (not measured). That only matters on the 1 MB ESP8266s.
+
+**Recipe.** Each node needs two installs:
+
+1. Migration install, sent once over the old plaintext path:
+   ```yaml
+   ota:
+     - platform: esphome
+       password: !secret ota_password
+       encryption:
+         allow_plaintext_upload: true
+   ```
+2. Final install: drop `password` and `allow_plaintext_upload`, leaving a bare
+   `encryption:` that inherits the api key.
+
+A bare `encryption:` on firmware older than 2026.9 makes the uploader refuse
+("refusing to send the image in plaintext"). No harm is done, but the node
+needs step 1 first.
+
+**Where the `ota:` block lives.**
+
+- Inline in the node yaml: 15 nodes. Edit them directly.
+- Inside a package repo, passed in through the `ota_password` substitution.
+  A change here needs a repo change plus a version bump, and every consumer
+  picks it up.
+  - `dude84/esphome-co2`: sg-co2-bedroom, sg-co2-livingroom, sg-co2-office,
+    sg-co2-walkin.
+  - `dude84/ESP32-CO2-LCD`: pl-co2-lcd-kitchen, sg-co2-lcd-office,
+    pl-co2-lcd-livingroom.
+  - `dude84/esphome-audio-sentinel`: sg-baby-audio-sentinel-s3.
+
+**Deadlines found in the same scan.**
+
+| What | Nodes | Breaks in |
+|---|---|---|
+| Password field redacted by the legacy substring heuristic (from the `ESP32-CO2-LCD` package) | the 3 CO2-LCD nodes | 2026.12.0 (heuristic removed) |
+| `parse_esphome_version()`: use `cv.require_esphome_version` instead (bslamp2 fork, `components/xiaomi_bslamp2/__init__.py:53`) | sg-mi-bedside-lamp | 2027.2.0 |
+| `rgb_order`: use `channel_colors: GRB` instead | sg-baby-audio-sentinel-s3, sg-electric-desk | 2027.3.0 |
+| Plaintext fallback for an install without `ota: encryption:` | all | 2027.3.0 |
+
+pl-ir-blaster-up fails config; that device is known dead, so skip it.
+
+**Stages.**
+
+1. **Canary:** sg-mi-bedside-lamp. Fix `parse_esphome_version` in the fork in
+   the same pass.
+2. **Simple SG inline nodes:** sg-ir-livingroom, sg-bambulamp-bedroom,
+   sg-mi-desk-lamp-pro, sg-electric-desk (fix `rgb_order` too).
+3. **Flash-tight ESP8266s:** sg-mi-desk-lamp-1 (esp8285) and
+   smart-powerstrip-office (esp01_1m). Before installing, check fit with
+   `haops_esphome_build` and `target_free_bytes`.
+4. **SG package groups:** `esphome-co2`, then `ESP32-CO2-LCD`. The
+   `ESP32-CO2-LCD` change also fixes the redaction warning. Do this before
+   2026.12.
+5. **PL:** 7 nodes, with no physical access if a flash fails. pl-smart-water-tank
+   goes last, because its relays don't survive a reboot.
+6. **Risky or offline nodes, done when in hand:**
+   - sg-baby-audio-sentinel-s3: has had OTA brown-outs, so be ready for USB.
+   - sg-co2-lcd-office: offline.
+   - sg-microscope-led, sg-n20-motor, sg-bl-proxy-and-inkbird: never adopted.
