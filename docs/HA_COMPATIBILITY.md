@@ -21,7 +21,7 @@ server logs a warning at startup when the live instance falls outside the window
 | **Oldest supported** | **2026.6** |
 | **Newest verified** | **2026.10** |
 | Verified how | `haops_tools_check` → `all_pass`, 16/16 groups, 0 broken tools |
-| Verified on | Singapore HA, 2026-10-12, addon v0.66.0 → certified as v0.66.1; re-confirmed on Singapore **and** Poland at HA 2026.10.2 with v0.66.3, 2026-10-17 |
+| Verified on | Singapore HA, 2026-10-12, addon v0.66.0 → certified as v0.66.1; re-confirmed on Singapore **and** Poland at HA 2026.10.2 with v0.66.3, 2026-10-17, and at HA 2026.10.3 with v0.66.4, 2026-10-24 |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.66.4 | 2026.10.3 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-10-24 |
 | 0.66.3 | 2026.10.2 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-10-17 |
 | 0.66.0 | 2026.10.1 | 53 | 16/16 pass, Singapore; device registry now 3.4 (`child_devices` list) — loader fixed, certified as 0.66.1 | 2026-10-12 |
 | 0.66.0 | 2026.9.4 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-09-28 |
@@ -64,7 +65,7 @@ almost all HA breakage is integration-level and touches none of it.
 
 | Command | Used by |
 |---|---|
-| `config/check_config` | `haops_config_validate` — **BROKEN on 2026.9.2 – 2026.10.2**, see below |
+| `config/check_config` | `haops_config_validate` — **BROKEN on 2026.9.2 – 2026.10.3**, see below |
 | `config/area_registry/list` | registry tools (fallback) |
 | `config/device_registry/list` | registry tools (fallback) |
 | `config/entity_registry/list` | registry tools (fallback) |
@@ -285,7 +286,7 @@ what we do:
 | Device registry | **3.4** — see above |
 | Entity registry | 1.23 |
 | `zigbee.db` | still `*_v15` tables |
-| `config/check_config` | still gone (also on 2026.10.2) |
+| `config/check_config` | still gone (also on 2026.10.2 and 2026.10.3) |
 
 ### `config/check_config` is gone — 2026.9.2, still gone on 2026.9.4 (FOUND 2026-09-17)
 

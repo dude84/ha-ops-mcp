@@ -15,6 +15,29 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.66.4` — verified 2026-10-24 (**Singapore and Poland HA** — HA 2026.10.3 patch update)
+
+Server side: HA Core **2026.10.3**, Supervisor **2026.10.3**, HAOS **18.3** amd64, MariaDB
+**11.4.10** schema **53**. Client side: Claude Code **2.1.310**, macOS **27.0.1** (build 26A434),
+iTerm2 **3.7.6**, Bun **1.3.14**, Node **v26.12.0**. Transport streamable-http + static Bearer
+token, raw-IP URL.
+
+- **Singapore:**
+  - `haops_self_check` → `overall: ok`, `ha_ops_version: 0.66.4`.
+  - `haops_tools_check` → **`all_pass`, 16/16 groups, 0 broken tools**, `in_window: true`.
+  - Scale: 2019 states, 3140 registry entities, 249 devices, 109 config entries (12 removable),
+    6,256,261 `states` rows, 433 `statistics_meta`, refindex 3613 nodes / 5595 edges, 30 Zigbee
+    devices (`*_v15`), 17 ESPHome node configs, 14 add-ons, 6 users.
+- **Poland:**
+  - `self_check` → `overall: ok`, `ha_ops_version: 0.66.4`.
+  - `tools_check` → **`all_pass` 16/16**, `in_window: true`. The first call ended in a client-side
+    `ECONNRESET`; the immediate retry passed, and SG was unaffected.
+  - Scale: 1076 states, 1365 entities, 142 devices, 50 config entries, 3,740,912 `states` rows,
+    refindex 1630/2759, 23 Zigbee devices, 8 ESPHome configs, 13 add-ons, 5 users.
+- `haops_config_validate` still fails on both with `config/check_config` → `Unknown command`.
+- Deltas since the last baseline: HA Core 2026.10.2 → **2026.10.3**, Claude Code 2.1.308 →
+  **2.1.310**. compat.py unchanged: the 2026.10 window already covers the patch.
+
 ### `v0.66.4` — verified 2026-10-22 (**Singapore and Poland HA** — ESPHome node-discovery fix)
 
 Server side: HA Core **2026.10.2**, Supervisor **2026.10.3**, HAOS **18.3** amd64, MariaDB
