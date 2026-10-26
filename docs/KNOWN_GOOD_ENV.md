@@ -15,6 +15,33 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.66.5` — verified 2026-10-26 (**Singapore and Poland HA** — config_validate over REST, batch chaining, add-on option masking)
+
+Server side unchanged from the 2026-10-25 row: HA Core **2026.10.4**, Supervisor **2026.10.3**,
+HAOS **18.3** amd64, MariaDB **11.4.10** schema **53**. Client side: macOS **27.0.1**, iTerm2
+**3.7.6**, Bun **1.3.14**, Node **v26.12.0**; Claude Code not re-read (`claude --version` hit a
+broken local `cc-wrapper` shim), last known **2.1.310**. Transport streamable-http + static Bearer
+token, raw-IP URL.
+
+- **Singapore:**
+  - `haops_self_check` → `overall: ok`, `ha_ops_version: 0.66.5`.
+  - `haops_tools_check` → **`all_pass`, 16/16 groups, 0 broken tools**, `in_window: true`; the new
+    `rest_api.check_config_route` probe passes (405 on GET).
+  - `haops_config_validate` → `valid: true` (first working run since HA 2026.9.2).
+  - `haops_addon_info` → `ha_token`/`auth_token` and MariaDB `logins[].password` come back
+    `***masked***`; empty `db_url` stays visible.
+  - Scale: 2023 states, 3140 entities, 249 devices, 109 config entries (12 removable), 6,061,750
+    `states` rows, 433 `statistics_meta`, refindex 3613/5595, 30 Zigbee devices, 17 ESPHome
+    configs, 14 add-ons, 6 users.
+- **Poland:**
+  - `self_check` → `overall: ok`, `ha_ops_version: 0.66.5`.
+  - `tools_check` → **`all_pass` 16/16**, `check_config_route` ok, `in_window: true`.
+  - `config_validate` → `valid: true`; `addon_info` masks `ha_token`/`auth_token`.
+  - Scale: 1077 states, 1365 entities, 142 devices, 50 config entries (11 removable), 3,746,934
+    `states` rows, refindex 1630/2759, 23 Zigbee devices, 8 ESPHome configs, 13 add-ons, 5 users.
+- Deltas since the last baseline: ha-ops-mcp 0.66.4 → **0.66.5**; Playwright exclusion dropped
+  from the Dockerfile (image now takes the latest Playwright, 1.64.x).
+
 ### `v0.66.4` — verified 2026-10-25 (**Singapore and Poland HA** — HA 2026.10.4 patch update)
 
 Server side: HA Core **2026.10.4**, Supervisor **2026.10.3**, HAOS **18.3** amd64, MariaDB
