@@ -30,10 +30,7 @@ RUN python3 -m venv /opt/ha-ops-mcp
 # invalidate this layer and re-download Chromium (keeps rebuilds fast).
 # `--with-deps` apt-installs the headless shell's system libs (needs apt lists,
 # so refresh here and clean afterwards).
-# !=1.63.0: its downloader follows cdn.playwright.dev's redirect without clearing the
-# first request's timeout, which kills any Chrome download slower than ~5 s. Drop the
-# exclusion once a fixed release ships. Not a pin: newer releases are still picked up.
-RUN /opt/ha-ops-mcp/bin/pip install --no-cache-dir "playwright!=1.63.0" \
+RUN /opt/ha-ops-mcp/bin/pip install --no-cache-dir playwright \
     && apt-get update \
     && /opt/ha-ops-mcp/bin/playwright install --with-deps chromium-headless-shell \
     && rm -rf /var/lib/apt/lists/* /root/.cache/pip

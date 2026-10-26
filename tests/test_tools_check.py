@@ -81,6 +81,51 @@ async def test_tools_check_rest_api_calls_real_endpoints(ctx):
     # handled via filesystem/WS instead (see tools_check filesystem group)
 
 
+def _rest_get_with_check_route(status: int):
+    """REST GET mock: real-looking answers, check_config route raises `status`."""
+    from ha_ops_mcp.connections.rest import RestClientError
+
+    async def get(path: str):
+        if path == "/api/config/core/check_config":
+            raise RestClientError(status, "probe")
+        if path == "/api/config":
+            return {"version": "2026.10.4"}
+        if path == "/api/states":
+            return [{"entity_id": "sun.sun", "state": "above_horizon"}]
+        if path.startswith("/api/states/"):
+            return {"entity_id": "sun.sun", "state": "above_horizon"}
+        return {}
+
+    return get
+
+
+@pytest.mark.asyncio
+async def test_tools_check_check_config_route_present(ctx):
+    """405 on GET means the POST-only check_config view is registered."""
+    ctx.ws.send_command = AsyncMock(return_value=[])
+    ctx.rest.get = AsyncMock(side_effect=_rest_get_with_check_route(405))
+
+    rest = (await haops_tools_check(ctx))["rest_api"]
+
+    assert rest["tests"]["check_config_route"]["ok"] is True
+    assert rest["status"] == "pass"
+    assert "haops_config_validate" in rest["tools_affected"]
+
+
+@pytest.mark.asyncio
+async def test_tools_check_check_config_route_gone(ctx):
+    """404 means HA removed the route: the group fails and names the tool."""
+    ctx.ws.send_command = AsyncMock(return_value=[])
+    ctx.rest.get = AsyncMock(side_effect=_rest_get_with_check_route(404))
+
+    result = await haops_tools_check(ctx)
+
+    rest = result["rest_api"]
+    assert rest["tests"]["check_config_route"]["ok"] is False
+    assert rest["status"] == "fail"
+    assert "haops_config_validate" in result["summary"]["broken_tools"]
+
+
 @pytest.mark.asyncio
 async def test_tools_check_shell_runs_echo(ctx):
     """Shell check runs a real echo command."""

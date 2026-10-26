@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 async def _check_rest_api(ctx: HaOpsContext) -> dict[str, Any]:
     """Exercise REST endpoints used by entity/system/service tools."""
+    from ha_ops_mcp.connections.rest import RestClientError
+
     checks: dict[str, Any] = {}
 
     try:
@@ -55,6 +57,26 @@ async def _check_rest_api(ctx: HaOpsContext) -> dict[str, Any]:
         except Exception as e:
             checks["api_single_state"] = {"ok": False, "error": str(e)[:200]}
 
+    # Config check route — powers haops_config_validate. A GET is a cheap
+    # existence probe: the view only accepts POST, so 405 means the route is
+    # registered and 404 means HA removed it. Running the check itself would
+    # load the whole config, which is too heavy for a passive probe.
+    try:
+        await ctx.rest.get("/api/config/core/check_config")
+        checks["check_config_route"] = {"ok": True, "probe": "GET answered"}
+    except RestClientError as e:
+        checks["check_config_route"] = {
+            "ok": e.status == 405,
+            "endpoint": "POST /api/config/core/check_config",
+            **(
+                {"probe": "route present (405 on GET)"}
+                if e.status == 405
+                else {"error": str(e)[:200]}
+            ),
+        }
+    except Exception as e:
+        checks["check_config_route"] = {"ok": False, "error": str(e)[:200]}
+
     # Note: /api/config/entity_registry was removed from REST (WS-only now).
     # Entity registry is read from filesystem with WS fallback — tested in
     # the filesystem/websocket groups. Not tested here.
@@ -69,7 +91,7 @@ async def _check_rest_api(ctx: HaOpsContext) -> dict[str, Any]:
         "tools_affected": [
             "haops_entity_list", "haops_entity_audit", "haops_entity_state",
             "haops_system_info", "haops_system_logs", "haops_service_call",
-            "haops_monitor_entity",
+            "haops_monitor_entity", "haops_config_validate",
         ],
         "tests": checks,
     }
@@ -141,7 +163,6 @@ async def _check_websocket(ctx: HaOpsContext) -> dict[str, Any]:
             "haops_dashboard_apply",
             "haops_batch_preview", "haops_batch_apply",
             "haops_dashboard_resources",
-            "haops_config_validate",
             "haops_entity_toggle", "haops_entity_remove",
             "haops_entity_rename",
             "haops_ws_command", "haops_zha_reconfigure_device",

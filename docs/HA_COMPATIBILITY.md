@@ -66,7 +66,7 @@ almost all HA breakage is integration-level and touches none of it.
 
 | Command | Used by |
 |---|---|
-| `config/check_config` | `haops_config_validate` — **BROKEN on 2026.9.2 – 2026.10.4**, see below |
+| `config/check_config` | nothing since v0.66.5 — removed by HA 2026.9.2; `haops_config_validate` moved to REST, see below |
 | `config/area_registry/list` | registry tools (fallback) |
 | `config/device_registry/list` | registry tools (fallback) |
 | `config/entity_registry/list` | registry tools (fallback) |
@@ -93,6 +93,10 @@ almost all HA breakage is integration-level and touches none of it.
 `/api/config` · `/api/states` · `/api/states/<entity_id>` · `/api/services` ·
 `/api/services/<domain>/<service>` · `/api/template` · `/api/error_log` ·
 `/api/history/period/<ts>` · `/api/logbook/<ts>`
+
+`POST /api/config/core/check_config` (admin) — `haops_config_validate` since v0.66.5. Returns
+`{result: "valid"|"invalid", errors, warnings}`. `tools_check` probes it with a GET: the view is
+POST-only, so **405 = present**, 404 = removed.
 
 **Config-flow endpoints** (v0.64.0+, `haops_integration_flow_*`) — the method
 matters here, so they are listed separately:
@@ -290,6 +294,14 @@ what we do:
 | `config/check_config` | still gone (also on 2026.10.2, 2026.10.3 and 2026.10.4) |
 
 ### `config/check_config` is gone — 2026.9.2, still gone on 2026.9.4 (FOUND 2026-09-17)
+
+**FIXED in v0.66.5 (2026-10-26).** `haops_config_validate` now calls the REST view
+`POST /api/config/core/check_config`. That view is still registered in HA 2026.10.4
+(`homeassistant/components/config/core.py`, `CheckConfigView`) and returns the same
+`{result, errors, warnings}` shape the formatter already parsed. Verified on Singapore: 0.24 s,
+`valid`. `tools_check`'s `rest_api` group now probes the route (405 on GET = present), so a
+future removal fails the group and names `haops_config_validate` as broken. The original
+finding follows.
 
 The first surface breakage this list has caught in the wild, and it invalidates part of the
 2026.9 "nothing moved" entry below.

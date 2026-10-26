@@ -17,6 +17,7 @@ single-item flow.
 
 from __future__ import annotations
 
+import copy
 import io
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -79,7 +80,7 @@ def _validate_item_shape(item: dict[str, Any]) -> str | None:
 
 
 async def _prepare_config_patch(
-    ctx: HaOpsContext, item: dict[str, Any]
+    ctx: HaOpsContext, item: dict[str, Any], pending: dict[str, Any]
 ) -> dict[str, Any]:
     """Validate + compute new content for a config_patch batch item.
 
@@ -87,18 +88,25 @@ async def _prepare_config_patch(
     result ready to be embedded in the batch token. On error, returns a
     dict with an "error" key and no new content — the caller must refuse
     to issue the batch token.
+
+    ``pending`` holds the content an earlier item in the same batch leaves
+    a target in; the patch applies on top of that, not on the live file.
     """
     path = item["path"]
     patch = item["patch"]
     resolved = ctx.path_guard.validate(path)
 
-    if not resolved.exists():
+    key = f"file:{resolved}"
+    if key in pending:
+        old_content = pending[key]
+    elif resolved.exists():
+        old_content = resolved.read_text()
+    else:
         return {
             "error": f"File not found: {path}",
             "hint": "Use config_create for new files.",
         }
 
-    old_content = resolved.read_text()
     try:
         new_content = apply_patch(old_content, patch)
     except PatchApplyError as e:
@@ -133,13 +141,13 @@ async def _prepare_config_patch(
 
 
 async def _prepare_config_create(
-    ctx: HaOpsContext, item: dict[str, Any]
+    ctx: HaOpsContext, item: dict[str, Any], pending: dict[str, Any]
 ) -> dict[str, Any]:
     path = item["path"]
     content = item["content"]
     resolved = ctx.path_guard.validate(path)
 
-    if resolved.exists():
+    if resolved.exists() or f"file:{resolved}" in pending:
         return {
             "error": (
                 f"File already exists: {path}. "
@@ -166,12 +174,16 @@ async def _prepare_config_create(
 
 
 async def _prepare_dashboard_patch(
-    ctx: HaOpsContext, item: dict[str, Any]
+    ctx: HaOpsContext, item: dict[str, Any], pending: dict[str, Any]
 ) -> dict[str, Any]:
     dashboard_id = item["dashboard_id"]
     patch = item["patch"]
 
-    old_config = await _get_dashboard_config(ctx, dashboard_id)
+    key = f"dashboard:{dashboard_id}"
+    if key in pending:
+        old_config = copy.deepcopy(pending[key])
+    else:
+        old_config = await _get_dashboard_config(ctx, dashboard_id)
     if old_config is None:
         return {"error": f"Dashboard not found: {dashboard_id}"}
 
@@ -270,16 +282,27 @@ async def haops_batch_preview(
         if err:
             return {"error": f"items[{idx}]: {err}"}
 
+    # Items are prepared in order, each against the state the earlier items
+    # leave its target in. Two items on one target then chain: the second
+    # item's old state is the first item's new state, so apply's drift
+    # recheck passes and neither write clobbers the other.
     prepared: list[dict[str, Any]] = []
+    pending: dict[str, Any] = {}
     for idx, item in enumerate(items):
         tool = item["tool"]
-        result = await PREPARE_DISPATCH[tool](ctx, item)
+        result = await PREPARE_DISPATCH[tool](ctx, item, pending)
         if "error" in result:
             return {
                 "error": f"items[{idx}] ({tool}): {result['error']}",
                 "hint": result.get("hint"),
             }
         prepared.append(result)
+        if tool == "dashboard_patch":
+            pending[f"dashboard:{result['dashboard_id']}"] = copy.deepcopy(
+                result["new_config"]
+            )
+        else:
+            pending[f"file:{result['path']}"] = result["new_content"]
 
     # Build combined rendered diff: one markdown document with per-target
     # headers followed by that target's fenced diff. This is the artefact

@@ -11,23 +11,34 @@ from ha_ops_mcp.tools.config import haops_config_search, haops_config_validate
 
 @pytest.mark.asyncio
 async def test_config_validate_valid(ctx):
-    ctx.ws.send_command = AsyncMock(return_value={
+    ctx.rest.post = AsyncMock(return_value={
         "result": "valid", "errors": None, "warnings": None,
     })
     result = await haops_config_validate(ctx)
     assert result["valid"] is True
-    # Must use the WS command, not the (response-less) REST service.
-    ctx.ws.send_command.assert_awaited_once_with("config/check_config")
+    # Must use the REST view: the WS config/check_config command is gone
+    # since HA 2026.9.2 and the service returns no response object.
+    ctx.rest.post.assert_awaited_once_with("/api/config/core/check_config")
 
 
 @pytest.mark.asyncio
 async def test_config_validate_invalid(ctx):
-    ctx.ws.send_command = AsyncMock(return_value={
+    ctx.rest.post = AsyncMock(return_value={
         "result": "invalid", "errors": "Invalid platform: foo", "warnings": None,
     })
     result = await haops_config_validate(ctx)
     assert result["valid"] is False
     assert result["errors"] == "Invalid platform: foo"
+
+
+@pytest.mark.asyncio
+async def test_config_validate_route_gone(ctx):
+    from ha_ops_mcp.connections.rest import RestClientError
+
+    ctx.rest.post = AsyncMock(side_effect=RestClientError(404, "Not Found"))
+    result = await haops_config_validate(ctx)
+    assert "error" in result
+    assert "404" in result["error"]
 
 
 @pytest.mark.asyncio

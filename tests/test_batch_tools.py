@@ -377,3 +377,112 @@ async def test_batch_apply_stale_dashboard_item_fails(ctx, dashboard_storage):
     assert result["success"] is False
     assert "changed" in result["failed_at"]["error"]
     assert "since preview" in result["failed_at"]["error"]
+
+
+# ── several items on one target ──────────────────────────────────────────
+# Regression: each item used to be prepared against the live target, so a
+# second item on the same dashboard was diffed against the original. Apply's
+# drift recheck then saw the first item's write and failed the batch.
+
+
+def _save_to_storage(storage: Path):
+    """Mock lovelace/config/save that writes through to .storage like HA does."""
+
+    async def save(command: str, **kwargs):
+        assert command == "lovelace/config/save"
+        storage_file = storage / "lovelace"
+        data = json.loads(storage_file.read_text())
+        data["data"]["config"] = kwargs["config"]
+        storage_file.write_text(json.dumps(data))
+
+    return save
+
+
+@pytest.mark.asyncio
+async def test_batch_two_dashboard_patches_on_one_dashboard(ctx, dashboard_storage):
+    preview = await haops_batch_preview(ctx, items=[
+        {"tool": "dashboard_patch", "dashboard_id": "lovelace",
+         "patch": [{"op": "add", "path": "/views/0/cards/-",
+                    "value": {"type": "markdown", "content": "A"}}]},
+        {"tool": "dashboard_patch", "dashboard_id": "lovelace",
+         "patch": [{"op": "add", "path": "/views/0/cards/-",
+                    "value": {"type": "markdown", "content": "B"}}]},
+    ])
+    assert "token" in preview, preview
+
+    ctx.ws.send_command = AsyncMock(side_effect=_save_to_storage(dashboard_storage))
+    result = await haops_batch_apply(ctx, token=preview["token"])
+    assert result["success"] is True, result
+
+    config = json.loads((dashboard_storage / "lovelace").read_text())["data"]["config"]
+    contents = [c.get("content") for c in config["views"][0]["cards"]]
+    assert contents == [None, "A", "B"]
+
+
+@pytest.mark.asyncio
+async def test_batch_two_dashboard_patches_roll_back_to_original(
+    ctx, dashboard_storage
+):
+    original = json.loads((dashboard_storage / "lovelace").read_text())["data"]["config"]
+    preview = await haops_batch_preview(ctx, items=[
+        {"tool": "dashboard_patch", "dashboard_id": "lovelace",
+         "patch": [{"op": "replace", "path": "/title", "value": "One"}]},
+        {"tool": "dashboard_patch", "dashboard_id": "lovelace",
+         "patch": [{"op": "replace", "path": "/title", "value": "Two"}]},
+        {"tool": "config_create", "path": "late.yaml", "content": "a: 1\n"},
+    ])
+    assert "token" in preview, preview
+
+    # The third item fails at apply: its file appears after the preview.
+    (ctx.path_guard.config_root / "late.yaml").write_text("b: 2\n")
+    ctx.ws.send_command = AsyncMock(side_effect=_save_to_storage(dashboard_storage))
+    result = await haops_batch_apply(ctx, token=preview["token"])
+    assert result["success"] is False
+    assert not result["still_dirty"]
+
+    config = json.loads((dashboard_storage / "lovelace").read_text())["data"]["config"]
+    assert config == original
+
+
+@pytest.mark.asyncio
+async def test_batch_two_config_patches_on_one_file(ctx):
+    target = ctx.path_guard.config_root / "scripts.yaml"
+    target.write_text("a: 1\nb: 2\n")
+    preview = await haops_batch_preview(ctx, items=[
+        {"tool": "config_patch", "path": "scripts.yaml",
+         "patch": "--- a/scripts.yaml\n+++ b/scripts.yaml\n"
+                  "@@ -1,2 +1,2 @@\n-a: 1\n+a: 10\n b: 2\n"},
+        {"tool": "config_patch", "path": "scripts.yaml",
+         "patch": "--- a/scripts.yaml\n+++ b/scripts.yaml\n"
+                  "@@ -1,2 +1,2 @@\n a: 10\n-b: 2\n+b: 20\n"},
+    ])
+    assert "token" in preview, preview
+
+    result = await haops_batch_apply(ctx, token=preview["token"])
+    assert result["success"] is True, result
+    assert target.read_text() == "a: 10\nb: 20\n"
+
+
+@pytest.mark.asyncio
+async def test_batch_create_then_patch_same_file(ctx):
+    preview = await haops_batch_preview(ctx, items=[
+        {"tool": "config_create", "path": "fresh.yaml", "content": "a: 1\n"},
+        {"tool": "config_patch", "path": "fresh.yaml",
+         "patch": "--- a/fresh.yaml\n+++ b/fresh.yaml\n"
+                  "@@ -1 +1 @@\n-a: 1\n+a: 2\n"},
+    ])
+    assert "token" in preview, preview
+
+    result = await haops_batch_apply(ctx, token=preview["token"])
+    assert result["success"] is True, result
+    assert (ctx.path_guard.config_root / "fresh.yaml").read_text() == "a: 2\n"
+
+
+@pytest.mark.asyncio
+async def test_batch_create_twice_same_file_refused(ctx):
+    preview = await haops_batch_preview(ctx, items=[
+        {"tool": "config_create", "path": "dup.yaml", "content": "a: 1\n"},
+        {"tool": "config_create", "path": "dup.yaml", "content": "a: 2\n"},
+    ])
+    assert "error" in preview
+    assert "items[1]" in preview["error"]

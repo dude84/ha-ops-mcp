@@ -187,3 +187,53 @@ def test_supervisor_token_prefers_env_over_config(monkeypatch):
     assert _supervisor_token(ctx) == "SUPTOK"  # env wins
     monkeypatch.delenv("SUPERVISOR_TOKEN", raising=False)
     assert _supervisor_token(ctx) == "LLAT"  # fallback for non-addon/dev
+
+
+@pytest.mark.asyncio
+async def test_addon_info_masks_credentials(ctx):
+    info = {
+        **MOCK_ADDON_INFO,
+        "slug": "ha_ops_mcp",
+        "options": {
+            "ha_token": "eyJhbGciOiJIUzI1NiJ9.secret",
+            "auth_token": "hunter2-long-token",
+            "pin": "1234",
+            "db_url": "mysql://homeassistant:s3cret@core-mariadb/homeassistant",
+            "auth_issuer_url": "http://10.0.0.2:8901",
+            "log_level": "info",
+            "auth_mode": "token",
+            "backup_max_age_days": 30,
+            "mqtt": {"password": "nested-pw", "user": "ha"},
+            "logins": [{"username": "me", "password": "list-pw"}],
+            "api_key": "",
+        },
+        "schema": [
+            {"name": "ha_token", "type": "string", "optional": True},
+            {"name": "auth_token", "type": "string", "format": "password"},
+            {"name": "pin", "type": "string", "format": "password"},
+        ],
+    }
+    with patch(
+        "ha_ops_mcp.tools.addon._supervisor_get",
+        new=_make_supervisor_get_mock({"/info": info, "/stats": MOCK_STATS}),
+    ):
+        result = await haops_addon_info(ctx, slug="ha_ops_mcp")
+
+    opts = result["options"]
+    assert opts["ha_token"] == "***masked***"
+    assert opts["auth_token"] == "***masked***"
+    assert opts["pin"] == "***masked***"  # schema says password, name doesn't
+    assert opts["db_url"] == (
+        "mysql://homeassistant:***masked***@core-mariadb/homeassistant"
+    )
+    assert opts["mqtt"] == {"password": "***masked***", "user": "ha"}
+    assert opts["logins"] == [{"username": "me", "password": "***masked***"}]
+    # Not credentials: left alone
+    assert opts["auth_issuer_url"] == "http://10.0.0.2:8901"
+    assert opts["log_level"] == "info"
+    assert opts["auth_mode"] == "token"
+    assert opts["backup_max_age_days"] == 30
+    assert opts["api_key"] == ""  # empty stays visible: "not set"
+    # The raw secret appears nowhere in the response
+    assert "s3cret" not in str(result)
+    assert "hunter2" not in str(result)

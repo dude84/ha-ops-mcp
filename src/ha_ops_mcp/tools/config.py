@@ -920,22 +920,24 @@ async def haops_config_apply(ctx: HaOpsContext, token: str) -> dict[str, Any]:
     name="haops_config_validate",
     description=(
         "Run Home Assistant's config check without making changes. "
-        "Uses the WebSocket config/check_config command — HA's "
-        "homeassistant.check_config service returns no response object, so the "
-        "WS command is the only way to read the verdict. "
+        "Uses the REST endpoint POST /api/config/core/check_config (admin) — "
+        "HA's homeassistant.check_config service returns no response object, "
+        "and the WS config/check_config command was removed in HA 2026.9.2. "
         "Returns valid/invalid with error details. Read-only, no parameters."
     ),
 )
 async def haops_config_validate(ctx: HaOpsContext) -> dict[str, Any]:
-    from ha_ops_mcp.connections.websocket import WebSocketError
+    import aiohttp
+
+    from ha_ops_mcp.connections.rest import RestClientError
 
     # The homeassistant.check_config *service* does not support return_response
-    # (HA rejects it with HTTP 400). The WS config/check_config command returns
-    # the verdict directly: {"result": "valid"|"invalid", "errors": <str|null>,
-    # "warnings": <str|null>}.
+    # (HA rejects it with HTTP 400), and HA 2026.9.2 dropped the WS
+    # config/check_config command. The REST view returns the verdict directly:
+    # {"result": "valid"|"invalid", "errors": <str|null>, "warnings": <str|null>}.
     try:
-        result = await ctx.ws.send_command("config/check_config")
-    except WebSocketError as e:
+        result = await ctx.rest.post("/api/config/core/check_config")
+    except (RestClientError, aiohttp.ClientError, TimeoutError) as e:
         return {"error": f"Config check failed: {e}"}
 
     if isinstance(result, dict):
@@ -945,7 +947,7 @@ async def haops_config_validate(ctx: HaOpsContext) -> dict[str, Any]:
 
 
 def _format_check_result(response: dict[str, Any]) -> dict[str, Any]:
-    """Format a config/check_config response into valid/invalid output.
+    """Format a check_config response into valid/invalid output.
 
     HA returns {"result": "valid"|"invalid", "errors": <str|null>,
     "warnings": <str|null>}.

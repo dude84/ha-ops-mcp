@@ -8,6 +8,7 @@ not in Container or Core installs.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +21,53 @@ logger = logging.getLogger(__name__)
 
 # The Supervisor API endpoint — available inside HA OS / Supervised
 _SUPERVISOR_URL = "http://supervisor"
+
+MASKED = "***masked***"
+
+# Option keys whose string values are credentials even when the add-on
+# declares them as a plain "str" (ours does: ha_token). Matched per key,
+# case-insensitive, at any nesting depth.
+_SECRET_KEY = re.compile(
+    r"token|passw|secret|api_?key|private_?key|credential|(^|_)key$",
+    re.IGNORECASE,
+)
+# user:password@ in a URL (db_url, mqtt://, ...): keep the user, mask the password.
+_URL_PASSWORD = re.compile(r"(://[^:/@\s]*:)[^@/\s]+(@)")
+
+
+def _password_fields(schema: Any) -> set[str]:
+    """Names of options the Supervisor UI schema marks as passwords.
+
+    /addons/<slug>/info returns the schema as a list of
+    {"name", "type", "format": "password", ...} entries.
+    """
+    if not isinstance(schema, list):
+        return set()
+    return {
+        entry["name"]
+        for entry in schema
+        if isinstance(entry, dict)
+        and isinstance(entry.get("name"), str)
+        and "password" in (entry.get("format"), entry.get("type"))
+    }
+
+
+def _mask_options(value: Any, password_fields: set[str], key: str = "") -> Any:
+    """Return a copy of add-on options with credential values masked.
+
+    Empty and None values stay visible, so "not set" is still readable.
+    """
+    if isinstance(value, dict):
+        return {
+            k: _mask_options(v, password_fields, str(k)) for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask_options(v, password_fields, key) for v in value]
+    if isinstance(value, str) and value:
+        if key in password_fields or _SECRET_KEY.search(key):
+            return MASKED
+        return _URL_PASSWORD.sub(rf"\g<1>{MASKED}\g<2>", value)
+    return value
 
 
 def _supervisor_token(ctx: HaOpsContext) -> str:
@@ -166,7 +214,9 @@ async def haops_addon_list(ctx: HaOpsContext) -> dict[str, Any]:
     description=(
         "SUPERUSER TOOL: Get detailed info for a specific add-on. "
         "Returns version, state, resource usage, network config, "
-        "options, and available updates. "
+        "options, and available updates. Credential-looking option values "
+        "(password fields, token/secret/key names, passwords inside URLs) "
+        "are returned as '***masked***'; empty values stay visible. "
         "Parameters: slug (string, required — e.g. 'core_mariadb', "
         "'core_ssh', 'a]0d7b49_esphome'). "
         "Use haops_addon_list to find the slug."
@@ -200,7 +250,9 @@ async def haops_addon_info(
         "url": info.get("url"),
         "auto_update": info.get("auto_update"),
         "boot": info.get("boot"),  # auto / manual
-        "options": info.get("options"),
+        "options": _mask_options(
+            info.get("options"), _password_fields(info.get("schema"))
+        ),
         "network": info.get("network"),
         "host_network": info.get("host_network"),
         "ingress": info.get("ingress"),

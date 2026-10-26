@@ -1,3 +1,34 @@
+## 0.66.5
+
+**Fixed: `haops_config_validate` works again.** HA 2026.9.2 removed the
+WebSocket `config/check_config` command, so the tool had returned "Unknown
+command" ever since. It now calls the REST endpoint
+`POST /api/config/core/check_config`, which HA still serves and which returns
+the same valid/invalid verdict with errors and warnings. `haops_tools_check`
+now probes that route in its `rest_api` group, so if HA removes it, the check
+fails and names the tool.
+
+**Fixed: several batch items on the same target failed.** `haops_batch_preview`
+prepared every item against the live file or dashboard. A second patch to the
+same dashboard was diffed against the original, so at apply time the drift check
+saw the first item's write and failed the whole batch. Without that check the
+second write would have silently undone the first. Items are now prepared in
+order, each on top of what the earlier items leave behind. Two patches to one
+dashboard or file now apply together, a `config_create` can be followed by a
+`config_patch` of the same file, and two creates of one file are refused at
+preview.
+
+**Security: `haops_addon_info` masks credentials in add-on options.** Values
+that the add-on schema marks as passwords, values under token, password,
+secret or key names, and passwords inside URLs such as `db_url` are now
+returned as `***masked***`. Empty values stay visible, so you can still see
+that an option is not set. Before this, the tool returned every option in
+plain text, including this add-on's own `ha_token`.
+
+**Build: the Playwright 1.63.0 exclusion is gone.** 1.64.0 and 1.64.1 have
+shipped, so the build installs the latest Playwright again without skipping
+any release.
+
 ## 0.66.4
 
 **Fixed: `haops_esphome_status` and `haops_esphome_build` missed nodes built

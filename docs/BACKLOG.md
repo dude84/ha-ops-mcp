@@ -20,11 +20,8 @@ Found 2026-09-17 on HA 2026.9.2 while doing unrelated recorder work. Full writeu
 
 Two pieces of work, and the second matters more than the first:
 
-1. **Find the replacement surface.** Untested candidate: `POST /api/config/core/check_config`
-   (REST), which historically returned `{result, errors, warnings}` — the same shape
-   `_format_check_result()` already parses. Confirm against a live 2026.9.x instance before
-   committing to it. If nothing readable exists any more, the honest fix is for the tool to say
-   so rather than return a misleading error string.
+1. ~~**Find the replacement surface.**~~ DONE in v0.66.5: the tool calls
+   `POST /api/config/core/check_config`, and `tools_check` probes that route.
 
 2. **Make `tools_check` cover it.** This broke without any of the three 2026.9.x verifications
    noticing, because no group exercises the command — `websocket` tests ping, `get_config`,
