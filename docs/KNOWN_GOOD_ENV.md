@@ -15,6 +15,25 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.66.5` — verified 2026-10-31 (**Singapore and Poland HA** — HAOS 18.4 + Supervisor 2026.10.5)
+
+Server side: HA Core **2026.10.4** (unchanged), Supervisor **2026.10.5**, HAOS **18.4** amd64,
+MariaDB **11.4.10** schema **53**. Client side: macOS **27.0.1**, iTerm2 **3.7.6**, Bun
+**1.3.14**, Node **v26.12.0**, Claude Code **2.1.314** (read from `~/.local/bin/claude`, which
+bypasses the broken `cc-wrapper` shim). Transport streamable-http + static Bearer token, raw-IP URL.
+
+- **Both boxes:**
+  - `haops_self_check` → `overall: ok`, `ha_ops_version: 0.66.5`.
+  - `haops_tools_check` → **`all_pass`, 16/16 groups, 0 broken tools**, `in_window: true`.
+  - `haops_config_validate` → `valid: true`.
+- Note: both MCP sessions were refused (ECONNREFUSED) while the hosts rebooted into HAOS 18.4.
+  Claude Code did not reconnect on its own; a manual `/mcp` reconnect fixed it. No server change was needed.
+- Scale: Singapore has 2022 states, 3140 entities, 249 devices, 109 config entries and 5,706,909
+  `states` rows. Poland has 1029 states, 1317 entities, 140 devices, 48 config entries and
+  3,779,283 `states` rows.
+- Deltas since the last baseline: HAOS 18.3 → **18.4**, Supervisor 2026.10.3 → **2026.10.5**,
+  Claude Code 2.1.310 → **2.1.314**.
+
 ### `v0.66.5` — verified 2026-10-26 (**Singapore and Poland HA** — config_validate over REST, batch chaining, add-on option masking)
 
 Server side unchanged from the 2026-10-25 row: HA Core **2026.10.4**, Supervisor **2026.10.3**,
