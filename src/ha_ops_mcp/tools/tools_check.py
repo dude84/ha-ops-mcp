@@ -81,7 +81,7 @@ async def _check_rest_api(ctx: HaOpsContext) -> dict[str, Any]:
     # up in the service catalogue rather than reloading anything.
     try:
         services = await ctx.rest.get("/api/services")
-        ha_core = next(
+        ha_core: dict[str, Any] = next(
             (d for d in services or [] if d.get("domain") == "homeassistant"),
             {},
         )

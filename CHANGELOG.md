@@ -1,3 +1,9 @@
+## 0.66.7
+
+**Fixed: the 0.66.6 build.** The new `haops_tools_check` probe was missing a
+type annotation, so the strict type check failed and 0.66.6 never produced
+release assets. No behaviour change; install this instead of 0.66.6.
+
 ## 0.66.6
 
 **Fixed: `haops_integration_reload` works.** It sent the WebSocket command
