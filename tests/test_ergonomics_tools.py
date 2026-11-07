@@ -66,13 +66,13 @@ async def test_scene_activate_calls_turn_on(ctx, mock_rest):
 
 
 @pytest.mark.asyncio
-async def test_integration_reload_calls_ws(ctx, mock_ws):
-    mock_ws.send_command.return_value = {}
+async def test_integration_reload_calls_service(ctx, mock_rest):
+    mock_rest.post.return_value = []
     res = await haops_integration_reload(ctx, entry_id="mqtt_entry_1")
     assert res["success"] is True
-    call = mock_ws.send_command.await_args
-    assert call.args[0] == "config_entries/reload"
-    assert call.kwargs["entry_id"] == "mqtt_entry_1"
+    call = mock_rest.post.await_args
+    assert call.args[0] == "/api/services/homeassistant/reload_config_entry"
+    assert call.args[1] == {"entry_id": "mqtt_entry_1"}
 
 
 @pytest.mark.asyncio

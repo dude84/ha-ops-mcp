@@ -77,6 +77,25 @@ async def _check_rest_api(ctx: HaOpsContext) -> dict[str, Any]:
     except Exception as e:
         checks["check_config_route"] = {"ok": False, "error": str(e)[:200]}
 
+    # Reload service — powers haops_integration_reload. Read-only: look it
+    # up in the service catalogue rather than reloading anything.
+    try:
+        services = await ctx.rest.get("/api/services")
+        ha_core = next(
+            (d for d in services or [] if d.get("domain") == "homeassistant"),
+            {},
+        )
+        present = "reload_config_entry" in (ha_core.get("services") or {})
+        checks["reload_config_entry_service"] = {
+            "ok": present,
+            "service": "homeassistant.reload_config_entry",
+            **({} if present else {"error": "service not registered"}),
+        }
+    except Exception as e:
+        checks["reload_config_entry_service"] = {
+            "ok": False, "error": str(e)[:200],
+        }
+
     # Note: /api/config/entity_registry was removed from REST (WS-only now).
     # Entity registry is read from filesystem with WS fallback — tested in
     # the filesystem/websocket groups. Not tested here.
@@ -92,6 +111,7 @@ async def _check_rest_api(ctx: HaOpsContext) -> dict[str, Any]:
             "haops_entity_list", "haops_entity_audit", "haops_entity_state",
             "haops_system_info", "haops_system_logs", "haops_service_call",
             "haops_monitor_entity", "haops_config_validate",
+            "haops_integration_reload",
         ],
         "tests": checks,
     }

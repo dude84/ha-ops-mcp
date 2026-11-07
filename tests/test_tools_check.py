@@ -81,13 +81,16 @@ async def test_tools_check_rest_api_calls_real_endpoints(ctx):
     # handled via filesystem/WS instead (see tools_check filesystem group)
 
 
-def _rest_get_with_check_route(status: int):
+def _rest_get_with_check_route(status: int, reload_service: bool = True):
     """REST GET mock: real-looking answers, check_config route raises `status`."""
     from ha_ops_mcp.connections.rest import RestClientError
 
     async def get(path: str):
         if path == "/api/config/core/check_config":
             raise RestClientError(status, "probe")
+        if path == "/api/services":
+            svcs = {"reload_config_entry": {}} if reload_service else {}
+            return [{"domain": "homeassistant", "services": svcs}]
         if path == "/api/config":
             return {"version": "2026.10.4"}
         if path == "/api/states":
@@ -124,6 +127,22 @@ async def test_tools_check_check_config_route_gone(ctx):
     assert rest["tests"]["check_config_route"]["ok"] is False
     assert rest["status"] == "fail"
     assert "haops_config_validate" in result["summary"]["broken_tools"]
+
+
+@pytest.mark.asyncio
+async def test_tools_check_reload_service_gone(ctx):
+    """No homeassistant.reload_config_entry: the group fails, names the tool."""
+    ctx.ws.send_command = AsyncMock(return_value=[])
+    ctx.rest.get = AsyncMock(
+        side_effect=_rest_get_with_check_route(405, reload_service=False)
+    )
+
+    result = await haops_tools_check(ctx)
+
+    rest = result["rest_api"]
+    assert rest["tests"]["reload_config_entry_service"]["ok"] is False
+    assert rest["status"] == "fail"
+    assert "haops_integration_reload" in result["summary"]["broken_tools"]
 
 
 @pytest.mark.asyncio

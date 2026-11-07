@@ -78,7 +78,6 @@ almost all HA breakage is integration-level and touches none of it.
 | `config/auth_provider/homeassistant/create` | `haops_user_create` |
 | `config/device_registry/remove_config_entry` | `haops_device_remove` |
 | `config_entries/get` | `haops_device_remove` (per-entry `supports_remove_device`) |
-| `config_entries/reload` | `haops_integration_reload` |
 | `config_entries/flow/progress` | `haops_integration_flow_start` (duplicate-flow warning), `haops_tools_check` |
 | `lovelace/config`, `lovelace/config/save` | dashboard read/write |
 | `lovelace/dashboards/list`, `lovelace/resources` | `haops_dashboard_list`, `_resources` |
@@ -94,6 +93,11 @@ almost all HA breakage is integration-level and touches none of it.
 `/api/config` · `/api/states` · `/api/states/<entity_id>` · `/api/services` ·
 `/api/services/<domain>/<service>` · `/api/template` · `/api/error_log` ·
 `/api/history/period/<ts>` · `/api/logbook/<ts>`
+
+`POST /api/services/homeassistant/reload_config_entry` `{entry_id}` — `haops_integration_reload`
+since v0.66.6. It used to send WS `config_entries/reload`, which HA answers "Unknown command"
+(found on 2026.10.x; that WS type likely never existed — the UI reloads over REST).
+`tools_check` looks the service up in `GET /api/services`.
 
 `POST /api/config/core/check_config` (admin) — `haops_config_validate` since v0.66.5. Returns
 `{result: "valid"|"invalid", errors, warnings}`. `tools_check` probes it with a GET: the view is

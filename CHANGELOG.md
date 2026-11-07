@@ -1,3 +1,11 @@
+## 0.66.6
+
+**Fixed: `haops_integration_reload` works.** It sent the WebSocket command
+`config_entries/reload`, which Home Assistant answers with "Unknown command", so
+every reload failed. It now calls the `homeassistant.reload_config_entry`
+service over REST. `haops_tools_check` now looks that service up in its
+`rest_api` group, so if HA removes it, the check fails and names the tool.
+
 ## 0.66.5
 
 **Fixed: `haops_config_validate` works again.** HA 2026.9.2 removed the

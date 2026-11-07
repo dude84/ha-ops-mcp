@@ -127,7 +127,8 @@ async def haops_scene_activate(
         "Reload a config entry (integration instance) without restarting HA. "
         "Parameter: entry_id (the config entry's id — from haops_registry_query "
         "type='config_entries'). Useful after editing integration options or "
-        "when an integration is in setup_retry state."
+        "when an integration is in setup_retry state. Mutating; calls the "
+        "homeassistant.reload_config_entry service over REST."
     ),
     params={"entry_id": {"type": "string"}},
 )
@@ -136,11 +137,14 @@ async def haops_integration_reload(
 ) -> dict[str, Any]:
     if not entry_id:
         return {"error": "entry_id is required"}
+    # HA has no `config_entries/reload` WS command ("Unknown command");
+    # the core service is the stable route.
     try:
-        await ctx.ws.send_command(
-            "config_entries/reload", entry_id=entry_id
+        await ctx.rest.post(
+            "/api/services/homeassistant/reload_config_entry",
+            {"entry_id": entry_id},
         )
-    except WebSocketError as e:
+    except RestClientError as e:
         return {"error": f"Reload failed: {e}"}
 
     await ctx.audit.log(
