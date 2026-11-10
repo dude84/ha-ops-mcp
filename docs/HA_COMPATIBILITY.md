@@ -16,12 +16,12 @@ server logs a warning at startup when the live instance falls outside the window
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.10.1** |
+| **Built against** | HA Core **2026.11.1** |
 | **Recorder DB schema** | **53** (unchanged since 2026.5) |
 | **Oldest supported** | **2026.6** |
-| **Newest verified** | **2026.10** |
+| **Newest verified** | **2026.11** |
 | Verified how | `haops_tools_check` → `all_pass`, 16/16 groups, 0 broken tools |
-| Verified on | Singapore HA, 2026-10-12, addon v0.66.0 → certified as v0.66.1; re-confirmed on Singapore **and** Poland at HA 2026.10.2 with v0.66.3, 2026-10-17, at HA 2026.10.3 with v0.66.4, 2026-10-24, at HA 2026.10.4 with v0.66.4, 2026-10-25, and with v0.66.5, 2026-10-26 |
+| Verified on | Singapore HA, 2026-10-12, addon v0.66.0 → certified as v0.66.1; re-confirmed on Singapore **and** Poland at HA 2026.10.2 with v0.66.3, 2026-10-17, at HA 2026.10.3 with v0.66.4, 2026-10-24, at HA 2026.10.4 with v0.66.4, 2026-10-25, and with v0.66.5, 2026-10-26; HA 2026.11.1 (Singapore) and 2026.11.0 (Poland) with v0.66.7, 2026-11-11 |
 
 "Newest verified" goes stale by design — HA ships on the first Wednesday of every month. A newer
 HA is **not** a known failure; it means nobody has run the suite yet. The startup warning says
@@ -31,6 +31,7 @@ exactly that.
 
 | ha-ops-mcp | HA Core | DB schema | Result | Date |
 |---|---|---|---|---|
+| 0.66.7 | 2026.11.1 / 2026.11.0 | 53 | 16/16 pass, Singapore (2026.11.1) and Poland (2026.11.0); entity registry now 1.24 (new `data.settings` dict, no new record list — file reads unaffected); new `reload_config_entry_service` probe passes | 2026-11-11 |
 | 0.66.5 | 2026.10.4 | 53 | 16/16 pass, both instances; `haops_config_validate` works again via `POST /api/config/core/check_config` (new `check_config_route` probe passes) | 2026-10-26 |
 | 0.66.4 | 2026.10.3 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-10-24 |
 | 0.66.4 | 2026.10.4 | 53 | 16/16 pass, both instances (HA patch bump, no surface change); `config/check_config` still gone | 2026-10-25 |
@@ -172,7 +173,7 @@ Two facts to re-check if container tools ever break:
 
 ### Other
 
-`zigbee.db` (zigpy — separate from the recorder DB; table suffix `_v15` as of 2026.7) ·
+`zigbee.db` (zigpy — separate from the recorder DB; table suffix `_v15` as of 2026.7, `_v16` by 2026.11) ·
 `/config/.HA_VERSION`
 
 ## Known HA-version-specific behaviour
@@ -272,6 +273,27 @@ practice yet.
 
 The 2026.9 entry below recorded "still version 3, minor 2" — that was read on Poland; Singapore was
 not re-read then, so the exact release that wrote 3.4 there is unknown (HA's own comment says 2026.9).
+
+### Entity registry 1.24 — 2026.11 (VERIFIED 2026-11-11, Singapore and Poland)
+
+`.storage/core.entity_registry` is now **version 1, minor 24**. `data` gained a `settings` dict
+(`{"entity_id_parts": null}`) next to `entities` and `deleted_entities`; records gained
+`aliases_v2`, `compat_name` and `object_id_base`. None of these is a record list, and we read none
+of those fields, so the file-first reader still returns every entity. Device registry still 3.4,
+config entries 1.5, area registry 1.9, recorder schema 53, `zigbee.db` tables now `*_v16`.
+HA 2026.11's breaking-change list was not diffed against the surface; `haops_tools_check` passed
+16/16 on both instances.
+
+| | |
+|---|---|
+| Recorder schema | **53** — unchanged |
+| Supervisor | 2026.10.5 |
+| HA OS | 18.4 |
+| Device registry | 3.4 — unchanged |
+| Entity registry | **1.24** |
+| `zigbee.db` | `*_v16` tables |
+| `check_config` | `POST /api/config/core/check_config` still present |
+| `homeassistant.reload_config_entry` | registered |
 
 ### Nothing else in our surface moved — 2026.10 (VERIFIED 2026-10-12, Singapore)
 

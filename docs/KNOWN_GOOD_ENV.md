@@ -15,6 +15,25 @@ versions and tying the row to the current git tag. **Keep old rows** — the his
 
 ## Baselines
 
+### `v0.66.7` — verified 2026-11-11 (**Singapore and Poland HA** — HA 2026.11 update)
+
+Server side: HA Core **2026.11.1** on Singapore and **2026.11.0** on Poland, Supervisor
+**2026.10.5**, HAOS **18.4** amd64, schema **53**. MariaDB **11.8.9** on Singapore, **11.4.10** on
+Poland. Client side: macOS **27.2**, iTerm2 **3.7.7**, Bun **1.3.14**, Node **v26.13.0**, Claude Code
+**2.1.322** (read from `~/.local/bin/claude`). Transport streamable-http + static Bearer token,
+raw-IP URL.
+
+- **Both boxes:**
+  - `haops_self_check` → `overall: ok`, `ha_ops_version: 0.66.7`.
+  - `haops_tools_check` → **`all_pass`, 16/16 groups, 0 broken tools** (`in_window: false` before
+    the compat bump to 2026.11).
+- Scale: Singapore has 2067 states, 3215 entities, 256 devices, 111 config entries and 5,097,975
+  `states` rows. Poland has 1036 states, 1326 entities, 145 devices, 48 config entries and
+  3,267,299 `states` rows.
+- Deltas since the last baseline: HA Core 2026.10.4 → **2026.11.x**, ha-ops-mcp 0.66.5 →
+  **0.66.7**, Singapore MariaDB 11.4.10 → **11.8.9**, macOS 27.0.1 → **27.2**, iTerm2 3.7.6 →
+  **3.7.7**, Node v26.12.0 → **v26.13.0**, Claude Code 2.1.314 → **2.1.322**.
+
 ### `v0.66.5` — verified 2026-10-31 (**Singapore and Poland HA** — HAOS 18.4 + Supervisor 2026.10.5)
 
 Server side: HA Core **2026.10.4** (unchanged), Supervisor **2026.10.5**, HAOS **18.4** amd64,

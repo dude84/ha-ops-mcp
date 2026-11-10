@@ -16,8 +16,8 @@ Other HA MCP tools ([HA's built-in MCP integration](https://www.home-assistant.i
 
 | | |
 |---|---|
-| **Built against** | HA Core **2026.10.1** |
-| **Supported window** | **2026.6 – 2026.10** |
+| **Built against** | HA Core **2026.11.1** |
+| **Supported window** | **2026.6 – 2026.11** |
 | **Recorder DB schema** | **53** |
 
 Every release is verified against a live instance with `haops_tools_check` — 16 read-only groups exercising REST, WebSocket, database, filesystem, registries, config flow, Supervisor, shell, Docker, ESPHome, reference graph, debugger, helpers, Zigbee, UI and user tools. A release ships when that returns `all_pass`. (The Docker group reports `skip` unless you opt into container access, and `skip` does not block `all_pass`.)
@@ -28,6 +28,8 @@ Every release is verified against a live instance with `haops_tools_check` — 1
 
 | ha-ops-mcp | HA Core | DB schema | Result |
 |---|---|---|---|
+| 0.66.7 | 2026.11.1 | 53 | 16/16 groups pass, Singapore |
+| 0.66.7 | 2026.11.0 | 53 | 16/16 groups pass, Poland |
 | 0.66.4 | 2026.10.3 | 53 | 16/16 groups pass, both instances |
 | 0.66.4 | 2026.10.4 | 53 | 16/16 groups pass, both instances |
 | 0.66.3 | 2026.10.2 | 53 | 16/16 groups pass, both instances |

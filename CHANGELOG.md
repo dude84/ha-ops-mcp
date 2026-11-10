@@ -1,3 +1,11 @@
+## 0.66.8
+
+**Verified against Home Assistant 2026.11.** `haops_tools_check` passes all 16
+groups on 2026.11.1 and 2026.11.0. The supported window is now 2026.6 – 2026.11,
+so the "newer than the newest verified release" warning stops on 2026.11. The
+entity registry moved to version 1.24; it adds no new record list, so the
+file-first registry reads are unaffected.
+
 ## 0.66.7
 
 **Fixed: the 0.66.6 build.** The new `haops_tools_check` probe was missing a
